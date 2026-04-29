@@ -55,6 +55,28 @@ python -m py_compile app\streamlit_app.py
 - **Python**: 3.11 via `.venv` (NOT 3.14, NOT global)
 - **OS**: Windows (PowerShell)
 
+## Git Safety
+
+- Agents MUST NOT run `git push` under any circumstance.
+- Agents may inspect git status/diff/log and may prepare local commits only when explicitly requested.
+- Pushing to any remote repository is reserved for the human user.
+
+## GNN Training/Evaluation Performance Policy
+
+When writing or modifying code under `GNN_Neural_Network/`:
+
+- Use CUDA automatically when available, with CPU fallback.
+- Use available GPU/CPU resources efficiently, but do not intentionally allocate all VRAM or memory.
+- Keep batch size, chunk size, and candidate pool size configurable via YAML or CLI.
+- Avoid repeated graph propagation or embedding recomputation inside tight loops.
+- Cache reused LightGCN/XSimGCL embeddings, adjacency tensors, popularity counts, and co-occurrence counts.
+- Prefer batched GPU tensor operations for dense scoring, masking, and top-k when practical.
+- Avoid per-person model forward calls when batch scoring is possible.
+- Training code should avoid duplicate LightGCN propagation for positive and negative scores in the same batch.
+- Use CPU loops only when the data structure is small or vectorization would add unnecessary complexity.
+- Record training/evaluation time and GPU memory usage for major experiments when practical.
+- Preserve deterministic evaluation: fixed split, fixed seed, same candidate pool, and same known-hobby masking rules.
+
 ## Coding Conventions
 
 - Python 4-space indentation, `snake_case` file/function names, `PascalCase` classes

@@ -1,0 +1,109 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "canonical_hobby": "산책",
+      "include_keywords": ["산책", "걷기", "둘레길", "호수", "공원"],
+      "exclude_keywords": ["자전거", "러닝", "마라톤"],
+      "taxonomy": {
+        "category": "야외활동",
+        "subcategory": "걷기/산책",
+        "intensity": "low",
+        "sociality": "solo_or_small_group",
+        "location_sensitive": true
+      }
+    },
+    {
+      "canonical_hobby": "맛집/카페 탐방",
+      "include_keywords": ["맛집", "먹자골목", "빵지순례", "카페", "베이커리", "빵집", "디저트"],
+      "exclude_keywords": [],
+      "taxonomy": {
+        "category": "미식",
+        "subcategory": "맛집/카페 탐방",
+        "intensity": "low",
+        "sociality": "solo_or_group",
+        "location_sensitive": true
+      }
+    },
+    {
+      "canonical_hobby": "영화/드라마 감상",
+      "include_keywords": ["영화", "드라마", "넷플릭스", "왓챠", "시청"],
+      "exclude_keywords": ["게임 시청"],
+      "taxonomy": {
+        "category": "문화콘텐츠",
+        "subcategory": "영상 감상",
+        "intensity": "low",
+        "sociality": "solo_or_small_group",
+        "location_sensitive": false
+      }
+    },
+    {
+      "canonical_hobby": "노래방",
+      "include_keywords": ["노래방"],
+      "exclude_keywords": [],
+      "taxonomy": {
+        "category": "문화콘텐츠",
+        "subcategory": "노래/가창",
+        "intensity": "medium",
+        "sociality": "small_group",
+        "location_sensitive": true
+      }
+    }
+  ],
+  "manual_aliases": {
+    "코인 노래방 방문": "노래방",
+    "코인 노래방 가창": "노래방",
+    "최신 드라마 시청": "영화/드라마 감상",
+    "역사 드라마 시청": "영화/드라마 감상"
+  },
+  "taxonomy": {
+    "산책": {
+      "category": "야외활동",
+      "subcategory": "걷기/산책",
+      "intensity": "low",
+      "sociality": "solo_or_small_group",
+      "location_sensitive": true
+    },
+    "맛집/카페 탐방": {
+      "category": "미식",
+      "subcategory": "맛집/카페 탐방",
+      "intensity": "low",
+      "sociality": "solo_or_group",
+      "location_sensitive": true
+    },
+    "영화/드라마 감상": {
+      "category": "문화콘텐츠",
+      "subcategory": "영상 감상",
+      "intensity": "low",
+      "sociality": "solo_or_small_group",
+      "location_sensitive": false
+    },
+    "노래방": {
+      "category": "문화콘텐츠",
+      "subcategory": "노래/가창",
+      "intensity": "medium",
+      "sociality": "small_group",
+      "location_sensitive": true
+    }
+  },
+  "display_examples": {
+    "산책": [
+      "석촌호수 주변 산책",
+      "한강공원 산책",
+      "동네 둘레길 걷기"
+    ],
+    "맛집/카페 탐방": [
+      "방이동 먹자골목 맛집 탐방",
+      "전국 맛집 탐방",
+      "동네 베이커리 빵지순례"
+    ],
+    "영화/드라마 감상": [
+      "넷플릭스 스릴러 영화 감상",
+      "역사 드라마 시청"
+    ],
+    "노래방": [
+      "코인 노래방 방문",
+      "코인 노래방 가창"
+    ]
+  }
+}

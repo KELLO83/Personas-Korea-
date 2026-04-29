@@ -43,6 +43,8 @@ secrets.json
 
 # Data / Databases
 data/
+GNN_Neural_Network/data/
+GNN_Neural_Network/artifacts/
 *.parquet
 *.csv
 *.jsonl

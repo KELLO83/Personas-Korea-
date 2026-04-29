@@ -1,0 +1,962 @@
+{
+  "version": 2,
+  "description": "Strict taxonomy review: generic/non-hobby canonicals removed, sub-hobbies redirected to base canonicals, duplicates merged.",
+  "approved_clusters": [
+    {
+      "canonical_hobby": "웨이트 트레이닝",
+      "include_keywords": [
+        "웨이트",
+        "트레이닝"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0039"
+    },
+    {
+      "canonical_hobby": "필라테스",
+      "include_keywords": [
+        "필라테스"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0044"
+    },
+    {
+      "canonical_hobby": "경기 직관",
+      "include_keywords": [
+        "경기",
+        "직관"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0049"
+    },
+    {
+      "canonical_hobby": "자전거 라이딩",
+      "include_keywords": [
+        "자전거",
+        "라이딩"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0051"
+    },
+    {
+      "canonical_hobby": "시티투어",
+      "include_keywords": [
+        "시티투어"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0056"
+    },
+    {
+      "canonical_hobby": "조깅",
+      "include_keywords": [
+        "조깅"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0058"
+    },
+    {
+      "canonical_hobby": "바둑 대국",
+      "include_keywords": [
+        "바둑",
+        "대국"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0062"
+    },
+    {
+      "canonical_hobby": "골프 라운딩",
+      "include_keywords": [
+        "골프",
+        "라운딩"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0073"
+    },
+    {
+      "canonical_hobby": "유산소 운동",
+      "include_keywords": [
+        "유산소",
+        "운동"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0077"
+    },
+    {
+      "canonical_hobby": "러닝",
+      "include_keywords": [
+        "러닝"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0080"
+    },
+    {
+      "canonical_hobby": "블로그 운영",
+      "include_keywords": [
+        "블로그",
+        "운영"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0094"
+    },
+    {
+      "canonical_hobby": "네일 아트",
+      "include_keywords": [
+        "네일",
+        "아트"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0104"
+    },
+    {
+      "canonical_hobby": "노래 부르기",
+      "include_keywords": [
+        "노래",
+        "부르기"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0105"
+    },
+    {
+      "canonical_hobby": "농구 경기",
+      "include_keywords": [
+        "농구",
+        "경기"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0108"
+    },
+    {
+      "canonical_hobby": "성지순례",
+      "include_keywords": [
+        "성지순례"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0109"
+    },
+    {
+      "canonical_hobby": "술자리",
+      "include_keywords": [
+        "술자리"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0110"
+    },
+    {
+      "canonical_hobby": "장기 대국",
+      "include_keywords": [
+        "장기",
+        "대국"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0115"
+    },
+    {
+      "canonical_hobby": "3쿠션 경기",
+      "include_keywords": [
+        "3쿠션",
+        "경기"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0121"
+    },
+    {
+      "canonical_hobby": "공예",
+      "include_keywords": [
+        "공예"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0123"
+    },
+    {
+      "canonical_hobby": "경기 분석",
+      "include_keywords": [
+        "경기",
+        "분석"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0129"
+    },
+    {
+      "canonical_hobby": "그리기",
+      "include_keywords": [
+        "그리기"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0136"
+    },
+    {
+      "canonical_hobby": "명상",
+      "include_keywords": [
+        "명상"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0149"
+    },
+    {
+      "canonical_hobby": "호캉스",
+      "include_keywords": [
+        "호캉스"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0168"
+    },
+    {
+      "canonical_hobby": "혼술",
+      "include_keywords": [
+        "혼술"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0179"
+    },
+    {
+      "canonical_hobby": "전통시장 장보기",
+      "include_keywords": [
+        "전통시장",
+        "장보기"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0185"
+    },
+    {
+      "canonical_hobby": "펜션 휴양",
+      "include_keywords": [
+        "펜션",
+        "휴양"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0187"
+    },
+    {
+      "canonical_hobby": "볼링 경기",
+      "include_keywords": [
+        "볼링",
+        "경기"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0206"
+    },
+    {
+      "canonical_hobby": "파티",
+      "include_keywords": [
+        "파티"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0215"
+    },
+    {
+      "canonical_hobby": "맛집/카페 탐방",
+      "include_keywords": [
+        "음식",
+        "탐방"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0061"
+    },
+    {
+      "canonical_hobby": "맛집/카페 탐방",
+      "include_keywords": [
+        "시음"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0068"
+    },
+    {
+      "canonical_hobby": "맛집/카페 탐방",
+      "include_keywords": [
+        "음식점",
+        "탐방"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0071"
+    },
+    {
+      "canonical_hobby": "웨이트 트레이닝",
+      "include_keywords": [
+        "근력",
+        "운동"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0074"
+    },
+    {
+      "canonical_hobby": "맛집/카페 탐방",
+      "include_keywords": [
+        "먹거리",
+        "탐방"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0076"
+    },
+    {
+      "canonical_hobby": "맛집/카페 탐방",
+      "include_keywords": [
+        "음식",
+        "즐기기"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0078"
+    },
+    {
+      "canonical_hobby": "러닝",
+      "include_keywords": [
+        "야간",
+        "러닝"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0084"
+    },
+    {
+      "canonical_hobby": "맛집/카페 탐방",
+      "include_keywords": [
+        "시식"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0090"
+    },
+    {
+      "canonical_hobby": "독서",
+      "include_keywords": [
+        "정독"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0095"
+    },
+    {
+      "canonical_hobby": "맛집/카페 탐방",
+      "include_keywords": [
+        "메뉴",
+        "탐방"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0097"
+    },
+    {
+      "canonical_hobby": "원예/식물 가꾸기",
+      "include_keywords": [
+        "채소",
+        "가꾸기"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0098"
+    },
+    {
+      "canonical_hobby": "맛집/카페 탐방",
+      "include_keywords": [
+        "식당",
+        "탐방"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0101"
+    },
+    {
+      "canonical_hobby": "여행/나들이",
+      "include_keywords": [
+        "경관",
+        "탐방"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0112"
+    },
+    {
+      "canonical_hobby": "맛집/카페 탐방",
+      "include_keywords": [
+        "레스토랑",
+        "탐방"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0113"
+    },
+    {
+      "canonical_hobby": "웹툰 감상",
+      "include_keywords": [
+        "만화",
+        "정주행"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0114"
+    },
+    {
+      "canonical_hobby": "맛집/카페 탐방",
+      "include_keywords": [
+        "이자카야",
+        "탐방"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0119"
+    },
+    {
+      "canonical_hobby": "자전거 라이딩",
+      "include_keywords": [
+        "사이클링"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0126"
+    },
+    {
+      "canonical_hobby": "맛집/카페 탐방",
+      "include_keywords": [
+        "양식당",
+        "탐방"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0127"
+    },
+    {
+      "canonical_hobby": "독서",
+      "include_keywords": [
+        "서점",
+        "탐방"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0131"
+    },
+    {
+      "canonical_hobby": "원예/식물 가꾸기",
+      "include_keywords": [
+        "재배"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0132"
+    },
+    {
+      "canonical_hobby": "맛집/카페 탐방",
+      "include_keywords": [
+        "주점",
+        "탐방"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0133"
+    },
+    {
+      "canonical_hobby": "노래 부르기",
+      "include_keywords": [
+        "따라",
+        "부르기"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0138"
+    },
+    {
+      "canonical_hobby": "낮잠/휴식",
+      "include_keywords": [
+        "멍",
+        "때리기"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0140"
+    },
+    {
+      "canonical_hobby": "바둑 대국",
+      "include_keywords": [
+        "바둑",
+        "두기"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0141"
+    },
+    {
+      "canonical_hobby": "맛집/카페 탐방",
+      "include_keywords": [
+        "맥주",
+        "시음"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0148"
+    },
+    {
+      "canonical_hobby": "전시/역사 관람",
+      "include_keywords": [
+        "역사",
+        "탐방"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0154"
+    },
+    {
+      "canonical_hobby": "피부/뷰티 관리",
+      "include_keywords": [
+        "외모",
+        "관리"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0155"
+    },
+    {
+      "canonical_hobby": "맛집/카페 탐방",
+      "include_keywords": [
+        "전문점",
+        "탐방"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0166"
+    },
+    {
+      "canonical_hobby": "경기 직관",
+      "include_keywords": [
+        "직관"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0167"
+    },
+    {
+      "canonical_hobby": "자전거 라이딩",
+      "include_keywords": [
+        "라이딩"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0171"
+    },
+    {
+      "canonical_hobby": "조깅",
+      "include_keywords": [
+        "야간",
+        "조깅"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0175"
+    },
+    {
+      "canonical_hobby": "맛집/카페 탐방",
+      "include_keywords": [
+        "고기집",
+        "탐방"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0180"
+    },
+    {
+      "canonical_hobby": "골프 라운딩",
+      "include_keywords": [
+        "골프장",
+        "라운딩"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0181"
+    },
+    {
+      "canonical_hobby": "맛집/카페 탐방",
+      "include_keywords": [
+        "음식",
+        "관광"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0183"
+    },
+    {
+      "canonical_hobby": "장기 대국",
+      "include_keywords": [
+        "장기",
+        "두기"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0184"
+    },
+    {
+      "canonical_hobby": "조깅",
+      "include_keywords": [
+        "새벽",
+        "조깅"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0190"
+    },
+    {
+      "canonical_hobby": "그리기",
+      "include_keywords": [
+        "스케치"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0210"
+    },
+    {
+      "canonical_hobby": "조깅",
+      "include_keywords": [
+        "아침",
+        "조깅"
+      ],
+      "exclude_keywords": [],
+      "taxonomy": {},
+      "source_cluster_id": "cluster_0213"
+    }
+  ],
+  "manual_aliases": {},
+  "rejected_patterns": [
+    "lp 감상",
+    "tv 시청",
+    "tv 시청하기",
+    "가벼운 반주",
+    "가요 감상",
+    "감상",
+    "갤러리 관람",
+    "갤러리 투어",
+    "경관 감상",
+    "경관 투어",
+    "경기 관람",
+    "경기 시청",
+    "경기 참여",
+    "공연 관람",
+    "관람",
+    "교실 참여",
+    "기록",
+    "노래 감상",
+    "뉴스 시청",
+    "담소",
+    "돌보기",
+    "동호회 활동",
+    "듣기",
+    "리뷰 시청",
+    "리스트 감상",
+    "마시기",
+    "만들기",
+    "만화 감상",
+    "맛보기",
+    "및 시청",
+    "발라드 감상",
+    "방문",
+    "버스 투어",
+    "분석",
+    "분석 시청",
+    "분식 투어",
+    "브이로그 시청",
+    "서점 투어",
+    "소주 한잔",
+    "숍 방문",
+    "수강",
+    "수업 참여",
+    "쉬기",
+    "스노보드 투어",
+    "시도",
+    "시청",
+    "시켜 먹기",
+    "시티팝 감상",
+    "식당 방문",
+    "식사",
+    "실시간 시청",
+    "안부 전화",
+    "야구 관람",
+    "야구 시청",
+    "연극 관람",
+    "연속극 시청",
+    "연주곡 감상",
+    "예능 시청",
+    "음식 투어",
+    "이자카야 방문",
+    "작성",
+    "잡담",
+    "전문점 투어",
+    "전화 통화",
+    "정주행",
+    "조합 찾기",
+    "종교 활동",
+    "주문",
+    "주문하기",
+    "주점 방문",
+    "중계 시청",
+    "참여",
+    "체험",
+    "클럽 방문",
+    "탐방",
+    "탐색",
+    "투어",
+    "팝송 감상",
+    "포크송 감상",
+    "풍경 감상",
+    "프로야구 시청",
+    "하이라이트 시청",
+    "활동"
+  ],
+  "split_required": [
+    {
+      "original_suffix": "경기 시청",
+      "note": "mined_suffix_group: 경기 시청; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "풍경 감상",
+      "note": "mined_suffix_group: 풍경 감상; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "경기 관람",
+      "note": "mined_suffix_group: 경기 관람; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "투어",
+      "note": "mined_suffix_group: 투어; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "노래 감상",
+      "note": "mined_suffix_group: 노래 감상; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "시청",
+      "note": "mined_suffix_group: 시청; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "방문",
+      "note": "mined_suffix_group: 방문; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "중계 시청",
+      "note": "mined_suffix_group: 중계 시청; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "감상",
+      "note": "mined_suffix_group: 감상; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "관람",
+      "note": "mined_suffix_group: 관람; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "연극 관람",
+      "note": "mined_suffix_group: 연극 관람; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "공연 관람",
+      "note": "mined_suffix_group: 공연 관람; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "가요 감상",
+      "note": "mined_suffix_group: 가요 감상; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "참여",
+      "note": "mined_suffix_group: 참여; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "활동",
+      "note": "mined_suffix_group: 활동; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "동호회 활동",
+      "note": "mined_suffix_group: 동호회 활동; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "뉴스 시청",
+      "note": "mined_suffix_group: 뉴스 시청; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "tv 시청",
+      "note": "mined_suffix_group: tv 시청; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "리뷰 시청",
+      "note": "mined_suffix_group: 리뷰 시청; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "갤러리 투어",
+      "note": "mined_suffix_group: 갤러리 투어; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "프로야구 시청",
+      "note": "mined_suffix_group: 프로야구 시청; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "발라드 감상",
+      "note": "mined_suffix_group: 발라드 감상; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "분석 시청",
+      "note": "mined_suffix_group: 분석 시청; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "및 시청",
+      "note": "mined_suffix_group: 및 시청; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "경관 감상",
+      "note": "mined_suffix_group: 경관 감상; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "수업 참여",
+      "note": "mined_suffix_group: 수업 참여; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "리스트 감상",
+      "note": "mined_suffix_group: 리스트 감상; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "실시간 시청",
+      "note": "mined_suffix_group: 실시간 시청; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "야구 관람",
+      "note": "mined_suffix_group: 야구 관람; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "음식 투어",
+      "note": "mined_suffix_group: 음식 투어; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "체험",
+      "note": "mined_suffix_group: 체험; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "예능 시청",
+      "note": "mined_suffix_group: 예능 시청; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "연속극 시청",
+      "note": "mined_suffix_group: 연속극 시청; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "하이라이트 시청",
+      "note": "mined_suffix_group: 하이라이트 시청; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "버스 투어",
+      "note": "mined_suffix_group: 버스 투어; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "팝송 감상",
+      "note": "mined_suffix_group: 팝송 감상; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "주점 방문",
+      "note": "mined_suffix_group: 주점 방문; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "포크송 감상",
+      "note": "mined_suffix_group: 포크송 감상; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "경기 참여",
+      "note": "mined_suffix_group: 경기 참여; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "숍 방문",
+      "note": "mined_suffix_group: 숍 방문; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "시티팝 감상",
+      "note": "mined_suffix_group: 시티팝 감상; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "브이로그 시청",
+      "note": "mined_suffix_group: 브이로그 시청; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "서점 투어",
+      "note": "mined_suffix_group: 서점 투어; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "야구 시청",
+      "note": "mined_suffix_group: 야구 시청; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "종교 활동",
+      "note": "mined_suffix_group: 종교 활동; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "lp 감상",
+      "note": "mined_suffix_group: lp 감상; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "갤러리 관람",
+      "note": "mined_suffix_group: 갤러리 관람; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "이자카야 방문",
+      "note": "mined_suffix_group: 이자카야 방문; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "연주곡 감상",
+      "note": "mined_suffix_group: 연주곡 감상; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "교실 참여",
+      "note": "mined_suffix_group: 교실 참여; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "만화 감상",
+      "note": "mined_suffix_group: 만화 감상; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "분식 투어",
+      "note": "mined_suffix_group: 분식 투어; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "스노보드 투어",
+      "note": "mined_suffix_group: 스노보드 투어; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "클럽 방문",
+      "note": "mined_suffix_group: 클럽 방문; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "경관 투어",
+      "note": "mined_suffix_group: 경관 투어; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "식당 방문",
+      "note": "mined_suffix_group: 식당 방문; multiple raw variants grouped"
+    },
+    {
+      "original_suffix": "전문점 투어",
+      "note": "mined_suffix_group: 전문점 투어; multiple raw variants grouped"
+    }
+  ]
+}

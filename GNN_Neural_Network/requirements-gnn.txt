@@ -1,0 +1,5 @@
+# GNN PoC helpers used by offline training scripts.
+# PyTorch itself is expected to be provided by the existing project .venv.
+pyyaml>=6.0.0
+torchinfo>=1.8.0
+tqdm>=4.66.0

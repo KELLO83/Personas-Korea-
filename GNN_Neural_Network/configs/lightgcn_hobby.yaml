@@ -1,0 +1,71 @@
+data:
+  normalize_hobbies: true
+  alias_map_path:
+  hobby_taxonomy_path: hobby_taxonomy.json
+  hobby_taxonomy_review_path: hobby_taxonomy_review.json
+  min_item_degree: 3
+  rare_item_policy: drop
+
+split:
+  validation_ratio: 0.1
+  test_ratio: 0.1
+  min_eval_hobbies: 3
+  two_hobby_policy: train_only
+
+train:
+  embedding_dim: 64
+  num_layers: 2
+  batch_size: 4096
+  negative_samples: 1
+  epochs: 10
+  learning_rate: 0.001
+  optimizer: adam
+  weight_decay: 0.0
+  seed: 42
+  device: cuda_if_available
+  scheduler: constant
+
+eval:
+  top_k: [5, 10, 20]
+  score_chunk_size: 4096
+
+rerank:
+  candidate_pool_size: 50
+  use_text_fit: false
+  weights:
+    lightgcn_score: 0.25
+    cooccurrence_score: 0.10
+    segment_popularity_score: 0.25
+    known_hobby_compatibility: 0.15
+    age_group_fit: 0.10
+    occupation_fit: 0.10
+    region_fit: 0.05
+    popularity_prior: 0.05
+    mismatch_penalty: 0.25
+
+paths:
+  edge_csv: GNN_Neural_Network/data/person_hobby_edges.csv
+  person_context_csv: GNN_Neural_Network/data/person_context.csv
+  artifact_dir: GNN_Neural_Network/artifacts
+  train_edges: GNN_Neural_Network/artifacts/train_edges.csv
+  validation_edges: GNN_Neural_Network/artifacts/validation_edges.csv
+  test_edges: GNN_Neural_Network/artifacts/test_edges.csv
+  person_mapping: GNN_Neural_Network/artifacts/person_mapping.json
+  hobby_mapping: GNN_Neural_Network/artifacts/hobby_mapping.json
+  checkpoint: GNN_Neural_Network/artifacts/lightgcn_hobby.pt
+  metrics: GNN_Neural_Network/artifacts/metrics.json
+  vocabulary_report: GNN_Neural_Network/artifacts/vocabulary_report.json
+  config_snapshot: GNN_Neural_Network/artifacts/config_snapshot.yaml
+  sample_recommendations: GNN_Neural_Network/artifacts/sample_recommendations.json
+  candidates_sample: GNN_Neural_Network/artifacts/candidates_sample.json
+  hobby_profile: GNN_Neural_Network/artifacts/hobby_profile.json
+  leakage_audit: GNN_Neural_Network/artifacts/leakage_audit.json
+  fallback_usage: GNN_Neural_Network/artifacts/fallback_usage.json
+  score_normalization: GNN_Neural_Network/artifacts/score_normalization.json
+  provider_contribution: GNN_Neural_Network/artifacts/provider_contribution.json
+  hobby_aliases: GNN_Neural_Network/artifacts/hobby_aliases.json
+  hobby_taxonomy: GNN_Neural_Network/artifacts/hobby_taxonomy.json
+  canonical_hobby_examples: GNN_Neural_Network/artifacts/canonical_hobby_examples.json
+  rerank_metrics: GNN_Neural_Network/artifacts/rerank_metrics.json
+  reranker_weights: GNN_Neural_Network/artifacts/reranker_weights.json
+  rerank_sample: GNN_Neural_Network/artifacts/rerank_sample.json

@@ -1,0 +1,822 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "canonical_hobby": "산책",
+      "include_keywords": ["산책", "걷기", "둘레길"],
+      "exclude_keywords": ["자전거", "러닝", "마라톤", "피크닉", "사진", "촬영", "캠핑"],
+      "taxonomy": {
+        "category": "야외활동",
+        "subcategory": "걷기/산책",
+        "intensity": "low",
+        "sociality": "solo_or_small_group",
+        "location_sensitive": true
+      }
+    },
+    {
+      "canonical_hobby": "맛집/카페 탐방",
+      "include_keywords": ["맛집", "먹자골목", "빵지순례", "카페", "베이커리", "빵집", "디저트", "외식", "일식", "한식", "분식집", "치킨집", "고깃집", "백반", "비빔밥", "제육볶음", "갈빗집", "노포"],
+      "exclude_keywords": [],
+      "taxonomy": {
+        "category": "미식",
+        "subcategory": "맛집/카페 탐방",
+        "intensity": "low",
+        "sociality": "solo_or_group",
+        "location_sensitive": true
+      }
+    },
+    {
+      "canonical_hobby": "영화/드라마 감상",
+      "include_keywords": ["영화", "드라마", "넷플릭스", "왓챠"],
+      "exclude_keywords": ["게임 시청", "유튜브", "쇼츠", "릴스", "교양", "건강 프로그램"],
+      "taxonomy": {
+        "category": "문화콘텐츠",
+        "subcategory": "영상 감상",
+        "intensity": "low",
+        "sociality": "solo_or_small_group",
+        "location_sensitive": false
+      }
+    },
+    {
+      "canonical_hobby": "노래방",
+      "include_keywords": ["노래방"],
+      "exclude_keywords": [],
+      "taxonomy": {
+        "category": "문화콘텐츠",
+        "subcategory": "노래/가창",
+        "intensity": "medium",
+        "sociality": "small_group",
+        "location_sensitive": true
+      }
+    },
+    {
+      "canonical_hobby": "유튜브/온라인 영상 시청",
+      "include_keywords": ["유튜브", "쇼츠", "릴스", "영상 시청", "콘텐츠 시청"],
+      "exclude_keywords": ["영화", "드라마", "넷플릭스", "왓챠"],
+      "taxonomy": {
+        "category": "디지털콘텐츠",
+        "subcategory": "온라인 영상 소비",
+        "intensity": "low",
+        "sociality": "solo",
+        "location_sensitive": false
+      }
+    },
+    {
+      "canonical_hobby": "배드민턴",
+      "include_keywords": ["배드민턴"],
+      "exclude_keywords": [],
+      "taxonomy": {
+        "category": "스포츠",
+        "subcategory": "라켓 스포츠",
+        "intensity": "medium",
+        "sociality": "small_group",
+        "location_sensitive": true
+      }
+    },
+    {
+      "canonical_hobby": "사우나/목욕",
+      "include_keywords": ["사우나", "목욕탕", "찜질방", "반신욕", "온탕"],
+      "exclude_keywords": [],
+      "taxonomy": {
+        "category": "휴식/회복",
+        "subcategory": "사우나/목욕",
+        "intensity": "low",
+        "sociality": "solo_or_small_group",
+        "location_sensitive": true
+      }
+    },
+    {
+      "canonical_hobby": "웹툰 감상",
+      "include_keywords": ["웹툰"],
+      "exclude_keywords": [],
+      "taxonomy": {
+        "category": "문화콘텐츠",
+        "subcategory": "웹툰/만화",
+        "intensity": "low",
+        "sociality": "solo",
+        "location_sensitive": false
+      }
+    },
+    {
+      "canonical_hobby": "트로트 감상",
+      "include_keywords": ["트로트", "임영웅"],
+      "exclude_keywords": [],
+      "taxonomy": {
+        "category": "음악",
+        "subcategory": "트로트",
+        "intensity": "low",
+        "sociality": "solo_or_group",
+        "location_sensitive": false
+      }
+    },
+    {
+      "canonical_hobby": "게임",
+      "include_keywords": ["게임", "리그 오브 레전드", "닌텐도", "시뮬레이션", "moba", "퍼즐"],
+      "exclude_keywords": ["게임 시청", "게임 방송"],
+      "taxonomy": {
+        "category": "디지털엔터테인먼트",
+        "subcategory": "게임",
+        "intensity": "medium",
+        "sociality": "solo_or_group",
+        "location_sensitive": false
+      }
+    },
+    {
+      "canonical_hobby": "건강/교양 콘텐츠 시청",
+      "include_keywords": ["건강 정보", "건강 프로그램", "교양 콘텐츠", "시사", "다큐멘터리"],
+      "exclude_keywords": ["영화", "드라마", "넷플릭스", "왓챠", "게임", "예능", "팟캐스트"],
+      "taxonomy": {
+        "category": "정보콘텐츠",
+        "subcategory": "건강/시사/교양",
+        "intensity": "low",
+        "sociality": "solo",
+        "location_sensitive": false
+      }
+    },
+    {
+      "canonical_hobby": "독서",
+      "include_keywords": ["독서", "책", "소설", "읽기", "탐독", "잡지"],
+      "exclude_keywords": ["웹툰"],
+      "taxonomy": {
+        "category": "지식/콘텐츠",
+        "subcategory": "독서",
+        "intensity": "low",
+        "sociality": "solo",
+        "location_sensitive": false
+      }
+    },
+    {
+      "canonical_hobby": "등산/트레킹",
+      "include_keywords": ["등산", "트레킹", "산행"],
+      "exclude_keywords": ["산책", "둘레길", "걷기"],
+      "taxonomy": {
+        "category": "야외활동",
+        "subcategory": "등산/트레킹",
+        "intensity": "medium",
+        "sociality": "solo_or_small_group",
+        "location_sensitive": true
+      }
+    },
+    {
+      "canonical_hobby": "캠핑/차박",
+      "include_keywords": ["캠핑", "차박", "불멍"],
+      "exclude_keywords": [],
+      "taxonomy": {
+        "category": "야외활동",
+        "subcategory": "캠핑/차박",
+        "intensity": "medium",
+        "sociality": "small_group_or_family",
+        "location_sensitive": true
+      }
+    },
+    {
+      "canonical_hobby": "사진 촬영",
+      "include_keywords": ["사진", "촬영", "출사", "카메라"],
+      "exclude_keywords": [],
+      "taxonomy": {
+        "category": "창작/기록",
+        "subcategory": "사진 촬영",
+        "intensity": "low",
+        "sociality": "solo_or_small_group",
+        "location_sensitive": true
+      }
+    },
+    {
+      "canonical_hobby": "요리/홈베이킹",
+      "include_keywords": ["요리", "베이킹", "홈베이킹", "야식 만들기", "빵 굽기"],
+      "exclude_keywords": ["맛집", "먹자골목", "카페"],
+      "taxonomy": {
+        "category": "생활/창작",
+        "subcategory": "요리/홈베이킹",
+        "intensity": "low",
+        "sociality": "solo_or_family",
+        "location_sensitive": false
+      }
+    },
+    {
+      "canonical_hobby": "원예/식물 가꾸기",
+      "include_keywords": ["원예", "식물", "텃밭", "다육식물", "야생화", "반려식물", "화분"],
+      "exclude_keywords": [],
+      "taxonomy": {
+        "category": "생활/자연",
+        "subcategory": "원예/식물 가꾸기",
+        "intensity": "low",
+        "sociality": "solo",
+        "location_sensitive": false
+      }
+    },
+    {
+      "canonical_hobby": "음악 감상/청취",
+      "include_keywords": ["음악", "청취", "라디오", "팟캐스트", "플레이리스트", "노래 듣기"],
+      "exclude_keywords": ["트로트", "노래방", "코인 노래방"],
+      "taxonomy": {
+        "category": "음악",
+        "subcategory": "감상/청취",
+        "intensity": "low",
+        "sociality": "solo",
+        "location_sensitive": false
+      }
+    },
+    {
+      "canonical_hobby": "여행/나들이",
+      "include_keywords": ["여행", "나들이", "드라이브", "소풍", "피크닉"],
+      "exclude_keywords": [],
+      "taxonomy": {
+        "category": "여행/야외활동",
+        "subcategory": "여행/나들이",
+        "intensity": "medium",
+        "sociality": "solo_or_group",
+        "location_sensitive": true
+      }
+    },
+    {
+      "canonical_hobby": "전시/역사 관람",
+      "include_keywords": ["전시", "미술관", "박물관", "유적지", "답사", "유물", "역사 관람"],
+      "exclude_keywords": ["영화", "드라마", "경기"],
+      "taxonomy": {
+        "category": "문화/역사",
+        "subcategory": "전시/역사 관람",
+        "intensity": "low",
+        "sociality": "solo_or_small_group",
+        "location_sensitive": true
+      }
+    },
+    {
+      "canonical_hobby": "수영",
+      "include_keywords": ["수영"],
+      "exclude_keywords": [],
+      "taxonomy": {
+        "category": "스포츠",
+        "subcategory": "수영",
+        "intensity": "medium",
+        "sociality": "solo_or_group",
+        "location_sensitive": true
+      }
+    },
+    {
+      "canonical_hobby": "낚시",
+      "include_keywords": ["낚시"],
+      "exclude_keywords": [],
+      "taxonomy": {
+        "category": "야외활동",
+        "subcategory": "낚시",
+        "intensity": "medium",
+        "sociality": "solo_or_small_group",
+        "location_sensitive": true
+      }
+    },
+    {
+      "canonical_hobby": "피부/뷰티 관리",
+      "include_keywords": ["피부", "뷰티", "스킨케어", "향수", "메이크업", "미용"],
+      "exclude_keywords": [],
+      "taxonomy": {
+        "category": "자기관리",
+        "subcategory": "피부/뷰티 관리",
+        "intensity": "low",
+        "sociality": "solo",
+        "location_sensitive": false
+      }
+    },
+    {
+      "canonical_hobby": "축제/행사 관람",
+      "include_keywords": ["축제", "행사"],
+      "exclude_keywords": ["영화", "드라마", "경기", "소품샵", "시장"],
+      "taxonomy": {
+        "category": "문화/여행",
+        "subcategory": "축제/행사 관람",
+        "intensity": "low",
+        "sociality": "solo_or_group",
+        "location_sensitive": true
+      }
+    },
+    {
+      "canonical_hobby": "인테리어/소품 수집",
+      "include_keywords": ["인테리어", "소품"],
+      "exclude_keywords": ["식물", "향수", "만화", "공예"],
+      "taxonomy": {
+        "category": "생활/취향",
+        "subcategory": "인테리어/소품 수집",
+        "intensity": "low",
+        "sociality": "solo",
+        "location_sensitive": false
+      }
+    },
+    {
+      "canonical_hobby": "종교/예배 활동",
+      "include_keywords": ["교회", "성당", "예배", "봉사 활동", "구역 예배"],
+      "exclude_keywords": [],
+      "taxonomy": {
+        "category": "커뮤니티/신앙",
+        "subcategory": "종교/예배 활동",
+        "intensity": "low",
+        "sociality": "group",
+        "location_sensitive": true
+      }
+    },
+    {
+      "canonical_hobby": "낮잠/휴식",
+      "include_keywords": ["낮잠", "휴식"],
+      "exclude_keywords": [],
+      "taxonomy": {
+        "category": "휴식/회복",
+        "subcategory": "낮잠/휴식",
+        "intensity": "low",
+        "sociality": "solo",
+        "location_sensitive": false
+      }
+    },
+    {
+      "canonical_hobby": "쇼핑",
+      "include_keywords": ["쇼핑"],
+      "exclude_keywords": [],
+      "taxonomy": {
+        "category": "소비/여가",
+        "subcategory": "쇼핑",
+        "intensity": "low",
+        "sociality": "solo_or_group",
+        "location_sensitive": true
+      }
+    },
+    {
+      "canonical_hobby": "드라이브",
+      "include_keywords": ["드라이브"],
+      "exclude_keywords": [],
+      "taxonomy": {
+        "category": "여행/야외활동",
+        "subcategory": "드라이브",
+        "intensity": "low",
+        "sociality": "solo_or_group",
+        "location_sensitive": true
+      }
+    },
+    {
+      "canonical_hobby": "사교/친목 모임",
+      "include_keywords": ["모임", "친목", "수다", "지인들과의", "친구들과의"],
+      "exclude_keywords": ["배드민턴", "노래방", "예배", "봉사", "사우나", "찜질방", "교회", "성당"],
+      "taxonomy": {
+        "category": "커뮤니티",
+        "subcategory": "사교/친목 모임",
+        "intensity": "low",
+        "sociality": "group",
+        "location_sensitive": true
+      }
+    },
+    {
+      "canonical_hobby": "봉사활동",
+      "include_keywords": ["봉사", "봉사활동"],
+      "exclude_keywords": [],
+      "taxonomy": {
+        "category": "커뮤니티",
+        "subcategory": "봉사활동",
+        "intensity": "low",
+        "sociality": "group",
+        "location_sensitive": true
+      }
+    },
+    {
+      "canonical_hobby": "동호회/클럽 활동",
+      "include_keywords": ["동호회", "클럽 활동", "소모임 활동", "커뮤니티 활동"],
+      "exclude_keywords": ["배드민턴", "볼링", "배구", "야구"],
+      "taxonomy": {
+        "category": "커뮤니티",
+        "subcategory": "동호회/클럽 활동",
+        "intensity": "low",
+        "sociality": "group",
+        "location_sensitive": true
+      }
+    },
+    {
+      "canonical_hobby": "테마파크/동물원 나들이",
+      "include_keywords": ["테마파크", "동물원", "롯데월드", "에버랜드", "오월드"],
+      "exclude_keywords": [],
+      "taxonomy": {
+        "category": "여행/나들이",
+        "subcategory": "테마파크/동물원",
+        "intensity": "medium",
+        "sociality": "group_or_family",
+        "location_sensitive": true
+      }
+    },
+    {
+      "canonical_hobby": "온천/스파",
+      "include_keywords": ["온천", "스파"],
+      "exclude_keywords": [],
+      "taxonomy": {
+        "category": "휴식/회복",
+        "subcategory": "온천/스파",
+        "intensity": "low",
+        "sociality": "solo_or_group",
+        "location_sensitive": true
+      }
+    },
+    {
+      "canonical_hobby": "수목원/식물원 방문",
+      "include_keywords": ["수목원", "식물원"],
+      "exclude_keywords": [],
+      "taxonomy": {
+        "category": "자연/관람",
+        "subcategory": "수목원/식물원",
+        "intensity": "low",
+        "sociality": "solo_or_group",
+        "location_sensitive": true
+      }
+    }
+  ],
+  "manual_aliases": {
+    "코인 노래방 방문": "노래방",
+    "코인 노래방 가창": "노래방",
+    "최신 드라마 시청": "영화/드라마 감상",
+    "역사 드라마 시청": "영화/드라마 감상"
+  },
+  "taxonomy": {
+    "산책": {
+      "category": "야외활동",
+      "subcategory": "걷기/산책",
+      "intensity": "low",
+      "sociality": "solo_or_small_group",
+      "location_sensitive": true
+    },
+    "맛집/카페 탐방": {
+      "category": "미식",
+      "subcategory": "맛집/카페 탐방",
+      "intensity": "low",
+      "sociality": "solo_or_group",
+      "location_sensitive": true
+    },
+    "영화/드라마 감상": {
+      "category": "문화콘텐츠",
+      "subcategory": "영상 감상",
+      "intensity": "low",
+      "sociality": "solo_or_small_group",
+      "location_sensitive": false
+    },
+    "노래방": {
+      "category": "문화콘텐츠",
+      "subcategory": "노래/가창",
+      "intensity": "medium",
+      "sociality": "small_group",
+      "location_sensitive": true
+    },
+    "유튜브/온라인 영상 시청": {
+      "category": "디지털콘텐츠",
+      "subcategory": "온라인 영상 소비",
+      "intensity": "low",
+      "sociality": "solo",
+      "location_sensitive": false
+    },
+    "배드민턴": {
+      "category": "스포츠",
+      "subcategory": "라켓 스포츠",
+      "intensity": "medium",
+      "sociality": "small_group",
+      "location_sensitive": true
+    },
+    "사우나/목욕": {
+      "category": "휴식/회복",
+      "subcategory": "사우나/목욕",
+      "intensity": "low",
+      "sociality": "solo_or_small_group",
+      "location_sensitive": true
+    },
+    "웹툰 감상": {
+      "category": "문화콘텐츠",
+      "subcategory": "웹툰/만화",
+      "intensity": "low",
+      "sociality": "solo",
+      "location_sensitive": false
+    },
+    "트로트 감상": {
+      "category": "음악",
+      "subcategory": "트로트",
+      "intensity": "low",
+      "sociality": "solo_or_group",
+      "location_sensitive": false
+    },
+    "게임": {
+      "category": "디지털엔터테인먼트",
+      "subcategory": "게임",
+      "intensity": "medium",
+      "sociality": "solo_or_group",
+      "location_sensitive": false
+    },
+    "건강/교양 콘텐츠 시청": {
+      "category": "정보콘텐츠",
+      "subcategory": "건강/시사/교양",
+      "intensity": "low",
+      "sociality": "solo",
+      "location_sensitive": false
+    },
+    "독서": {
+      "category": "지식/콘텐츠",
+      "subcategory": "독서",
+      "intensity": "low",
+      "sociality": "solo",
+      "location_sensitive": false
+    },
+    "등산/트레킹": {
+      "category": "야외활동",
+      "subcategory": "등산/트레킹",
+      "intensity": "medium",
+      "sociality": "solo_or_small_group",
+      "location_sensitive": true
+    },
+    "캠핑/차박": {
+      "category": "야외활동",
+      "subcategory": "캠핑/차박",
+      "intensity": "medium",
+      "sociality": "small_group_or_family",
+      "location_sensitive": true
+    },
+    "사진 촬영": {
+      "category": "창작/기록",
+      "subcategory": "사진 촬영",
+      "intensity": "low",
+      "sociality": "solo_or_small_group",
+      "location_sensitive": true
+    },
+    "요리/홈베이킹": {
+      "category": "생활/창작",
+      "subcategory": "요리/홈베이킹",
+      "intensity": "low",
+      "sociality": "solo_or_family",
+      "location_sensitive": false
+    },
+    "원예/식물 가꾸기": {
+      "category": "생활/자연",
+      "subcategory": "원예/식물 가꾸기",
+      "intensity": "low",
+      "sociality": "solo",
+      "location_sensitive": false
+    },
+    "음악 감상/청취": {
+      "category": "음악",
+      "subcategory": "감상/청취",
+      "intensity": "low",
+      "sociality": "solo",
+      "location_sensitive": false
+    },
+    "여행/나들이": {
+      "category": "여행/야외활동",
+      "subcategory": "여행/나들이",
+      "intensity": "medium",
+      "sociality": "solo_or_group",
+      "location_sensitive": true
+    },
+    "전시/역사 관람": {
+      "category": "문화/역사",
+      "subcategory": "전시/역사 관람",
+      "intensity": "low",
+      "sociality": "solo_or_small_group",
+      "location_sensitive": true
+    },
+    "수영": {
+      "category": "스포츠",
+      "subcategory": "수영",
+      "intensity": "medium",
+      "sociality": "solo_or_group",
+      "location_sensitive": true
+    },
+    "낚시": {
+      "category": "야외활동",
+      "subcategory": "낚시",
+      "intensity": "medium",
+      "sociality": "solo_or_small_group",
+      "location_sensitive": true
+    },
+    "피부/뷰티 관리": {
+      "category": "자기관리",
+      "subcategory": "피부/뷰티 관리",
+      "intensity": "low",
+      "sociality": "solo",
+      "location_sensitive": false
+    },
+    "축제/행사 관람": {
+      "category": "문화/여행",
+      "subcategory": "축제/행사 관람",
+      "intensity": "low",
+      "sociality": "solo_or_group",
+      "location_sensitive": true
+    },
+    "인테리어/소품 수집": {
+      "category": "생활/취향",
+      "subcategory": "인테리어/소품 수집",
+      "intensity": "low",
+      "sociality": "solo",
+      "location_sensitive": false
+    },
+    "종교/예배 활동": {
+      "category": "커뮤니티/신앙",
+      "subcategory": "종교/예배 활동",
+      "intensity": "low",
+      "sociality": "group",
+      "location_sensitive": true
+    },
+    "낮잠/휴식": {
+      "category": "휴식/회복",
+      "subcategory": "낮잠/휴식",
+      "intensity": "low",
+      "sociality": "solo",
+      "location_sensitive": false
+    },
+    "쇼핑": {
+      "category": "소비/여가",
+      "subcategory": "쇼핑",
+      "intensity": "low",
+      "sociality": "solo_or_group",
+      "location_sensitive": true
+    },
+    "드라이브": {
+      "category": "여행/야외활동",
+      "subcategory": "드라이브",
+      "intensity": "low",
+      "sociality": "solo_or_group",
+      "location_sensitive": true
+    },
+    "사교/친목 모임": {
+      "category": "커뮤니티",
+      "subcategory": "사교/친목 모임",
+      "intensity": "low",
+      "sociality": "group",
+      "location_sensitive": true
+    },
+    "봉사활동": {
+      "category": "커뮤니티",
+      "subcategory": "봉사활동",
+      "intensity": "low",
+      "sociality": "group",
+      "location_sensitive": true
+    },
+    "동호회/클럽 활동": {
+      "category": "커뮤니티",
+      "subcategory": "동호회/클럽 활동",
+      "intensity": "low",
+      "sociality": "group",
+      "location_sensitive": true
+    },
+    "테마파크/동물원 나들이": {
+      "category": "여행/나들이",
+      "subcategory": "테마파크/동물원",
+      "intensity": "medium",
+      "sociality": "group_or_family",
+      "location_sensitive": true
+    },
+    "온천/스파": {
+      "category": "휴식/회복",
+      "subcategory": "온천/스파",
+      "intensity": "low",
+      "sociality": "solo_or_group",
+      "location_sensitive": true
+    },
+    "수목원/식물원 방문": {
+      "category": "자연/관람",
+      "subcategory": "수목원/식물원",
+      "intensity": "low",
+      "sociality": "solo_or_group",
+      "location_sensitive": true
+    }
+  },
+  "display_examples": {
+    "산책": [
+      "석촌호수 주변 산책",
+      "한강공원 산책",
+      "동네 둘레길 걷기"
+    ],
+    "맛집/카페 탐방": [
+      "방이동 먹자골목 맛집 탐방",
+      "전국 맛집 탐방",
+      "동네 베이커리 빵지순례"
+    ],
+    "영화/드라마 감상": [
+      "넷플릭스 스릴러 영화 감상",
+      "역사 드라마 시청"
+    ],
+    "노래방": [
+      "코인 노래방 방문",
+      "코인 노래방 가창"
+    ],
+    "유튜브/온라인 영상 시청": [
+      "유튜브 시사 및 교양 콘텐츠 시청",
+      "침대 위에서 숏폼 영상 시청하며 낮잠 자기"
+    ],
+    "배드민턴": [
+      "지역 배드민턴 동호회 활동",
+      "동네 배드민턴 클럽 활동"
+    ],
+    "사우나/목욕": [
+      "동네 사우나 방문",
+      "동네 목욕탕 사우나 이용"
+    ],
+    "웹툰 감상": [
+      "네이버 웹툰 정주행",
+      "웹툰 정주행"
+    ],
+    "트로트 감상": [
+      "임영웅 노래 감상",
+      "트로트 프로그램 시청"
+    ],
+    "게임": [
+      "리그 오브 레전드 게임",
+      "모바일 퍼즐 게임"
+    ],
+    "건강/교양 콘텐츠 시청": [
+      "유튜브 건강 정보 시청",
+      "TV 건강 정보 프로그램 시청"
+    ],
+    "독서": [
+      "소설책 읽기",
+      "동네 도서관 소설책 읽기"
+    ],
+    "등산/트레킹": [
+      "강원도 숲길 트레킹",
+      "주말 등산"
+    ],
+    "캠핑/차박": [
+      "대청호 인근 가족 캠핑",
+      "대관령 숲속 캠핑과 불멍"
+    ],
+    "사진 촬영": [
+      "미러리스 카메라 풍경 출사",
+      "풍경 사진 촬영"
+    ],
+    "요리/홈베이킹": [
+      "유튜브 요리 채널 보고 야식 만들기",
+      "맥주와 곁들일 간단한 홈술 안주 요리"
+    ],
+    "원예/식물 가꾸기": [
+      "다육식물 및 야생화 키우기",
+      "베란다 텃밭 가꾸기"
+    ],
+    "음악 감상/청취": [
+      "유튜브 음악 큐레이션 감상",
+      "라디오 청취"
+    ],
+    "여행/나들이": [
+      "가족 동반 국내 여행",
+      "주말 가족 나들이 및 피크닉"
+    ],
+    "전시/역사 관람": [
+      "지역 축제 관람",
+      "국내 역사 유적지 답사"
+    ],
+    "수영": [
+      "수영",
+      "주말 수영"
+    ],
+    "낚시": [
+      "낚시",
+      "주말 낚시"
+    ],
+    "피부/뷰티 관리": [
+      "기초 스킨케어 및 향수 수집",
+      "피부과 및 체형 관리 시술"
+    ],
+    "축제/행사 관람": [
+      "지역 축제 관람",
+      "행사 구경"
+    ],
+    "인테리어/소품 수집": [
+      "집안 분위기를 바꾸는 소품 수집",
+      "거실 가구 재배치 및 인테리어 소품 수집"
+    ],
+    "종교/예배 활동": [
+      "매주 참석하는 교회 구역 예배와 봉사 활동",
+      "성당 미사 참여"
+    ],
+    "낮잠/휴식": [
+      "낮잠을 통한 에너지 충전",
+      "주말 오후의 깊은 낮잠과 휴식"
+    ],
+    "쇼핑": [
+      "쇼핑",
+      "주말 쇼핑"
+    ],
+    "드라이브": [
+      "청풍호 주변 드라이브 및 카페 투어",
+      "주말 근교 드라이브"
+    ],
+    "사교/친목 모임": [
+      "지역 커뮤니티 기반 소모임 활동",
+      "친구들과의 모임"
+    ],
+    "봉사활동": [
+      "지역 사회 봉사활동 모임",
+      "지역 주민센터 봉사활동"
+    ],
+    "동호회/클럽 활동": [
+      "지역 커뮤니티 기반 소모임 활동",
+      "클럽 활동"
+    ],
+    "테마파크/동물원 나들이": [
+      "롯데월드 테마파크 방문",
+      "손주와 동물원 방문"
+    ],
+    "온천/스파": [
+      "울산 인근 온천 방문",
+      "아산 지역 온천 및 스파 방문"
+    ],
+    "수목원/식물원 방문": [
+      "전국 유명 수목원 및 자연 명승지 방문",
+      "마곡서울식물원 야간 산책"
+    ]
+  }
+}
