@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, KeyboardEvent, MouseEvent, PointerEvent, WheelEvent } from "react";
 import type { PersonaProfileResponse, SubgraphResponse } from "@/lib/api-types";
 import type { Loadable } from "@/hooks/use-loadable";
@@ -240,7 +240,6 @@ interface GraphSectionProps {
 
 export function GraphSection({ graph, profile, onSelectPersona }: GraphSectionProps) {
   const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null);
   const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
@@ -249,8 +248,53 @@ export function GraphSection({ graph, profile, onSelectPersona }: GraphSectionPr
   const dragStartRef = useRef<{ pointerId: number; x: number; y: number; panX: number; panY: number } | null>(null);
   const nodeDragRef = useRef<NodeDragState | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const panRef = useRef({ x: 0, y: 0 });
+  const zoomRef = useRef(1);
+  const viewportFrameRef = useRef<number | null>(null);
+  const zoomFrameRef = useRef<number | null>(null);
+  const manualPositionFrameRef = useRef<number | null>(null);
+  const pendingManualPositionRef = useRef<{ nodeId: string; position: { left: number; top: number } } | null>(null);
   const zoomLimits = { min: 0.6, max: 2.2 };
   const centerNodeId = useMemo(() => resolveCenterNodeId(graph.data), [graph.data]);
+
+  function applyViewportTransform() {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const { x, y } = panRef.current;
+    viewport.style.transform = `translate(${x}px, ${y}px) scale(${zoomRef.current})`;
+  }
+
+  function scheduleViewportTransform() {
+    if (viewportFrameRef.current !== null) return;
+    viewportFrameRef.current = window.requestAnimationFrame(() => {
+      viewportFrameRef.current = null;
+      applyViewportTransform();
+    });
+  }
+
+  function scheduleZoomDisplay() {
+    if (zoomFrameRef.current !== null) return;
+    zoomFrameRef.current = window.requestAnimationFrame(() => {
+      zoomFrameRef.current = null;
+      setZoom(zoomRef.current);
+    });
+  }
+
+  useEffect(() => {
+    applyViewportTransform();
+    return () => {
+      if (viewportFrameRef.current !== null) {
+        window.cancelAnimationFrame(viewportFrameRef.current);
+      }
+      if (zoomFrameRef.current !== null) {
+        window.cancelAnimationFrame(zoomFrameRef.current);
+      }
+      if (manualPositionFrameRef.current !== null) {
+        window.cancelAnimationFrame(manualPositionFrameRef.current);
+      }
+    };
+  }, []);
 
   const positionedNodes = useMemo(() => semanticLayout(graph.data, manualPositions), [graph.data, manualPositions]);
 
@@ -306,24 +350,29 @@ export function GraphSection({ graph, profile, onSelectPersona }: GraphSectionPr
     const boundedZoom = clamp(nextZoom, zoomLimits.min, zoomLimits.max);
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect || !anchor) {
-      setZoom(boundedZoom);
+      zoomRef.current = boundedZoom;
+      scheduleViewportTransform();
+      scheduleZoomDisplay();
       return;
     }
 
-    setPan((currentPan) => {
-      const anchorWorldX = (anchor.x - rect.left - currentPan.x) / zoom;
-      const anchorWorldY = (anchor.y - rect.top - currentPan.y) / zoom;
-      return {
-        x: anchor.x - rect.left - anchorWorldX * boundedZoom,
-        y: anchor.y - rect.top - anchorWorldY * boundedZoom,
-      };
-    });
-    setZoom(boundedZoom);
+    const currentPan = panRef.current;
+    const anchorWorldX = (anchor.x - rect.left - currentPan.x) / zoomRef.current;
+    const anchorWorldY = (anchor.y - rect.top - currentPan.y) / zoomRef.current;
+    panRef.current = {
+      x: anchor.x - rect.left - anchorWorldX * boundedZoom,
+      y: anchor.y - rect.top - anchorWorldY * boundedZoom,
+    };
+    zoomRef.current = boundedZoom;
+    scheduleViewportTransform();
+    scheduleZoomDisplay();
   }
 
   function resetViewport() {
+    zoomRef.current = 1;
+    panRef.current = { x: 0, y: 0 };
+    applyViewportTransform();
     setZoom(1);
-    setPan({ x: 0, y: 0 });
     setHoveredNodeId(null);
     setFocusedNodeId(null);
     setManualPositions({});
@@ -331,19 +380,20 @@ export function GraphSection({ graph, profile, onSelectPersona }: GraphSectionPr
 
   function zoomStep(step: number) {
     const rect = canvasRef.current?.getBoundingClientRect();
-    setZoomByLevel(zoom + step, rect ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 } : undefined);
+    setZoomByLevel(zoomRef.current + step, rect ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 } : undefined);
   }
 
   function startPan(event: PointerEvent<HTMLDivElement>) {
     if (event.button !== 0) return;
     event.currentTarget.setPointerCapture(event.pointerId);
-    dragStartRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, panX: pan.x, panY: pan.y };
+    dragStartRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, panX: panRef.current.x, panY: panRef.current.y };
   }
 
   function movePan(event: PointerEvent<HTMLDivElement>) {
     const dragStart = dragStartRef.current;
     if (!dragStart || dragStart.pointerId !== event.pointerId) return;
-    setPan({ x: dragStart.panX + event.clientX - dragStart.x, y: dragStart.panY + event.clientY - dragStart.y });
+    panRef.current = { x: dragStart.panX + event.clientX - dragStart.x, y: dragStart.panY + event.clientY - dragStart.y };
+    scheduleViewportTransform();
   }
 
   function endPan(event: PointerEvent<HTMLDivElement>) {
@@ -354,7 +404,7 @@ export function GraphSection({ graph, profile, onSelectPersona }: GraphSectionPr
 
   function wheelZoom(event: WheelEvent<HTMLDivElement>) {
     event.preventDefault();
-    setZoomByLevel(zoom + (event.deltaY > 0 ? -0.12 : 0.12), { x: event.clientX, y: event.clientY });
+    setZoomByLevel(zoomRef.current + (event.deltaY > 0 ? -0.12 : 0.12), { x: event.clientX, y: event.clientY });
   }
 
   function handleCanvasKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -389,8 +439,16 @@ export function GraphSection({ graph, profile, onSelectPersona }: GraphSectionPr
     if (!dragState || dragState.pointerId !== event.pointerId) return;
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const world = getWorldPercent(event, pan, zoom, rect);
-    setManualPositions((current) => ({ ...current, [dragState.nodeId]: world }));
+    const world = getWorldPercent(event, panRef.current, zoomRef.current, rect);
+    pendingManualPositionRef.current = { nodeId: dragState.nodeId, position: world };
+    if (manualPositionFrameRef.current !== null) return;
+    manualPositionFrameRef.current = window.requestAnimationFrame(() => {
+      manualPositionFrameRef.current = null;
+      const pending = pendingManualPositionRef.current;
+      if (!pending) return;
+      pendingManualPositionRef.current = null;
+      setManualPositions((current) => ({ ...current, [pending.nodeId]: pending.position }));
+    });
   }
 
   function endNodeDrag(event: PointerEvent<HTMLDivElement>) {
@@ -468,7 +526,7 @@ export function GraphSection({ graph, profile, onSelectPersona }: GraphSectionPr
           onDoubleClick={resetViewport}
           onWheel={wheelZoom}
         >
-          <div className="graph-viewport" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}>
+          <div ref={viewportRef} className="graph-viewport">
             <div className="graph-lane-layer" aria-hidden="true">
               {(["hobbies", "work", "place", "life", "similar"] as LaneKey[]).map((lane) => {
                 const config = LANE_CONFIG[lane];
