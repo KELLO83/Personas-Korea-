@@ -1,16 +1,16 @@
 # React Frontend Migration Plan
 
-> Streamlit 기반 Python 프론트를 React 프론트로 점진 전환하기 위한 구현 계획 및 체크리스트입니다.  
-> 원칙: **기존 코드는 삭제하지 않고 보관한다. React는 기존 FastAPI API를 소비하는 별도 프론트로 병행 구축한다.**
+> Streamlit 기반 Python 프론트에서 React 프론트로 전환했던 구현 계획 및 체크리스트입니다.  
+> 현재 기준 원칙: **운영 프론트는 React/Next.js이며, 기존 Streamlit 코드는 이미 삭제되었습니다.**
 
 ---
 
 ## 1. 목표
 
-- 현재 `app/streamlit_app.py`에 집중된 Streamlit UI를 React 기반 프론트엔드로 단계적으로 이전한다.
+- 기존 Streamlit UI에서 사용하던 기능을 React 기반 프론트엔드로 단계적으로 이전한다.
 - 기존 FastAPI 백엔드(`src/api`)와 Neo4j/RAG/Graph 로직은 유지한다.
-- Streamlit 앱은 React가 기능 parity에 도달할 때까지 기준 구현(reference implementation)으로 유지한다.
-- 전환 중 언제든 기존 Streamlit 화면으로 되돌릴 수 있는 rollback 경로를 보장한다.
+- React가 핵심 기능 parity를 달성할 때까지 FastAPI API 계약과 테스트 결과를 기준선으로 사용한다.
+- Streamlit rollback 경로는 더 이상 존재하지 않으며, 필요 시 git history와 API 테스트를 기준으로 회귀 검증한다.
 
 ---
 
@@ -18,20 +18,14 @@
 
 ### 2.1 현재 프론트
 
-- 파일: `app/streamlit_app.py`
-- 역할:
-  - 11개 탭 UI 구성
-  - FastAPI 호출 래퍼(`get_json`, `post_json`)
-  - Streamlit `session_state` 기반 선택 UUID, 검색 결과, 채팅 기록, 그래프 데이터 관리
-  - 그래프 시각화 HTML/JS 생성(`vis-network`)
-  - 한국어 라벨/관계 문장/공통점 카드 등 UI 전용 가공
+- 운영 프론트: `frontend/` 기반 Next.js React
+- 기준선: FastAPI API 계약, 테스트, 기존 기능 요구사항 문서
+- 참고: 과거 Streamlit UI가 제공하던 탭형 워크플로우를 React 화면으로 재구성하는 것이 목표였다.
 
-### 2.2 기존 Streamlit 보관
+### 2.2 기존 Streamlit 상태
 
-- 보관 폴더: `discared/`
-- 보관 파일: `discared/streamlit_app_legacy_2026-04-28.py`
-- 원본 유지: `app/streamlit_app.py`
-- 주의: `discared`는 요청받은 폴더명 그대로 사용한다. 철자는 `discarded`가 아니라 `discared`이다.
+- 기존 Streamlit 프론트 코드는 현재 저장소에서 삭제되었다.
+- 따라서 이 문서의 Streamlit 언급은 과거 UI 구조를 설명하는 역사적 맥락으로만 읽어야 한다.
 
 ### 2.3 기존 API
 
@@ -62,9 +56,8 @@ React 전환 시 우선 재사용할 FastAPI 엔드포인트:
 
 1. `frontend/` 디렉터리를 새로 만든다.
 2. React 앱은 FastAPI를 HTTP API로만 호출한다.
-3. `app/streamlit_app.py`는 삭제하지 않고 계속 실행 가능하게 둔다.
-4. React 화면을 하나씩 만들고, Streamlit 화면과 결과를 비교한다.
-5. 핵심 워크플로우가 모두 통과한 뒤에만 기본 프론트를 React로 전환한다.
+3. React 화면을 하나씩 만들고, API 응답/기능 요구사항/테스트 결과와 비교한다.
+4. 핵심 워크플로우가 모두 통과한 뒤에만 기본 프론트를 React로 전환한다.
 
 ### 3.2 권장 기술 스택
 
@@ -76,7 +69,7 @@ React 전환 시 우선 재사용할 FastAPI 엔드포인트:
 - React Query 또는 SWR: API 캐싱, loading/error 상태 관리
 - Zustand 또는 Context: `selected_uuid`, 현재 탭/필터/채팅 세션 등 전역 상태 관리
 - 그래프 시각화 후보:
-  - `vis-network`: 기존 Streamlit HTML 로직과 가장 가까움
+  - `vis-network`: 과거 UI의 그래프 표현 방식과 가장 가까움
   - `React Flow`: UI 제어와 React 컴포넌트 통합에 유리
   - `Cytoscape.js`: 그래프 탐색/레이아웃 기능이 강함
 
@@ -127,13 +120,11 @@ frontend/
 
 ## 5. 단계별 구현 계획
 
-## Phase R0: 보관 및 기준선 고정
+## Phase R0: 기준선 고정
 
 
-- [x] `discared/` 폴더 생성
-- [x] `app/streamlit_app.py`를 `discared/streamlit_app_legacy_2026-04-28.py`로 복사
-- [x] 원본 `app/streamlit_app.py` 유지
-- [x] React 전환 중 Streamlit을 reference UI로 사용한다는 원칙 문서화
+- [x] React 전환 전 기존 Streamlit UI 구조 파악 완료
+- [x] React 전환 중 FastAPI API 계약을 기준선으로 사용한다는 원칙 문서화
 - [ ] 현재 FastAPI 테스트 전체 통과 확인
 
 ## Phase R1: API Contract 정리
@@ -176,7 +167,7 @@ frontend/
 - [x] 총 페르소나 수 카드
 - [x] 연령대/성별/지역 분포 차트
 - [x] 상위 취미/직업/스킬 목록
-- [ ] Streamlit 대시보드와 값 비교
+- [ ] 기존 요구사항/백엔드 응답과 값 비교
 
 ### Search
 
@@ -279,7 +270,7 @@ Streamlit에서 React로 옮길 주요 함수:
 ## Phase R7: Parity 검증 및 전환 준비
 
 
-- [ ] Streamlit 화면별 React 결과 비교
+- [ ] 기존 요구사항 기준으로 화면별 React 결과 비교
 - [ ] 주요 API 응답값 일치 확인
 - [ ] Korean UI text 검수
 - [ ] loading/error/empty 상태 검수
@@ -319,7 +310,7 @@ Streamlit `session_state`에서 React 상태로 이동할 항목:
 
 각 화면은 완료 처리 전에 아래 기준을 통과해야 한다.
 
-- [ ] 기존 Streamlit 화면과 핵심 기능 parity 충족
+- [ ] 기존 기능 요구사항과 핵심 기능 parity 충족
 - [ ] 정상 응답 표시
 - [ ] 빈 결과 표시
 - [ ] API 오류 표시
@@ -342,16 +333,16 @@ Streamlit `session_state`에서 React 상태로 이동할 항목:
 | 채팅 세션 유지 실패 | 대화 맥락 손실 | `session_id`를 localStorage/Zustand에 안정 저장 |
 | CORS/환경변수 오류 | 프론트-백엔드 연결 실패 | `.env.example`, 명시적 `API_BASE_URL`, health check 추가 |
 | 503/미준비 데이터 | 사용자 혼란 | 추천/중심성 미준비 상태 UI 별도 처리 |
-| 일괄 전환 실패 | rollback 어려움 | Streamlit 병행 유지, 화면별 parity 후 전환 |
+| 일괄 전환 실패 | rollback 어려움 | 화면별 parity 후 전환하고, 필요 시 git history·API 테스트·현재 프론트 검증 결과를 기준으로 회귀 검증 |
 
 ---
 
 ## 9. 삭제/보관 정책
 
-- `app/streamlit_app.py`는 React 이관 중 삭제하지 않는다.
-- 보관본은 `discared/streamlit_app_legacy_2026-04-28.py`에 유지한다.
-- React가 parity에 도달해도 Streamlit 원본 삭제는 별도 결정으로 분리한다.
-- deprecated 표시가 필요하면 삭제 대신 README/문서에 legacy 상태를 명시한다.
+- 과거 Streamlit UI 코드는 더 이상 저장소에 남아 있지 않다.
+- 회귀 검증은 API 테스트, PRD, CHECKLIST, 프론트 구현 결과를 기준으로 수행한다.
+- React가 parity에 도달한 이후에도 회귀 검증 기준은 PRD, CHECKLIST, API 테스트, 현재 프론트 구현 결과로 유지한다.
+- historical UI 맥락이 필요하면 별도 문서 기록으로만 남기고, 삭제된 프론트 경로를 다시 기준선으로 복원하지 않는다.
 
 ---
 
@@ -365,4 +356,4 @@ React 전환 완료 조건:
 - [ ] React lint/typecheck/build가 통과한다.
 - [ ] 그래프/채팅/추천/중심성의 오류 및 미준비 상태가 사용자에게 명확히 표시된다.
 - [ ] 실행 문서가 React 기준으로 업데이트된다.
-- [ ] Streamlit rollback 경로가 유지된다.
+- [ ] git history, API 테스트, 현재 프론트 검증 결과를 기준으로 회귀 검증 가능하다.

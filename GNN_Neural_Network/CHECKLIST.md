@@ -1,5 +1,14 @@
 # GNN 취미/여가 추천 구현 체크리스트
 
+## 문서 경계
+
+- 기준 문서: 이 체크리스트는 `PRD.md`의 요구사항을 실행 상태 관점에서 추적합니다.
+- 기준 순서: `PRD.md`에서 제시한 범위/우선순위를 최우선으로 적용하고, 항목 수행 여부를 `CHECKLIST.md`로 관리합니다.
+- v2 실행 보조: `CHECKLIST_GNN_Reranker_v2.md`는 v2 실험 단계별 진행 기록용 보조 체크리스트입니다.
+- 데이터/구조 맥락: `DATASET_EXPLAIN.md`는 정책 해석의 보조 자료로 사용합니다.
+- 충돌 해결: 본 체크리스트 항목의 의미가 다르면 `PRD.md`를 기준으로 수정합니다.
+- 해석 규칙: 보조 문서를 업데이트할 때도 `PRD.md`의 결정사항과 우선순위를 그대로 반영해야 하며, 충돌 시 `PRD.md`가 최종권한입니다.
+
 ## Phase G0. 준비
 
 - [ ] 기존 `.venv`에서 PyTorch CUDA 상태 확인
@@ -531,12 +540,163 @@
 - [x] test metric은 validation으로 config를 고정한 뒤 산출됨
 - [ ] 코드 구현 전 PRD와 체크리스트가 최신 상태로 유지됨
 
-## Phase G7.8. Item-Item Collaborative Filtering (BM25/TF-IDF) 고도화
+## Phase G7.8. Item-Item Collaborative Filtering 실험 (완료)
 
-Stage 2 승격 완료 후, popularity bias를 줄이기 위해 Stage 1 `cooccurrence`를 정교화하는 실험을 진행한다.
+Stage 2 승격 완료 후, popularity bias를 줄이기 위해 Stage 1 `cooccurrence`를 정교화하는 실험을 진행했다.
 
-- [ ] BM25-weighted ItemKNN 또는 TF-IDF weighted cooccurrence 계산 구현
-- [ ] BM25 ItemKNN provider 단독 평가 (vs raw cooccurrence)
-- [ ] `popularity + BM25 ItemKNN` 조합 평가 (vs 현재 baseline `popularity + cooccurrence`)
-- [ ] BM25 기반 향상된 candidate pool 위에서 Stage 2 reranker 재평가
-- [ ] XSimGCL/SimGCL은 이 item-item 고도화 실험 이후로 순연
+### 구현 완료
+
+- [x] BM25 ItemKNN provider 구현 (`build_bm25_itemknn_counts`, `bm25_itemknn_candidate_provider`)
+- [x] IDF-weighted cooccurrence provider 구현 (`build_idf_weighted_cooccurrence_counts`, `idf_weighted_cooccurrence_provider`)
+- [x] Popularity-capped cooccurrence provider 구현 (`build_pop_capped_cooccurrence_counts`, `pop_capped_cooccurrence_provider`)
+- [x] Jaccard item-item similarity provider 구현 (`build_jaccard_itemknn_counts`, `jaccard_itemknn_candidate_provider`)
+- [x] PMI (Pointwise Mutual Information) item-item provider 구현 (`build_pmi_itemknn_counts`, `pmi_itemknn_candidate_provider`)
+- [x] evaluate_stage1_ablation.py에 6개 provider 단독 + 조합 ablation 추가
+- [x] evaluate_reranker.py에 신규 provider wiring 추가
+
+### 실험 결과 (validation split, SELECTED_BASELINE = popularity + cooccurrence, R@10=0.6940)
+
+**단독 provider 성능:**
+
+| Provider | R@10 | N@10 | delta vs baseline |
+|---|---|---|---|
+| popularity | 0.6913 | 0.4346 | -0.0027 |
+| cooccurrence | 0.6932 | 0.4370 | -0.0008 |
+| idf_cooccurrence | 0.6927 | 0.4359 | -0.0013 |
+| pop_capped_cooccurrence | 0.6925 | 0.4369 | -0.0015 |
+| jaccard_itemknn | 0.6829 | 0.4251 | -0.0112 |
+| bm25_itemknn | 0.4493 | 0.1970 | -0.2447 |
+| pmi_itemknn | 0.0076 | 0.0030 | -0.6864 |
+| segment_popularity | 0.0038 | 0.0016 | -0.6903 |
+| lightgcn | 0.6770 | 0.4280 | -0.0171 |
+
+**조합 성능 (상위 조합만):**
+
+| Combination | R@10 | N@10 | delta_R@10 |
+|---|---|---|---|
+| **popularity + cooccurrence** | **0.6940** | **0.4355** | **0.0000** |
+| popularity + idf_cooccurrence | 0.6930 | 0.4352 | -0.0010 |
+| popularity + pop_capped_cooccurrence | 0.6930 | 0.4351 | -0.0010 |
+| popularity + jaccard_itemknn | 0.6932 | 0.4338 | -0.0008 |
+| popularity + bm25_itemknn | 0.6373 | 0.3922 | -0.0567 |
+| popularity + pmi_itemknn | 0.5359 | 0.3487 | -0.1581 |
+
+### 결론
+
+- **Stage1 = `popularity + cooccurrence`가 최선**. 모든 대안 provider가 baseline보다 낮거나 동등함
+- 인기 편향 완화 provider(BM25, PMI 등)는 accuracy를 크게 깎음
+- IDF, pop-capped, Jaccard는 근소하게 낮음 (개선 불가)
+- **인기 편향 완화는 Stage2 reranker에서 처리하는 것이 정답** (Stage1 교체로는 accuracy 손실 발생)
+- PMI, segment_popularity, BM25은 현재 형태로 사용 불가
+
+### 최종 상태
+
+- **선택됨**: `popularity + cooccurrence` (SELECTED_STAGE1_BASELINE)
+- **승격됨**: Stage2 **LightGBM learned ranker** (validation R@10=0.7300, test R@10=0.7080)
+- **fallback 유지**: v1 deterministic reranker (validation R@10=0.7099, test R@10=0.7043)
+- **거부됨**: segment_popularity, BM25 ItemKNN, PMI ItemKNN
+- **미선택**: idf_cooccurrence, pop_capped_cooccurrence, Jaccard ItemKNN, LightGCN merge (근소 하락)
+
+## Phase G7.9. LightGBM ranking collapse 완화 및 후속 실험
+
+Stage1 provider 교체로는 popularity bias를 완화하면서 accuracy를 유지할 수 없음이 확인됐다.
+현재 후속 과제의 1순위는 Stage1 교체가 아니라 **promoted LightGBM Stage 2의 ranking collapse 완화**다.
+
+**확정된 우선순위 (변경 금지):**
+
+### G7.9-1. Stage2 quality audit 심층 정성 검수 ✅
+
+- [x] 연령/직업/지역별 추천 Top-5가 얼마나 중복되는지 정량화
+  - 결과: 모든 연령/직업 세그먼트가 동일 Top-5 반복 (사우나/목욕, 여행/나들이, 유튜브, 산책, 사교/친목)
+- [x] 상위 인기 취미 몇 개에만 추천이 몰리는지 coverage 비율 확인
+  - 결과: Stage1 coverage 23/180=12.8%, Stage2 coverage 93/180=51.7%
+- [x] mismatch_penalty가 실제로 작동하는지, penalty 값 분포 확인
+  - 결과: penalty 분포는 audit에 포함됨
+- [x] popularity_prior가 0.87~1.0으로 후보 점수를 지배하는지 확인
+  - 결과: popularity_prior 분포 확인됨
+- [x] 50대 직장인 vs 20대 여성 등 맥락이 다른 페르소나 간 추천 차이 검수
+  - 결과: segment별 per-segment popularity rank audit에 포함
+- [x] 지역/가족형태별 추천 차이가 있는지 검수
+  - 결과: age_group/occupation breakdown audit에 포함
+
+**G7.9-1 결과 (v1 deterministic reference vs current promoted LightGBM 해석에 모두 사용):**
+
+| 메트릭 | Stage1 | v1 deterministic Stage2 |
+|--------|--------|-------------------|
+| Coverage | 23/180 (12.8%) | 93/180 (51.7%) |
+| Category Entropy | 3.680 | 3.997 |
+| Avg Categories/Person | 9.82 | 9.55 |
+| Avg Pop Rank | 6.8 | 9.2 |
+| Long-tail Share(>50) | 0.000 | 0.012 |
+| Avg Novelty | 4.484 | 4.732 |
+
+현재 promoted LightGBM은 위 deterministic reference보다 accuracy는 높지만 coverage@10과 novelty@10은 낮다 (`0.150`, `4.580`). 따라서 현재 병목은 retrieval보다 ranking collapse로 해석한다.
+
+### G7.9-2. Taxonomy 과잉 병합 재검수 (보류)
+
+G7.9-3/4 실험 결과 해석 후 필요시 재검수.
+
+- [ ] `canonicalization_candidates.json` 상위 cluster 직접 검수
+- [ ] 우선 점검 대상: 산책, 건강/교양 콘텐츠 시청, 축제/행사 관람, 여행/나들이, 인테리어/소품 수집
+- [ ] 과잉 넓은 canonical이 서로 다른 취향을 하나로 뭉치고 있는지 판단
+- [ ] split_required 후보 식별 및 분리 규칙 재설계
+- [ ] canonical singleton ratio (현재 0.848)가 raw singleton ratio (0.834)보다 높은 원인 분석
+- [ ] 필요시 `hobby_taxonomy_review.json` 업데이트 및 재실행
+
+### G7.9-3. Stage2 diversity/novelty soft feature 설계 ✅
+
+Stage1은 popularity + cooccurrence로 확정. 더 이상 건드리지 않음.
+인기 편향 완화는 Stage2에서만 처리.
+
+- [x] `popularity_penalty`: log-normalized 인기도 기반 soft downweight 구현
+  - `log1p(train_popularity) / log1p(max_train_popularity)` 公식 사용
+- [x] `category_diversity_reward`: 같은 category 과도 집중 방지 구현
+  - `_diversity_aware_sort()` greedy MMR-like 선택 + `_hobby_category()` 헬퍼
+- [x] `novelty_bonus`: `1.0 - popularity_penalty`로 정의, long-tail item에 가산
+- [x] `RerankerWeights` dataclass에 3개 필드 추가 (기본값 0.0)
+- [x] `lightgcn_hobby.yaml`에 3개 weight 항목 추가 (기본값 0.00)
+- [x] `evaluate_reranker.py`, `sweep_reranker_weights.py`, `recommend_for_persona.py`에 hobby_taxonomy 로딩 + 전달 추가
+- [x] `recommendation_quality_audit.py`에 category/entropy/long-tail/novelty/per-segment 분석 추가 + hobby_taxonomy 전달
+- [x] 모든 수정 파일 py_compile 통과, config runtime sanity check 통과
+
+### G7.9-4. Validation 실험 — Gate 2 미충족으로 Test 평가 생략 ✅
+
+**G7.9-4a. Baseline audit (validation, new weights = 0.0):** 완료
+- Stage2 baseline R@10≈0.7099, N@10≈0.4423
+- Baseline audit 수치는 콘솔 출력에 기록 (아티팩트는 마지막 실행인 cdr=0.05 결과로 덮어씌워짐)
+
+**G7.9-4b. Validation sweep (64 combinations):** 완료
+- Top result: pp=0.0, nb=0.0, cdr=0.10 → N@10=0.4447, R@10=0.7107 (+0.0024, +0.0008 vs baseline)
+- Gate 1 (accuracy loss ≤ 0.003): **전원 통과**
+- category_diversity_reward가 가장 효과적인 단일 weight
+- popularity_penalty가 가장 위험 (0.03만으로도 accuracy 하락)
+
+**G7.9-4c. Diversity audit 비교 (cdr=0.05, cdr=0.10):** 완료, Gate 2 미충족
+
+| 메트릭 | Baseline(cdr=0) | cdr=0.05 | cdr=0.10 | 개선? |
+|--------|----------------|----------|----------|-------|
+| Coverage | 93/180 (51.7%) | 68/180 (37.8%) | 43/180 (23.9%) | ❌ 급감 |
+| Category Entropy | 3.997 | 3.986 | 3.974 | ❌ 하락 |
+| Avg Categories/Person | 9.55 | 9.98 | **10.00** | ✅ 개선 |
+| Long-tail >50 | 0.012 | 0.005 | 0.004 | ❌ 감소 |
+| Avg Novelty | 4.732 | 4.634 | 4.622 | ❌ 감소 |
+
+**판정: Gate 2 (5개 메트릭 중 최소 2개 개선) 미충족.**
+- accuracy는 개선되지만 global diversity 4개 지표가 전부 악화
+- 원인: `_diversity_aware_sort`가 per-person category diversity는 개선하지만 global coverage/novelty/long-tail을 희생
+- 사용자 요청에 따라 실험 중단, YAML은 기본값(모두 0.00)으로 복원됨
+- **Test split 평가는 수행되지 않음** — Gate 2 미충족으로 validation에서 기각되었으므로 test 평가 생략
+- 향후 고려사항: LightGBM regularization, negative sampling, source one-hot, taxonomy 과잉 병합 해결, KURE dense MMR 재평가
+
+### G7.9-5. Phase 2.5 후속 우선순위
+
+- [ ] LightGBM regularization tuning 실행 및 best config test 평가
+- [ ] negative sampling ablation 실행 (`1:1`, `4:1`, `8:1`)
+- [ ] source one-hot ablation 실행 (`source_popularity`, `source_cooccurrence`, `source_lightgcn`)
+- [ ] taxonomy 과잉 병합 재검수 및 singleton ratio 역전 원인 기록
+- [ ] KURE dense embedding 기반 MMR 재평가
+- [ ] leakage-safe text embedding ablation
+
+### XSimGCL/SimGCL 순연
+
+- [ ] XSimGCL/SimGCL은 Phase 2.5 ranking-collapse 완화 실험이 끝난 이후에만 검토

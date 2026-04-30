@@ -162,7 +162,7 @@
 |:---|:---|
 | `src/gds/centrality.py` | PageRank, Betweenness, Degree 계산 및 저장 |
 | `src/api/routes/influence.py` | `/api/influence/top`, `/api/influence/simulate-removal` 엔드포인트 |
-| `app/streamlit_app.py` | "핵심 인물" 탭 추가 |
+| Legacy Streamlit UI (historical) | "핵심 인물" 탭 추가 |
 | `tests/test_centrality.py` | 중심성 계산 로직 단위 테스트 |
 | `tests/test_api_influence.py` | API 응답 및 시뮬레이션 테스트 |
 
@@ -171,7 +171,7 @@
 |:---|:---|
 | `src/graph/recommendation.py` | 추천 알고리즘 (Collaborative Filtering) 구현 |
 | `src/api/routes/recommend.py` | `/api/recommend/{uuid}` 엔드포인트 |
-| `app/streamlit_app.py` | 프로필 상세 페이지에 "추천" 섹션 추가 |
+| Legacy Streamlit UI (historical) | 프로필 상세 페이지에 "추천" 섹션 추가 |
 | `tests/test_recommendation.py` | 추천 스코어링 로직 테스트 |
 
 ### Feature 3: 대화형 챗봇
@@ -179,7 +179,7 @@
 |:---|:---|
 | `src/rag/chat_graph.py` | 멀티턴 LangGraph 상태 관리 및 필터 병합 로직 |
 | `src/api/routes/chat.py` | `/api/chat` 엔드포인트 |
-| `app/streamlit_app.py` | 메인 화면 Chat Interface 추가 |
+| Legacy Streamlit UI (historical) | 메인 화면 Chat Interface 추가 |
 | `tests/test_chat_graph.py` | 필터 병합 및 대화 흐름 테스트 |
 
 ---

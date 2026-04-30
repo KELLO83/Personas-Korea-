@@ -6,7 +6,7 @@ import sys
 from collections import Counter, defaultdict
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 import torch
 from tqdm import tqdm
@@ -16,9 +16,18 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from GNN_Neural_Network.gnn_recommender.baseline import (  # noqa: E402
+    build_bm25_itemknn_counts,
     build_cooccurrence_counts,
+    build_idf_weighted_cooccurrence_counts,
+    build_jaccard_itemknn_counts,
+    build_pmi_itemknn_counts,
+    build_pop_capped_cooccurrence_counts,
     build_popularity_counts,
     cooccurrence_candidate_provider,
+    idf_weighted_cooccurrence_provider,
+    jaccard_itemknn_candidate_provider,
+    pmi_itemknn_candidate_provider,
+    pop_capped_cooccurrence_provider,
     popularity_candidate_provider,
     segment_popularity_candidate_provider,
 )
@@ -65,6 +74,7 @@ def main() -> None:
     truth = _known_from_edges(target_edges)
     contexts = load_person_contexts(config.paths.person_context_csv) if config.paths.person_context_csv.exists() else {}
     hobby_profile = load_json(config.paths.hobby_profile) if config.paths.hobby_profile.exists() else None
+    hobby_taxonomy = _load_hobby_taxonomy(config.paths.hobby_taxonomy, config.paths.artifact_dir)
     normalization_method = _normalization_method(config.paths.score_normalization)
     reranker_config = build_reranker_config(config.rerank.use_text_fit, config.rerank.weights)
     effective_weights = {key: float(value) for key, value in asdict(reranker_config.weights).items()}
@@ -81,6 +91,11 @@ def main() -> None:
     person_embeddings, hobby_embeddings = compute_lightgcn_embeddings(model, adjacency)
     popularity_counts = build_popularity_counts(train_edges)
     cooccurrence_counts = build_cooccurrence_counts(train_edges)
+    bm25_counts = build_bm25_itemknn_counts(train_edges)
+    idf_cooc_counts = build_idf_weighted_cooccurrence_counts(train_edges)
+    pop_capped_counts = build_pop_capped_cooccurrence_counts(train_edges)
+    jaccard_counts = build_jaccard_itemknn_counts(train_edges)
+    pmi_counts = build_pmi_itemknn_counts(train_edges)
 
     lightgcn_rankings: dict[int, list[int]] = {}
     stage1_rankings: dict[int, list[int]] = {}
@@ -105,6 +120,11 @@ def main() -> None:
             hobby_embeddings=hobby_embeddings,
             popularity_counts=popularity_counts,
             cooccurrence_counts=cooccurrence_counts,
+            bm25_counts=bm25_counts,
+            idf_cooc_counts=idf_cooc_counts,
+            pop_capped_counts=pop_capped_counts,
+            jaccard_counts=jaccard_counts,
+            pmi_counts=pmi_counts,
         )
         lightgcn_rankings[person_id] = [candidate.hobby_id for candidate in provider_candidates["lightgcn"][:max_k]]
         selected_stage1_candidates = _selected_stage1_provider_candidates(provider_candidates)
@@ -119,26 +139,35 @@ def main() -> None:
             hobby_profile if isinstance(hobby_profile, dict) else None,
             known_names,
             reranker_config,
+            hobby_taxonomy=hobby_taxonomy,
         )
         if reranked and reranked[0].reason_features.get("fallback") == "stage1_score_only":
             stage2_fallback_count += 1
         rerank_rankings[person_id] = [candidate.hobby_id for candidate in reranked[:max_k]]
 
+    hobby_categories = _build_hobby_categories(id_to_hobby, hobby_taxonomy)
+    person_segments = _build_person_segments(truth.keys(), id_to_person, contexts)
+
     lightgcn_metrics = summarize_ranking_metrics(
-        truth, lightgcn_rankings, config.eval.top_k, 
-        num_total_items=model.num_hobbies, item_popularity=popularity_counts
+        truth, lightgcn_rankings, config.eval.top_k,
+        num_total_items=model.num_hobbies, item_popularity=popularity_counts,
+        hobby_categories=hobby_categories, person_segments=person_segments,
     )
     selected_stage1_metrics = summarize_ranking_metrics(
-        truth, stage1_rankings, config.eval.top_k, 
-        num_total_items=model.num_hobbies, item_popularity=popularity_counts
+        truth, stage1_rankings, config.eval.top_k,
+        num_total_items=model.num_hobbies, item_popularity=popularity_counts,
+        hobby_categories=hobby_categories, person_segments=person_segments,
     )
     stage2_metrics = summarize_ranking_metrics(
-        truth, rerank_rankings, config.eval.top_k, 
-        num_total_items=model.num_hobbies, item_popularity=popularity_counts
+        truth, rerank_rankings, config.eval.top_k,
+        num_total_items=model.num_hobbies, item_popularity=popularity_counts,
+        hobby_categories=hobby_categories, candidate_pool_by_person=candidate_rankings,
+        person_segments=person_segments,
     )
     candidate_recall_metrics = summarize_ranking_metrics(
         truth, candidate_rankings, (candidate_k,),
-        num_total_items=model.num_hobbies, item_popularity=popularity_counts
+        num_total_items=model.num_hobbies, item_popularity=popularity_counts,
+        hobby_categories=hobby_categories,
     )
     delta_vs_selected_stage1 = {
         "recall@10": _metric_value(stage2_metrics, "recall@10") - _metric_value(selected_stage1_metrics, "recall@10"),
@@ -198,6 +227,52 @@ def main() -> None:
                     print(f"{section}_{key}: {value:.6f}")
 
 
+def _build_hobby_categories(
+    id_to_hobby: dict[int, str],
+    hobby_taxonomy: dict[str, object] | None,
+) -> dict[int, str]:
+
+    if hobby_taxonomy is None:
+        return {}
+    taxonomy_map = hobby_taxonomy.get("taxonomy", {})
+    rules = hobby_taxonomy.get("rules", [])
+    result: dict[int, str] = {}
+    for hobby_id, hobby_name in id_to_hobby.items():
+        category = ""
+        if isinstance(taxonomy_map, dict):
+            entry = taxonomy_map.get(hobby_name, {})
+            if isinstance(entry, dict):
+                category = str(entry.get("category", ""))
+        if not category and isinstance(rules, list):
+            for rule in rules:
+                if isinstance(rule, dict) and rule.get("canonical_hobby") == hobby_name:
+                    tax = rule.get("taxonomy", {})
+                    if isinstance(tax, dict):
+                        category = str(tax.get("category", ""))
+                    break
+        if category:
+            result[hobby_id] = category
+    return result
+
+
+def _build_person_segments(
+    person_ids: Iterable[int],
+    id_to_person: dict[int, str],
+    contexts: dict[str, PersonContext],
+) -> dict[int, dict[str, str]]:
+
+    result: dict[int, dict[str, str]] = {}
+    for person_id in person_ids:
+        person_uuid = id_to_person.get(person_id, "")
+        ctx = contexts.get(person_uuid)
+        if ctx is not None:
+            result[person_id] = {
+                "age_group": ctx.age_group,
+                "sex": ctx.sex,
+            }
+    return result
+
+
 def _provider_candidates(
     *,
     model: LightGCN,
@@ -216,6 +291,10 @@ def _provider_candidates(
     popularity_counts: Counter[int],
     cooccurrence_counts: dict[int, Counter[int]],
     bm25_counts: dict[int, dict[int, float]] | None = None,
+    idf_cooc_counts: dict[int, dict[int, float]] | None = None,
+    pop_capped_counts: dict[int, dict[int, float]] | None = None,
+    jaccard_counts: dict[int, dict[int, float]] | None = None,
+    pmi_counts: dict[int, dict[int, float]] | None = None,
 ) -> dict[str, list[Candidate]]:
     from GNN_Neural_Network.gnn_recommender.baseline import bm25_itemknn_candidate_provider
     return {
@@ -243,6 +322,22 @@ def _provider_candidates(
         ),
         "bm25_itemknn": normalize_candidate_scores(
             bm25_itemknn_candidate_provider(train_edges, person_id, known, candidate_k, bm25_counts=bm25_counts),
+            normalization_method,
+        ),
+        "idf_cooccurrence": normalize_candidate_scores(
+            idf_weighted_cooccurrence_provider(train_edges, person_id, known, candidate_k, idf_cooc_counts=idf_cooc_counts),
+            normalization_method,
+        ),
+        "pop_capped_cooccurrence": normalize_candidate_scores(
+            pop_capped_cooccurrence_provider(train_edges, person_id, known, candidate_k, pop_capped_counts=pop_capped_counts),
+            normalization_method,
+        ),
+        "jaccard_itemknn": normalize_candidate_scores(
+            jaccard_itemknn_candidate_provider(train_edges, person_id, known, candidate_k, jaccard_counts=jaccard_counts),
+            normalization_method,
+        ),
+        "pmi_itemknn": normalize_candidate_scores(
+            pmi_itemknn_candidate_provider(train_edges, person_id, known, candidate_k, pmi_counts=pmi_counts),
             normalization_method,
         ),
         "segment_popularity": normalize_candidate_scores(
@@ -301,6 +396,15 @@ def _normalization_method(path: Path) -> str:
     if not isinstance(value, dict):
         return "rank_percentile"
     return str(value.get("method", "rank_percentile"))
+
+
+def _load_hobby_taxonomy(configured_path: Path, artifact_dir: Path) -> dict[str, object] | None:
+    for path in (configured_path, artifact_dir / "hobby_taxonomy.json"):
+        if path.exists():
+            value = load_json(path)
+            if isinstance(value, dict):
+                return value
+    return None
 
 
 def _safe_torch_load(path: Path) -> dict[str, Any]:

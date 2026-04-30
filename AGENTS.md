@@ -9,21 +9,18 @@ All Python commands MUST be executed via the venv interpreter:
 ```powershell
 # CORRECT - always use .venv Python
 .\.venv\Scripts\python.exe -m pytest tests -q
-.\.venv\Scripts\python.exe -m py_compile app\streamlit_app.py
 .\.venv\Scripts\python.exe -m uvicorn src.api.main:app
-.\.venv\Scripts\python.exe -m streamlit run app/streamlit_app.py
 
 # WRONG - global Python lacks project dependencies (langchain, neo4j, etc.)
 python -m pytest tests
 pytest tests
-python -m py_compile app\streamlit_app.py
 ```
 
-**Why**: The global Python does not have `langchain_core`, `langgraph`, `neo4j`, `streamlit`, and other project dependencies installed. Using it will cause `ModuleNotFoundError`.
+**Why**: The global Python does not have `langchain_core`, `langgraph`, `neo4j`, and other project dependencies installed. Using it will cause `ModuleNotFoundError`.
 
 ## Project Structure
 
-- `app/streamlit_app.py` - Streamlit frontend (single file, ~1200 lines)
+- `frontend/` - Next.js frontend
 - `src/api/` - FastAPI backend (routes, main)
 - `src/rag/` - LangChain/LangGraph RAG engine
 - `src/graph/` - Neo4j graph operations, GDS algorithms
@@ -39,14 +36,8 @@ python -m py_compile app\streamlit_app.py
 # Run tests
 .\.venv\Scripts\python.exe -m pytest tests -q
 
-# Compile check
-.\.venv\Scripts\python.exe -m py_compile app\streamlit_app.py
-
 # Start backend (FastAPI on :8000)
 .\.venv\Scripts\python.exe -m uvicorn src.api.main:app --host 0.0.0.0 --port 8000
-
-# Start frontend (Streamlit on :8501)
-.\.venv\Scripts\python.exe -m streamlit run app/streamlit_app.py --server.port 8501
 ```
 
 ## Infrastructure
@@ -76,6 +67,36 @@ When writing or modifying code under `GNN_Neural_Network/`:
 - Use CPU loops only when the data structure is small or vectorization would add unnecessary complexity.
 - Record training/evaluation time and GPU memory usage for major experiments when practical.
 - Preserve deterministic evaluation: fixed split, fixed seed, same candidate pool, and same known-hobby masking rules.
+
+## GNN Experiment Logging Policy
+
+When running or modifying training/evaluation code under `GNN_Neural_Network/`:
+
+- Persist machine-readable metrics to `GNN_Neural_Network/artifacts/` instead of relying only on console output.
+- For major experiments, maintain these two decision artifacts in addition to raw metric files:
+  - `GNN_Neural_Network/artifacts/experiment_decisions.json`
+    - machine-readable decision log
+    - record the selected baseline, experiment status such as `accepted`, `rejected`, `promoted`, `disabled`, `experimental`, or `needs_followup`, key metric deltas, and short decision reasons
+  - `GNN_Neural_Network/artifacts/experiment_run_summary.md`
+    - human-readable run summary
+    - record what was tested, the main outcome, what changed in the default recommendation path, and the next recommended step
+- For each major experiment, record:
+  - what was tested,
+  - the selected baseline,
+  - the main metrics such as Recall, NDCG, and candidate recall,
+  - whether the change was accepted, rejected, promoted, disabled, or left experimental,
+  - and the short reason for that decision.
+- When a provider, model, feature, or taxonomy rule is rejected, record the failure reason concisely, for example:
+  - degraded validation recall,
+  - toxic in ablation,
+  - below selected baseline,
+  - leakage risk,
+  - or qualitative recommendation quality regression.
+- Keep a human-readable experiment summary artifact in addition to raw JSON metrics when the decision changes the default recommendation path.
+- Update both `experiment_decisions.json` and `experiment_run_summary.md` whenever a training/evaluation run changes the default recommendation path or closes an experiment with a clear decision.
+- If a result is inconclusive, record that explicitly as `experimental` or `needs_followup` instead of leaving the decision implicit.
+- If the default Stage 1 baseline, Stage 2 promotion status, provider policy, or taxonomy policy changes, update the relevant `README.md`, `PRD.md`, and `CHECKLIST.md` entries in the same task.
+- Prefer short decision logs over long narrative notes. The goal is reproducibility and later review.
 
 ## Coding Conventions
 

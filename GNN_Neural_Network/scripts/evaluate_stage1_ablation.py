@@ -16,21 +16,33 @@ from GNN_Neural_Network.gnn_recommender.data import load_json, load_person_conte
 from GNN_Neural_Network.gnn_recommender.metrics import summarize_ranking_metrics
 from GNN_Neural_Network.gnn_recommender.model import LightGCN, build_normalized_adjacency, choose_device
 from GNN_Neural_Network.gnn_recommender.recommend import Candidate, compute_lightgcn_embeddings, merge_candidates_by_hobby
-from GNN_Neural_Network.scripts.evaluate_reranker import _expect_mapping, _known_from_edges, _normalization_method, _provider_candidates, _read_indexed_edges, _safe_torch_load, _build_cooccurrence_counts_cached, _build_popularity_counts_cached, _build_bm25_itemknn_counts_cached
+from GNN_Neural_Network.scripts.evaluate_reranker import _expect_mapping, _known_from_edges, _normalization_method, _provider_candidates, _read_indexed_edges, _safe_torch_load
 
 
 PROVIDER_ONLY: tuple[tuple[str, ...], ...] = (
     ("popularity",),
     ("cooccurrence",),
     ("bm25_itemknn",),
+    ("idf_cooccurrence",),
+    ("pop_capped_cooccurrence",),
+    ("jaccard_itemknn",),
+    ("pmi_itemknn",),
     ("segment_popularity",),
     ("lightgcn",),
 )
 
 PROVIDER_COMBINATIONS: tuple[tuple[str, ...], ...] = (
     ("popularity", "cooccurrence"),
-    ("popularity", "bm25_itemknn"),
+    ("popularity", "idf_cooccurrence"),
+    ("popularity", "pop_capped_cooccurrence"),
+    ("popularity", "jaccard_itemknn"),
+    ("popularity", "pmi_itemknn"),
     ("popularity", "cooccurrence", "lightgcn"),
+    ("popularity", "idf_cooccurrence", "lightgcn"),
+    ("popularity", "pop_capped_cooccurrence", "lightgcn"),
+    ("popularity", "jaccard_itemknn", "lightgcn"),
+    ("popularity", "pmi_itemknn", "lightgcn"),
+    ("popularity", "bm25_itemknn"),
     ("popularity", "bm25_itemknn", "lightgcn"),
     ("segment_popularity", "popularity"),
     ("segment_popularity", "cooccurrence"),
@@ -81,6 +93,10 @@ def main() -> None:
     popularity_counts = _build_popularity_counts_cached(train_edges)
     cooccurrence_counts = _build_cooccurrence_counts_cached(train_edges)
     bm25_counts = _build_bm25_itemknn_counts_cached(train_edges)
+    idf_cooc_counts = _build_idf_cooc_counts_cached(train_edges)
+    pop_capped_counts = _build_pop_capped_counts_cached(train_edges)
+    jaccard_counts = _build_jaccard_counts_cached(train_edges)
+    pmi_counts = _build_pmi_counts_cached(train_edges)
     provider_cache: dict[int, dict[str, list[Candidate]]] = {}
     for person_id in tqdm(truth, desc=f"stage1 ablation cache ({args.split})"):
         provider_cache[person_id] = _provider_candidates(
@@ -100,6 +116,10 @@ def main() -> None:
             popularity_counts=popularity_counts,
             cooccurrence_counts=cooccurrence_counts,
             bm25_counts=bm25_counts,
+            idf_cooc_counts=idf_cooc_counts,
+            pop_capped_counts=pop_capped_counts,
+            jaccard_counts=jaccard_counts,
+            pmi_counts=pmi_counts,
         )
 
     provider_only_results = _evaluate_combinations(PROVIDER_ONLY, provider_cache, truth, config.eval.top_k, candidate_k)
@@ -196,6 +216,10 @@ def _combo_name(combo: tuple[str, ...]) -> str:
 _popularity_counts_cache: Counter[int] | None = None
 _cooccurrence_counts_cache: dict[int, Counter[int]] | None = None
 _bm25_itemknn_counts_cache: dict[int, dict[int, float]] | None = None
+_idf_cooc_counts_cache: dict[int, dict[int, float]] | None = None
+_pop_capped_counts_cache: dict[int, dict[int, float]] | None = None
+_jaccard_counts_cache: dict[int, dict[int, float]] | None = None
+_pmi_counts_cache: dict[int, dict[int, float]] | None = None
 
 
 def _build_popularity_counts_cached(train_edges: list[tuple[int, int]]) -> Counter[int]:
@@ -223,6 +247,42 @@ def _build_bm25_itemknn_counts_cached(train_edges: list[tuple[int, int]]) -> dic
     if _bm25_itemknn_counts_cache is None:
         _bm25_itemknn_counts_cache = build_bm25_itemknn_counts(train_edges)
     return _bm25_itemknn_counts_cache
+
+
+def _build_idf_cooc_counts_cached(train_edges: list[tuple[int, int]]) -> dict[int, dict[int, float]]:
+    from GNN_Neural_Network.gnn_recommender.baseline import build_idf_weighted_cooccurrence_counts
+
+    global _idf_cooc_counts_cache
+    if _idf_cooc_counts_cache is None:
+        _idf_cooc_counts_cache = build_idf_weighted_cooccurrence_counts(train_edges)
+    return _idf_cooc_counts_cache
+
+
+def _build_pop_capped_counts_cached(train_edges: list[tuple[int, int]]) -> dict[int, dict[int, float]]:
+    from GNN_Neural_Network.gnn_recommender.baseline import build_pop_capped_cooccurrence_counts
+
+    global _pop_capped_counts_cache
+    if _pop_capped_counts_cache is None:
+        _pop_capped_counts_cache = build_pop_capped_cooccurrence_counts(train_edges)
+    return _pop_capped_counts_cache
+
+
+def _build_jaccard_counts_cached(train_edges: list[tuple[int, int]]) -> dict[int, dict[int, float]]:
+    from GNN_Neural_Network.gnn_recommender.baseline import build_jaccard_itemknn_counts
+
+    global _jaccard_counts_cache
+    if _jaccard_counts_cache is None:
+        _jaccard_counts_cache = build_jaccard_itemknn_counts(train_edges)
+    return _jaccard_counts_cache
+
+
+def _build_pmi_counts_cached(train_edges: list[tuple[int, int]]) -> dict[int, dict[int, float]]:
+    from GNN_Neural_Network.gnn_recommender.baseline import build_pmi_itemknn_counts
+
+    global _pmi_counts_cache
+    if _pmi_counts_cache is None:
+        _pmi_counts_cache = build_pmi_itemknn_counts(train_edges)
+    return _pmi_counts_cache
 
 
 if __name__ == "__main__":

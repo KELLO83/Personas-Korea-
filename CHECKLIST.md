@@ -2,6 +2,14 @@
 
 > 각 항목 완료 시 [x] 표시. 진행 중이면 [~] 표시.
 
+## 문서 역할 및 충돌 우선순위
+
+- `PRD.md`: 본 프로젝트의 요구사항, 범위, 설계 결정 및 품질 게이트를 결정하는 문서입니다.
+- `CHECKLIST.md`: PRD 실행 상태와 완료 조건을 추적·검증하는 단일 진행 규칙 문서입니다.
+- `README.md`: 실행 방법, 상태 가시화, 참고 자료를 제공하는 실무 안내서입니다.
+- 문서 충돌 시 우선순위는 **`PRD.md` → `CHECKLIST.md` → `README.md`** 입니다.
+- 보조 산출물(`docs/`, 실험/리뷰 기록)은 본 우선순위를 무시해 대체할 수 없습니다.
+
 ---
 
 ## Phase 0: 프로젝트 구조 및 환경 설정
@@ -85,14 +93,14 @@
 - [~] Swagger UI 확인 (/docs) (코드 완료, 서버 실행 후 확인)
 - [x] 각 엔드포인트 개별 테스트
 
-## Phase 7: Streamlit 프론트엔드
+## Phase 7: Legacy Streamlit 프론트엔드 이력
 
-- [x] `app/streamlit_app.py` — 메인 페이지
+- [x] Legacy Streamlit 프론트엔드 구현 완료 (현재 코드는 삭제됨)
 - [x] 인사이트 질의 UI (입력창 + 결과 표시)
 - [x] 유사 페르소나 매칭 UI (uuid 입력 + 결과 카드)
 - [x] 커뮤니티 탐지 UI (목록 + 특성 표시)
 - [x] 관계 경로 UI (두 uuid 입력 + 경로 시각화)
-- [ ] FastAPI 백엔드 연동 확인
+- [x] FastAPI 백엔드 연동 확인 이력 기록
 
 ## Phase 8: 통합 테스트 및 검증
 
@@ -135,7 +143,7 @@
   - [x] 존재하지 않는 metric → 400 에러
   - [x] 중심성 score 없음/배치 미실행 → 503 에러
 - [x] `src/api/schemas.py` — `InfluenceResponse`, `InfluenceTopItem`, `RemovalSimulationResponse` Pydantic 모델
-- [x] `app/streamlit_app.py` — "핵심 인물" 탭 추가
+- [x] Legacy Streamlit UI에 "핵심 인물" 탭 추가 이력 기록
   - [x] 중심성 지표 선택 (radio button: PageRank / Betweenness / Degree)
   - [x] 상위 20인 테이블 (score, rank, community_id)
   - [x] bar chart (상위 10인 시각화)
@@ -173,7 +181,7 @@
   - [x] 응답 시간 < 500ms (LLM 동기 호출 금지, 템플릿 기반 reasoning)
 - [x] `src/api/schemas.py` — `RecommendResponse`, `RecommendItem` Pydantic 모델
   - [x] item_name, reason_score, similar_users_count
-- [x] `app/streamlit_app.py` — 프로필 상세 페이지에 "추천" 섹션
+- [x] Legacy Streamlit UI에 프로필 상세 페이지 "추천" 섹션 추가 이력 기록
   - [x] 카드형 UI (st.columns)
   - [x] 카테고리 선택 (취미 / 기술 / 직업 / 지역)
   - [x] 각 카드 expander → 해당 속성 보유 유사 페르소나 목록
@@ -207,7 +215,7 @@
   - [x] context_filters 응답 (현재 적용 중인 필터)
   - [x] sources 포함 (참조된 데이터 출처)
 - [x] `src/api/schemas.py` — `ChatRequest`, `ChatResponse` Pydantic 모델
-- [x] `app/streamlit_app.py` — 메인 화면 Chat Interface
+- [x] Legacy Streamlit UI 메인 화면 Chat Interface 구현 이력 기록
   - [x] `st.chat_message` 기반 UI
   - [x] `st.chat_input` 입력창
   - [x] 현재 필터 표시 (칩 형태)
@@ -228,7 +236,7 @@
 ## Phase 18: 확장 기능 통합 및 검증
 
 - [ ] Phase 15~17 엔드포인트 Swagger UI 일괄 확인
-- [ ] Streamlit UI에 신규 3개 기능 탭 추가
+- [ ] 현재 운영 프론트(Next.js)에 신규 3개 기능 화면/흐름 반영
   - [x] 핵심 인물 탭
   - [x] 추천 섹션 (프로필 상세 내)
   - [x] 채팅 인터페이스 (메인 화면)

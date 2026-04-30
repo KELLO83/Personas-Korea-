@@ -42,6 +42,9 @@ rerank:
     region_fit: 0.05
     popularity_prior: 0.05
     mismatch_penalty: 0.25
+    popularity_penalty: 0.00
+    novelty_bonus: 0.00
+    category_diversity_reward: 0.00
 
 paths:
   edge_csv: GNN_Neural_Network/data/person_hobby_edges.csv

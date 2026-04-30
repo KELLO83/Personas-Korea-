@@ -258,13 +258,13 @@ def build_bm25_itemknn_counts(
     cooc = _build_cooccurrence_counts(train_edges)
     
     for source_id, targets in cooc.items():
-        source_degree = hobby_doc_freq[source_id]
+        source_idf = idf.get(source_id, 0.0)
         scores: dict[int, float] = {}
         for target_id, count in targets.items():
-            target_idf = idf.get(target_id, 0.0)
+            target_degree = hobby_doc_freq[target_id]
             numerator = count * (k1 + 1)
-            denominator = count + k1 * (1 - b + b * (source_degree / avg_item_deg))
-            scores[target_id] = target_idf * (numerator / denominator)
+            denominator = count + k1 * (1 - b + b * (target_degree / avg_item_deg))
+            scores[target_id] = source_idf * (numerator / denominator)
         bm25_scores[source_id] = scores
         
     return bm25_scores
@@ -280,14 +280,15 @@ def bm25_itemknn_candidate_provider(
     if top_k <= 0:
         raise ValueError("top_k must be positive")
     bm25 = bm25_counts or build_bm25_itemknn_counts(train_edges)
-    scores: Counter[int] = Counter()
+    scores: dict[int, float] = {}
     for hobby_id in known_hobbies:
         if hobby_id in bm25:
             for target_id, score in bm25[hobby_id].items():
-                scores[target_id] += score
-                
+                scores[target_id] = scores.get(target_id, 0.0) + score
+
     candidates: list[Candidate] = []
-    for rank, (hobby_id, score) in enumerate(scores.most_common(), start=1):
+    ranked_scores = sorted(scores.items(), key=lambda item: (-item[1], item[0]))
+    for rank, (hobby_id, score) in enumerate(ranked_scores, start=1):
         if hobby_id in known_hobbies:
             continue
         candidates.append(
@@ -298,6 +299,292 @@ def bm25_itemknn_candidate_provider(
                 rank=rank,
                 reason_features={"bm25_score": score, "known_hobby_count": len(known_hobbies), "person_id": person_id},
                 source_scores={"bm25_itemknn": score},
+            )
+        )
+        if len(candidates) >= top_k:
+            break
+    return candidates
+
+
+# ---------------------------------------------------------------------------
+# IDF-weighted cooccurrence provider
+#   cooccurrence(i,j) * IDF(j)
+#   IDF(j) = log((N + 1) / (1 + df(j)))
+#   Down-weights hobbies that appear in many user profiles.
+# ---------------------------------------------------------------------------
+
+def build_idf_weighted_cooccurrence_counts(
+    train_edges: list[tuple[int, int]],
+) -> dict[int, dict[int, float]]:
+    """Compute IDF-weighted cooccurrence:  cooc(source, target) * IDF(target)."""
+    import math
+
+    hobbies_by_person: dict[int, set[int]] = {}
+    for person_id, hobby_id in train_edges:
+        hobbies_by_person.setdefault(person_id, set()).add(hobby_id)
+
+    num_persons = len(hobbies_by_person)
+    hobby_df: Counter[int] = Counter()
+    for hobbies in hobbies_by_person.values():
+        for hobby_id in hobbies:
+            hobby_df[hobby_id] += 1
+
+    idf: dict[int, float] = {}
+    for hobby_id, df in hobby_df.items():
+        idf[hobby_id] = math.log((num_persons + 1) / (1 + df))
+
+    cooc = _build_cooccurrence_counts(train_edges)
+    weighted: dict[int, dict[int, float]] = {}
+    for source_id, targets in cooc.items():
+        weighted[source_id] = {
+            target_id: count * idf.get(target_id, 0.0)
+            for target_id, count in targets.items()
+        }
+    return weighted
+
+
+def idf_weighted_cooccurrence_provider(
+    train_edges: list[tuple[int, int]],
+    person_id: int,
+    known_hobbies: set[int],
+    top_k: int,
+    idf_cooc_counts: dict[int, dict[int, float]] | None = None,
+) -> list[Candidate]:
+    if top_k <= 0:
+        raise ValueError("top_k must be positive")
+    counts = idf_cooc_counts or build_idf_weighted_cooccurrence_counts(train_edges)
+    scores: dict[int, float] = {}
+    for hobby_id in known_hobbies:
+        if hobby_id in counts:
+            for target_id, score in counts[hobby_id].items():
+                scores[target_id] = scores.get(target_id, 0.0) + score
+
+    candidates: list[Candidate] = []
+    ranked = sorted(scores.items(), key=lambda item: (-item[1], item[0]))
+    for rank, (hobby_id, score) in enumerate(ranked, start=1):
+        if hobby_id in known_hobbies:
+            continue
+        candidates.append(
+            Candidate(
+                hobby_id=hobby_id,
+                provider="idf_cooccurrence",
+                raw_score=score,
+                rank=rank,
+                reason_features={"idf_cooccurrence_score": score, "known_hobby_count": len(known_hobbies), "person_id": person_id},
+                source_scores={"idf_cooccurrence": score},
+            )
+        )
+        if len(candidates) >= top_k:
+            break
+    return candidates
+
+
+# ---------------------------------------------------------------------------
+# Popularity-capped cooccurrence provider
+#   cooccurrence(i,j) / log(1 + popularity(j))
+#   Simple downweighting of popular items without zeroing out signal.
+# ---------------------------------------------------------------------------
+
+def build_pop_capped_cooccurrence_counts(
+    train_edges: list[tuple[int, int]],
+) -> dict[int, dict[int, float]]:
+    """Compute cooccurrence divided by log(1 + item popularity)."""
+    import math
+
+    popularity = build_popularity_counts(train_edges)
+    cooc = _build_cooccurrence_counts(train_edges)
+    weighted: dict[int, dict[int, float]] = {}
+    for source_id, targets in cooc.items():
+        weighted[source_id] = {
+            target_id: count / math.log(1 + popularity.get(target_id, 1))
+            for target_id, count in targets.items()
+        }
+    return weighted
+
+
+def pop_capped_cooccurrence_provider(
+    train_edges: list[tuple[int, int]],
+    person_id: int,
+    known_hobbies: set[int],
+    top_k: int,
+    pop_capped_counts: dict[int, dict[int, float]] | None = None,
+) -> list[Candidate]:
+    if top_k <= 0:
+        raise ValueError("top_k must be positive")
+    counts = pop_capped_counts or build_pop_capped_cooccurrence_counts(train_edges)
+    scores: dict[int, float] = {}
+    for hobby_id in known_hobbies:
+        if hobby_id in counts:
+            for target_id, score in counts[hobby_id].items():
+                scores[target_id] = scores.get(target_id, 0.0) + score
+
+    candidates: list[Candidate] = []
+    ranked = sorted(scores.items(), key=lambda item: (-item[1], item[0]))
+    for rank, (hobby_id, score) in enumerate(ranked, start=1):
+        if hobby_id in known_hobbies:
+            continue
+        candidates.append(
+            Candidate(
+                hobby_id=hobby_id,
+                provider="pop_capped_cooccurrence",
+                raw_score=score,
+                rank=rank,
+                reason_features={"pop_capped_score": score, "known_hobby_count": len(known_hobbies), "person_id": person_id},
+                source_scores={"pop_capped_cooccurrence": score},
+            )
+        )
+        if len(candidates) >= top_k:
+            break
+    return candidates
+
+
+# ---------------------------------------------------------------------------
+# Jaccard item-item similarity provider
+#   J(A, B) = |A ∩ B| / |A ∪ B| where A, B are sets of persons with each hobby.
+#   Aggregated per user: sum of Jaccard(known_hobby, candidate) over known hobbies.
+# ---------------------------------------------------------------------------
+
+def build_jaccard_itemknn_counts(
+    train_edges: list[tuple[int, int]],
+) -> dict[int, dict[int, float]]:
+    """Compute Jaccard similarity between every pair of hobbies based on person overlap."""
+    hobbies_by_person: dict[int, set[int]] = {}
+    for person_id, hobby_id in train_edges:
+        hobbies_by_person.setdefault(person_id, set()).add(hobby_id)
+
+    person_sets: dict[int, set[int]] = {}
+    for person_id, hobbies in hobbies_by_person.items():
+        for hobby_id in hobbies:
+            person_sets.setdefault(hobby_id, set()).add(person_id)
+
+    all_hobby_ids = list(person_sets.keys())
+    jaccard: dict[int, dict[int, float]] = {}
+    for i, source_id in enumerate(all_hobby_ids):
+        source_set = person_sets[source_id]
+        jaccard[source_id] = {}
+        for target_id in all_hobby_ids:
+            if source_id == target_id:
+                continue
+            target_set = person_sets[target_id]
+            intersection = len(source_set & target_set)
+            union = len(source_set | target_set)
+            if union > 0 and intersection > 0:
+                jaccard[source_id][target_id] = intersection / union
+
+    return jaccard
+
+
+def jaccard_itemknn_candidate_provider(
+    train_edges: list[tuple[int, int]],
+    person_id: int,
+    known_hobbies: set[int],
+    top_k: int,
+    jaccard_counts: dict[int, dict[int, float]] | None = None,
+) -> list[Candidate]:
+    if top_k <= 0:
+        raise ValueError("top_k must be positive")
+    counts = jaccard_counts or build_jaccard_itemknn_counts(train_edges)
+    scores: dict[int, float] = {}
+    for hobby_id in known_hobbies:
+        if hobby_id in counts:
+            for target_id, score in counts[hobby_id].items():
+                scores[target_id] = scores.get(target_id, 0.0) + score
+
+    candidates: list[Candidate] = []
+    ranked = sorted(scores.items(), key=lambda item: (-item[1], item[0]))
+    for rank, (hobby_id, score) in enumerate(ranked, start=1):
+        if hobby_id in known_hobbies:
+            continue
+        candidates.append(
+            Candidate(
+                hobby_id=hobby_id,
+                provider="jaccard_itemknn",
+                raw_score=score,
+                rank=rank,
+                reason_features={"jaccard_score": score, "known_hobby_count": len(known_hobbies), "person_id": person_id},
+                source_scores={"jaccard_itemknn": score},
+            )
+        )
+        if len(candidates) >= top_k:
+            break
+    return candidates
+
+
+# ---------------------------------------------------------------------------
+# PMI (Pointwise Mutual Information) item-item provider
+#   PMI(i, j) = log(P(i,j) / (P(i) * P(j)))
+#   P(i,j) = cooc(i,j) / total_persons
+#   P(i) = df(i) / total_persons
+#   Aggregated per user: sum of PMI(known_hobby, candidate) over known hobbies.
+# ---------------------------------------------------------------------------
+
+def build_pmi_itemknn_counts(
+    train_edges: list[tuple[int, int]],
+    positive_pmi: bool = True,
+) -> dict[int, dict[int, float]]:
+    """Compute PMI (or PPMI) between every pair of hobbies.
+
+    Args:
+        positive_pmi: If True, clamp negative PMI values to 0 (PPMI).
+    """
+    import math
+
+    hobbies_by_person: dict[int, set[int]] = {}
+    for person_id, hobby_id in train_edges:
+        hobbies_by_person.setdefault(person_id, set()).add(hobby_id)
+
+    num_persons = len(hobbies_by_person)
+    hobby_df: Counter[int] = Counter()
+    for hobbies in hobbies_by_person.values():
+        for hobby_id in hobbies:
+            hobby_df[hobby_id] += 1
+
+    cooc = _build_cooccurrence_counts(train_edges)
+    pmi: dict[int, dict[int, float]] = {}
+    for source_id, targets in cooc.items():
+        pmi[source_id] = {}
+        p_source = hobby_df[source_id] / num_persons
+        for target_id, count in targets.items():
+            p_joint = count / num_persons
+            p_target = hobby_df[target_id] / num_persons
+            denominator = p_source * p_target
+            if denominator > 0.0 and p_joint > 0.0:
+                val = math.log(p_joint / denominator)
+                if positive_pmi and val < 0.0:
+                    val = 0.0
+                pmi[source_id][target_id] = val
+    return pmi
+
+
+def pmi_itemknn_candidate_provider(
+    train_edges: list[tuple[int, int]],
+    person_id: int,
+    known_hobbies: set[int],
+    top_k: int,
+    pmi_counts: dict[int, dict[int, float]] | None = None,
+) -> list[Candidate]:
+    if top_k <= 0:
+        raise ValueError("top_k must be positive")
+    counts = pmi_counts or build_pmi_itemknn_counts(train_edges)
+    scores: dict[int, float] = {}
+    for hobby_id in known_hobbies:
+        if hobby_id in counts:
+            for target_id, score in counts[hobby_id].items():
+                scores[target_id] = scores.get(target_id, 0.0) + score
+
+    candidates: list[Candidate] = []
+    ranked = sorted(scores.items(), key=lambda item: (-item[1], item[0]))
+    for rank, (hobby_id, score) in enumerate(ranked, start=1):
+        if hobby_id in known_hobbies:
+            continue
+        candidates.append(
+            Candidate(
+                hobby_id=hobby_id,
+                provider="pmi_itemknn",
+                raw_score=score,
+                rank=rank,
+                reason_features={"pmi_score": score, "known_hobby_count": len(known_hobbies), "person_id": person_id},
+                source_scores={"pmi_itemknn": score},
             )
         )
         if len(candidates) >= top_k:

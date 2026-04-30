@@ -172,12 +172,14 @@ function SearchDetailProfile({ profile, onSelect }: { profile: PersonaProfileRes
               profile.occupation,
             ])}
           </p>
+          <p className="small muted">커뮤니티 {profile.community.label ?? profile.community.community_id ?? "미지정"}</p>
           <button className="primary-button" onClick={() => onSelect(profile.uuid, profile.display_name)}>이 사람 선택</button>
         </div>
         <div className="detail-panel">
           <h3>인구통계</h3>
           <div className="pill-row">
             <span className="pill">연령대 {profile.demographics.age_group ?? "-"}</span>
+            <span className="pill">국가 {profile.location.country ?? "-"}</span>
             <span className="pill">학력 {profile.demographics.education_level ?? "-"}</span>
             <span className="pill">전공 {profile.demographics.bachelors_field ?? "-"}</span>
             <span className="pill">혼인 {profile.demographics.marital_status ?? "-"}</span>

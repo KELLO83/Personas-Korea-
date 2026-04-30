@@ -1,5 +1,14 @@
 # GNN 취미/여가 추천 시스템 PRD
 
+## 문서 계층 및 우선순위
+
+- 단일 진실원천은 `PRD.md`와 `CHECKLIST.md`입니다.
+- `README.md`는 실행 가이드와 현재 상태를 보조적으로 정리합니다.
+- `PRD_GNN_Reranker_v2.md`/`CHECKLIST_GNN_Reranker_v2.md`는 v2 실험 계획·진행을 위한 보조 문서입니다.
+- `DATASET_EXPLAIN.md`는 데이터셋/스키마 맥락 참고문서입니다.
+- 실무 의사결정 충돌 시 우선순위는 **`PRD.md`(요구사항/의사결정)** → **`CHECKLIST.md`(실행 규칙/게이트)** → **`README.md`(현재 상태/실행 가이드)** 입니다.
+- 각 보조 문서의 최종 결론과 실험 결과는 위 순위를 수정할 수 없으며, 필요 시 이 순위를 준수해 PRD/CHECKLIST를 갱신합니다.
+
 ## 1. 목적
 
 `Nemotron-Personas-Korea` 지식 그래프를 활용해 특정 페르소나에게 어울릴 가능성이 높은 취미/여가활동을 추천하는 2-stage persona-aware 추천 PoC를 구축한다.
@@ -409,7 +418,7 @@ HobbyCandidate(
 )
 ```
 
-초기 reranker는 학습 모델이 아니라 해석 가능한 weighted scoring으로 시작한다.
+초기 reranker는 학습 모델이 아니라 해석 가능한 weighted scoring으로 시작했다. 이 deterministic reranker는 여전히 비교 기준선 및 fallback으로 유지되지만, **현재 promoted default Stage 2는 LightGBM learned ranker**다.
 
 ```text
 final_score =
@@ -428,27 +437,28 @@ final_score =
 
 기본 offline metric에서는 `persona_text_fit`을 사용하지 않는다. 현재 leakage audit 기준 `embedding_text`가 held-out hobby를 직접 포함하므로, text 기반 feature는 누수 통제가 끝나기 전까지 validation/test 비교에서 비활성화한다.
 
-이후 validation이 안정되면 LightGBM LambdaRank, Factorization Machine, two-tower retrieval, heterogeneous GraphSAGE/R-GCN 등을 비교한다. 단, 초기 구현에서는 검증 비용과 설명 가능성을 우선해 weighted reranker를 기본으로 한다.
+현재는 weighted reranker를 기본으로 보지 않는다. 운영 기본 경로는 `popularity + cooccurrence` Stage 1 후보 위에 **LightGBM learned ranker**를 적용하는 2-stage 파이프라인이며, weighted reranker는 fallback/비교 baseline 역할을 맡는다. 이후 비교 실험은 LightGBM regularization tuning, negative sampling ablation, source one-hot ablation이 끝난 뒤에 LambdaRank, Factorization Machine, two-tower retrieval, heterogeneous GraphSAGE/R-GCN 순으로 검토한다.
 
 Weighted reranker의 weight는 validation split에서만 조정한다. test split 결과를 보고 weight를 다시 조정하면 해당 test metric은 최종 성능 주장에 사용할 수 없다.
 
 ### Stage 2 tuning plan before SimGCL/XSimGCL Stage 1 swap
 
-현재 offline 실행 결과에서 `Stage1 multi-provider`가 `persona-aware reranker`보다 높은 Recall/NDCG를 보였다. 따라서 SimGCL/XSimGCL을 Stage 1에 연결하기 전에, 먼저 Stage 2가 기존 Stage 1 신호를 온전히 사용하도록 보정한다.
+현재 offline 실행 결과의 핵심 진단은 `retrieval 부족`이 아니라 **LightGBM Stage 2 ranking collapse**다. `candidate_recall@50`은 충분하지만, learned ranker가 인기 취미 쪽으로 top-k를 수축시키고 있다. 따라서 SimGCL/XSimGCL을 Stage 1에 연결하기 전에, 먼저 **현재 promoted Stage 2가 기존 Stage 1 신호와 side feature를 더 균형 있게 사용하도록 보정**한다.
 
 우선 보정 대상은 다음 순서로 고정한다.
 
-1. **`segment_popularity_score` 취급 재검토**
-   - feature 자체는 보존하되, Stage 1 ablation에서 `segment_popularity`가 toxic이면 default Stage 2 경로에서는 비활성화한다.
-   - `RerankerWeights`에는 실험용 weight를 둘 수 있지만, 기본값은 0 또는 명시적 opt-in이 바람직하다.
-2. **validation-only weight sweep / grid search**
-   - 기본 탐색 축은 `lightgcn_score`, `cooccurrence_score`, `known_hobby_compatibility`, `age_group_fit`, `occupation_fit`, `region_fit`, `popularity_prior`, `mismatch_penalty`로 둔다.
-   - `segment_popularity_score`는 별도 ablation/실험군에서만 추가한다.
+1. **LightGBM regularization tuning**
+   - `feature_fraction`, `num_leaves`, `min_data_in_leaf`, `lambda_l1`, `lambda_l2`를 우선 조정한다.
+   - 목표는 `cooccurrence_score + popularity_prior` 쏠림을 완화하고 다른 feature가 학습 기회를 갖게 하는 것이다.
+2. **negative sampling ablation**
+   - `1:1`, `4:1`, `8:1`과 hard/easy negative 비율을 비교한다.
    - test split은 최종 고정 설정 1회 평가에만 사용한다.
-3. **`mismatch_penalty` ablation**
-   - sparse demographic distribution 환경에서 penalty가 과도하게 좋은 후보를 밀어내는지 확인한다.
-   - 최소 비교군: `penalty=0`, `penalty=default`, `penalty=scaled-down`.
-4. **Stage 2 feature ablation report**
+3. **source one-hot ablation**
+   - `source_popularity`, `source_cooccurrence`, `source_lightgcn`를 추가해 source-aware ranking 개선 여부를 측정한다.
+4. **taxonomy 재검수 및 leakage-safe text/MMR 재평가 준비**
+   - canonical over-merge를 먼저 점검하고,
+   - 이후 KURE dense embedding 기반 MMR과 text embedding ablation을 순차 검토한다.
+5. **Stage 2 feature ablation report**
    - 기본 Stage 2 feature set에서 `known_hobby_compatibility`, `age_group_fit`, `occupation_fit`, `region_fit`, `popularity_prior`, `mismatch_penalty`를 하나씩 제거해 성능 변화를 기록한다.
    - `segment_popularity_score`는 별도 실험군으로만 비교한다.
 
@@ -828,26 +838,93 @@ PoC 성공 기준:
 - canonical_hobby 기준 `vocabulary_report.json`이 생성됨
 - canonical singleton ratio가 raw singleton ratio `0.834`보다 감소함
 - raw hobby examples가 canonical recommendation 출력 근거로 보존됨
-- persona-aware Stage 2 reranker가 selected Stage1 baseline 대비 validation과 test에서 모두 개선을 보였으므로 **promoted** 상태로 기록한다. 현재 운영 기본 추천기는 `popularity + cooccurrence` 후보 생성 후 Stage 2 reranking을 적용하는 파이프라인이다.
+- persona-aware Stage 2 reranker가 selected Stage1 baseline 대비 validation과 test에서 모두 개선을 보였으므로 **promoted** 상태로 기록한다. 현재 운영 기본 추천기는 `popularity + cooccurrence` 후보 생성 후 **LightGBM learned ranker**를 적용하는 파이프라인이다.
 
-### Item-Item Collaborative Filtering (BM25/TF-IDF) 고도화
+### Item-Item Collaborative Filtering 실험 결과 (완료)
 
-Stage 2가 성공적으로 승격됨에 따라 다음 개선 우선순위는 Stage 1 후보 생성(candidate pool) 품질 향상이다. 
+Stage 2가 성공적으로 승격됨에 따라 Stage 1 후보 생성 품질 향상을 위해 6개 item-item provider를 실험했다.
 
-현재 가장 강한 Stage 1 신호는 `cooccurrence`이다. 하지만 단순 cooccurrence는 전역적으로 자주 등장하는 취미(인기 아이템)에 점수가 편향되는 한계가 있다. 이를 극복하고 틈새(niche) 취향의 강한 연관성을 포착하기 위해 다음 실험을 진행한다.
+실험한 provider:
 
-1. **BM25 / TF-IDF ItemKNN Provider 도입**
-   - 단순 동시발생 횟수 대신 BM25 또는 TF-IDF 가중치를 적용하여 흔한 아이템의 영향력을 페널티로 줄이고 희귀 아이템 간의 강한 연관성을 부스팅한다.
-2. **실험 절차**
-   - BM25 ItemKNN provider를 구현하여 단독 recall@10 측정
-   - `popularity + BM25 ItemKNN`을 구성하여 현재 selected baseline (`popularity + cooccurrence`)과 비교
-   - 새로운 baseline 위에서 Stage 2 reranker 재평가
+1. **BM25 ItemKNN** — BM25 term-frequency weighting으로 흔한 아이템 페널티
+2. **IDF-weighted cooccurrence** — cooccurrence × IDF(target)
+3. **Popularity-capped cooccurrence** — cooccurrence / log(1 + popularity)
+4. **Jaccard item-item similarity** — person overlap 기반 Jaccard 계수
+5. **PMI (Pointwise Mutual Information)** — log(P(i,j) / (P(i)×P(j))), 음수는 0으로 클램프(PPMI)
 
-XSimGCL 등의 그래프 모델은 같은 collaborative 계열로서 popularity bias 한계를 공유할 가능성이 높으므로, BM25/TF-IDF 기반 ItemKNN 고도화를 먼저 완료한 후 실험 트랙으로 돌린다.
-- 50대/20대, 직업/지역/생활패턴 mismatch 사례에서 reranker가 부적절 후보를 하향 조정
-- 추천 결과마다 source/evidence/reason feature를 추적 가능
-- Stage 2 feature가 train split 기준으로 생성되어 leakage audit을 통과
-- CPU와 CUDA-if-available 경로 모두 오류 없이 동작
+실험 결과 (validation split, baseline = popularity + cooccurrence, R@10=0.6940):
+
+| Provider (단독) | R@10 | N@10 | vs baseline |
+|---|---|---|---|
+| cooccurrence | 0.6932 | 0.4370 | -0.0008 |
+| idf_cooccurrence | 0.6927 | 0.4359 | -0.0013 |
+| pop_capped_cooccurrence | 0.6925 | 0.4369 | -0.0015 |
+| jaccard_itemknn | 0.6829 | 0.4251 | -0.0112 |
+| bm25_itemknn | 0.4493 | 0.1970 | -0.2447 |
+| pmi_itemknn | 0.0076 | 0.0030 | -0.6864 |
+
+| Combination | R@10 | N@10 | delta vs baseline |
+|---|---|---|---|
+| **popularity + cooccurrence** | **0.6940** | **0.4355** | **0.0000** |
+| popularity + idf_cooccurrence | 0.6930 | 0.4352 | -0.0010 |
+| popularity + pop_capped_cooccurrence | 0.6930 | 0.4351 | -0.0010 |
+| popularity + jaccard_itemknn | 0.6932 | 0.4338 | -0.0008 |
+| popularity + bm25_itemknn | 0.6373 | 0.3922 | -0.0567 |
+| popularity + pmi_itemknn | 0.5359 | 0.3487 | -0.1581 |
+
+결론:
+
+- **현재 데이터에서 `popularity + cooccurrence`가 Stage 1 최적 조합**이다.
+- 인기 편향 완화 provider(BM25, PMI)는 accuracy를 크게 깎아서 사용 불가하다.
+- IDF, pop-capped, Jaccard는 baseline보다 근소하게 낮아 개선효과가 없다.
+- LightGCN도 조합에서 도움이 되지 않는다 (0.6940 → 0.6914).
+- **결정적으로, Stage 1 provider 교체로는 popularity bias를 완화하면서 accuracy를 유지할 수 없다.**
+- 인기 편향 완화는 Stage 2 reranker에서 diversity/novelty 보정 feature로 처리하는 것이 올바른 방향이다.
+
+### 다음 우선순위: LightGBM ranking collapse 완화 및 문서 기준선 정렬 (확정)
+
+Stage 1 provider 실험 종료 후, 현재 개선 방향은 Stage 1 교체가 아니라 **promoted LightGBM Stage 2의 ranking collapse 완화**다. `candidate_recall@50`은 충분하므로 1순위는 retrieval 확장이 아니라 ranking objective/feature balance 조정이다.
+
+**확정된 순서 (변경 금지):**
+
+1. **LightGBM regularization tuning**
+   - `feature_fraction`, `num_leaves`, `min_data_in_leaf`, `lambda_l1`, `lambda_l2`를 조정한다.
+   - 목표는 `cooccurrence_score`와 `popularity_prior` 편중을 줄이고 다른 feature 기여를 늘리는 것이다.
+
+2. **negative sampling ablation**
+   - `1:1`, `4:1`, `8:1`과 hard/easy negative 비율을 비교한다.
+   - ranking collapse 완화와 test 성능 유지 여부를 함께 본다.
+
+3. **source one-hot ablation**
+   - `source_popularity`, `source_cooccurrence`, `source_lightgcn`를 추가해 source-aware ranking 개선 여부를 측정한다.
+
+4. **Taxonomy 과잉 병합 재검수**
+   - `canonicalization_candidates.json`과 singleton ratio 역전 현상을 다시 검토한다.
+   - over-merge가 popularity collapse를 증폭하는지 확인한다.
+
+5. **KURE dense embedding 기반 MMR 재평가**
+   - category one-hot MMR은 NO-GO였으므로, dense similarity가 준비된 뒤에만 재실험한다.
+
+6. **leakage-safe text embedding ablation**
+   - masking 및 post-audit를 통과한 경우에만 `text_embedding_similarity`를 제한적으로 재도입한다.
+
+**현재 확정 상태:**
+
+- Stage1 = `popularity + cooccurrence` selected baseline (validation R@10=0.6940)
+- Stage2 default = **LightGBM learned ranker promoted** (validation R@10=0.7300, test R@10=0.7080)
+- Stage2 legacy fallback = deterministic reranker (test R@10=0.7043)
+- LightGCN = auxiliary/analysis provider (default Stage 1 merge에서는 개선 없음)
+- segment_popularity = disabled (toxic)
+- BM25/PMI/IDF/Jaccard/pop-capped = baseline 미달
+- MMR(category one-hot) = NO-GO, flag-only 유지
+
+**현재 핵심 문제:**
+
+- retrieval 부족이 아니라 **ranking collapse**
+- `candidate_recall@50 ≈ 97.8%`로 pool은 충분하지만, v2 LightGBM이 top-k를 인기 취미로 수축
+- validation coverage@10이 v1 deterministic `0.517` 대비 v2 LightGBM `0.150`으로 하락
+- feature importance가 `cooccurrence_score + popularity_prior`에 과도하게 집중
+- canonical singleton ratio `0.848`이 raw `0.834`보다 높아 taxonomy over-merge 가능성 존재
 
 ## 14. 향후 확장
 

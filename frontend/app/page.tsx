@@ -71,6 +71,12 @@ export default function Home() {
     setActiveView("profile");
   }
 
+  function selectGraphPersona(uuid: string, label: string | null) {
+    setSelectedUuid(uuid);
+    setSelectedLabel(label || shortUuid(uuid));
+    setActiveView("graph");
+  }
+
   function resetChat() {
     resetChatSessionId();
     setChatMessages([]);
@@ -150,7 +156,7 @@ export default function Home() {
         {activeView === "dashboard" && <DashboardSection stats={stats} />}
         {activeView === "search" && <SearchSection filters={filters} page={page} search={search} onFilterChange={updateFilter} onSearch={submitSearch} onSelect={selectPersona} />}
         {activeView === "profile" && <ProfileSection profile={profile} selectedUuid={selectedUuid} onUuidChange={(uuid) => selectPersona(uuid, null)} onSelectPersona={selectPersona} />}
-        {activeView === "graph" && <GraphSection graph={graph} profile={profile.data} />}
+        {activeView === "graph" && <GraphSection graph={graph} profile={profile.data} onSelectPersona={selectGraphPersona} />}
         {activeView === "chat" && <ChatSection messages={chatMessages} input={chatInput} loading={chatLoading} error={chatError} onInputChange={setChatInput} onSubmit={submitChat} onReset={resetChat} />}
       </main>
     </div>

@@ -100,8 +100,23 @@ paths:
             Candidate(3, "lightgcn", 1.0, source_scores={"lightgcn": 1.0}),
         ],
     )
-    monkeypatch.setattr(evaluate_reranker, "cooccurrence_candidate_provider", lambda *args, **kwargs: [])
-    monkeypatch.setattr(evaluate_reranker, "popularity_candidate_provider", lambda *args, **kwargs: [])
+    monkeypatch.setattr(
+        evaluate_reranker,
+        "cooccurrence_candidate_provider",
+        lambda *args, **kwargs: [
+            Candidate(1, "cooccurrence", 2.5, source_scores={"cooccurrence": 2.5}),
+            Candidate(2, "cooccurrence", 1.5, source_scores={"cooccurrence": 1.5}),
+            Candidate(3, "cooccurrence", 0.5, source_scores={"cooccurrence": 0.5}),
+        ],
+    )
+    monkeypatch.setattr(
+        evaluate_reranker,
+        "popularity_candidate_provider",
+        lambda *args, **kwargs: [
+            Candidate(3, "popularity", 3.0, source_scores={"popularity": 3.0}),
+            Candidate(1, "popularity", 2.0, source_scores={"popularity": 2.0}),
+        ],
+    )
     monkeypatch.setattr(evaluate_reranker, "segment_popularity_candidate_provider", lambda *args, **kwargs: [])
     monkeypatch.setattr(sys, "argv", ["evaluate_reranker.py", "--config", str(config_path), "--split", "validation"])
 
@@ -109,11 +124,11 @@ paths:
 
     payload = json.loads(output_path.read_text(encoding="utf-8"))
     assert payload["candidate_recall"]["recall@3"] == 1.0
-    assert payload["stage1_multi_provider"]["recall@2"] == 0.0
+    assert payload["stage1_multi_provider"]["metrics"]["recall@2"] == 1.0
     assert payload["reranker_weights"]["lightgcn_score"] == 0.7
     assert payload["reranker_weights"]["known_hobby_compatibility"] == 0.15
     assert payload["stage2_fallback_count"] == 0
     weights_payload = json.loads((artifact_dir / "reranker_weights.json").read_text(encoding="utf-8"))
-    assert weights_payload["configured_weights"] == {"lightgcn_score": 0.7}
+    assert weights_payload["configured_weights"]["lightgcn_score"] == 0.7
     assert weights_payload["effective_weights"]["lightgcn_score"] == 0.7
     assert weights_payload["candidate_k"] == 3

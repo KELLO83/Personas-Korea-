@@ -4,6 +4,14 @@
 > 본 문서는 Phase 1~3의 모든 기능 요구사항을 통합 관리합니다.  
 > 과거 버전: `docs/prd-archive/prd-v1.0-phase1.md`, `prd-v1.5-phase2.md`, `prd-v2.0-expansion.md`
 
+## 문서 역할 및 충돌 우선순위
+
+- `PRD.md`: 시스템 요구사항, 범위, 아키텍처 결정, 운영/검수 기준의 단일 진실원천입니다.
+- `CHECKLIST.md`: 본 PRD의 항목을 실행 관점에서 추적·검증하는 진행 상태 문서입니다.
+- `README.md`: 설치/실행 명령, 현재 구현 요약, 참고 링크를 담는 실행 안내 문서입니다.
+- 충돌이 발생할 때의 우선순위는 **`PRD.md` → `CHECKLIST.md` → `README.md`** 입니다.
+- 보조 문서(`docs/`, 실험/리뷰 노트)는 본 우선순위를 바꾸지 못하며, 충돌 시 위 규칙을 우선 적용합니다.
+
 ---
 
 ## 1. 개요 (Executive Summary)
@@ -622,7 +630,7 @@ Phase 4의 코드는 아래 산출물이 승인되기 전 작성하지 않습니
   - 기존 `POST /api/insight`의 Cypher/Vector/Composite 분석 기능을 챗봇 내부 옵션으로 노출합니다.
   - UI에서는 별도 탭보다 `고급 분석` 토글/버튼/명령어로 접근합니다.
 - **호환성 유지**
-  - `/api/insight`는 기존 API 사용자를 위해 유지하되, Streamlit 주 UX에서는 챗봇 내부 고급 모드로 이동합니다.
+  - `/api/insight`는 기존 API 사용자를 위해 유지하되, 주 프론트 UX에서는 챗봇 내부 고급 모드로 이동합니다.
   - `/api/chat`은 향후 `mode: "explore" | "analysis"` 또는 intent 기반 내부 라우팅을 지원하도록 확장합니다.
 
 #### 사용자 경험 기준

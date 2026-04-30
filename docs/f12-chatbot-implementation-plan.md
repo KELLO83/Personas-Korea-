@@ -137,14 +137,15 @@ class ChatResponse(BaseModel):
 - `chat` router import
 - `app.include_router(chat.router)` 추가
 
-### 4.5 `app/streamlit_app.py` 수정
+### 4.5 프론트 연동 메모
 
-추가 UI:
+현재 저장소에는 Streamlit 프론트가 남아 있지 않으므로, 이 계획의 UI 항목은 **운영 프론트(Next.js) 또는 API 계약 검증 기준**으로 해석한다.
 
-- 새 탭: `🤖 대화형 탐색`
-- `st.chat_message`로 메시지 표시
-- `st.chat_input`으로 입력
-- 사이드바 또는 탭 상단에 현재 필터 칩 표시
+필요 UI 요구사항:
+
+- 대화형 탐색 진입 지점 제공
+- 메시지 표시/입력
+- 현재 필터 칩 표시
 - `필터 초기화` 버튼
 - loading state: “답변 생성 중...”
 - empty state: “질문을 입력하면 현재 데이터 탐색을 도와드립니다.”
@@ -251,7 +252,7 @@ ADR-004를 그대로 따른다.
 모든 Python 명령은 `.venv`를 사용한다.
 
 ```powershell
-.\.venv\Scripts\python.exe -m py_compile src\rag\chat_graph.py src\api\routes\chat.py src\api\schemas.py app\streamlit_app.py
+.\.venv\Scripts\python.exe -m py_compile src\rag\chat_graph.py src\api\routes\chat.py src\api\schemas.py
 .\.venv\Scripts\python.exe -m pytest tests\test_chat_graph.py tests\test_api_chat.py -q
 .\.venv\Scripts\python.exe -m pytest tests -q
 ```
@@ -288,11 +289,12 @@ curl -X POST http://localhost:8000/api/chat `
 - `src/api/main.py` router mount
 - API 테스트 통과
 
-### Step 4: Streamlit UI 추가
+### Step 4: 운영 프론트 UI 연동
 
 - `🤖 대화형 탐색` 탭
 - 메시지 표시/input/current filter chips/reset button
 - API 연동 및 error/loading/empty state
+- 주의: Streamlit 구현은 더 이상 존재하지 않으므로, 이 단계는 운영 프론트 또는 API 계약 검증 기준으로 진행한다.
 
 ### Step 5: P1 intent 확장
 
@@ -324,5 +326,5 @@ curl -X POST http://localhost:8000/api/chat `
 - `POST /api/chat`이 PRD 응답 계약을 만족한다.
 - 3턴 연속 필터 유지 테스트가 통과한다.
 - reset/교체/세션 분리 테스트가 통과한다.
-- Streamlit에서 채팅 입력/응답/현재 필터 표시/초기화가 동작한다.
+- 운영 프론트 또는 동등한 UI 검증 환경에서 채팅 입력/응답/현재 필터 표시/초기화가 동작한다.
 - 전체 테스트가 통과한다.

@@ -7,8 +7,6 @@ from collections import Counter
 from dataclasses import asdict
 from itertools import product
 from pathlib import Path
-from typing import Any
-
 import torch
 from tqdm import tqdm
 
@@ -20,9 +18,9 @@ from GNN_Neural_Network.gnn_recommender.config import load_config  # noqa: E402
 from GNN_Neural_Network.gnn_recommender.data import PersonContext, load_json, load_person_contexts, save_json  # noqa: E402
 from GNN_Neural_Network.gnn_recommender.metrics import summarize_ranking_metrics  # noqa: E402
 from GNN_Neural_Network.gnn_recommender.model import LightGCN, build_normalized_adjacency, choose_device  # noqa: E402
-from GNN_Neural_Network.gnn_recommender.baseline import build_cooccurrence_counts, build_popularity_counts  # noqa: E402
+from GNN_Neural_Network.gnn_recommender.baseline import build_bm25_itemknn_counts, build_cooccurrence_counts, build_popularity_counts  # noqa: E402
 from GNN_Neural_Network.gnn_recommender.recommend import compute_lightgcn_embeddings, merge_candidates_by_hobby  # noqa: E402
-from GNN_Neural_Network.gnn_recommender.rerank import HobbyCandidate, build_rerank_features, build_reranker_config, merge_stage1_candidates, score_rerank_features  # noqa: E402
+from GNN_Neural_Network.gnn_recommender.rerank import RerankedCandidate, _diversity_aware_sort, build_rerank_features, build_reranker_config, merge_stage1_candidates, score_rerank_features  # noqa: E402
 from GNN_Neural_Network.scripts.evaluate_reranker import SELECTED_STAGE1_BASELINE, _expect_mapping, _normalization_method, _provider_candidates, _safe_torch_load, _selected_stage1_provider_candidates  # noqa: E402
 
 
@@ -50,6 +48,7 @@ def main() -> None:
     truth = _known_from_edges(target_edges)
     contexts = load_person_contexts(config.paths.person_context_csv) if config.paths.person_context_csv.exists() else {}
     hobby_profile = load_json(config.paths.hobby_profile) if config.paths.hobby_profile.exists() else None
+    hobby_taxonomy = _load_hobby_taxonomy(config.paths.hobby_taxonomy, config.paths.artifact_dir)
     normalization_method = _normalization_method(config.paths.score_normalization)
     if config.rerank.use_text_fit:
         raise ValueError("weight sweep requires use_text_fit=false to avoid text-leakage tuning")
@@ -65,13 +64,14 @@ def main() -> None:
     person_embeddings, hobby_embeddings = compute_lightgcn_embeddings(model, adjacency)
     popularity_counts = build_popularity_counts(train_edges)
     cooccurrence_counts = build_cooccurrence_counts(train_edges)
+    bm25_counts = build_bm25_itemknn_counts(train_edges)
 
     base_weights = {key: float(value) for key, value in asdict(build_reranker_config(config.rerank.use_text_fit, config.rerank.weights).weights).items()}
-    search_space = list(
+    diversity_search_space = list(
         product(
-            [0.10, 0.15, 0.20, 0.25],
-            [0.00, 0.10, 0.25, 0.50],
-            [0.00, 0.03, 0.05],
+            [0.00, 0.03, 0.05, 0.10],
+            [0.00, 0.02, 0.05, 0.08],
+            [0.00, 0.02, 0.05, 0.10],
         )
     )
     feature_contexts = _precompute_stage2_features(
@@ -84,6 +84,7 @@ def main() -> None:
         id_to_person=id_to_person,
         contexts=contexts,
         hobby_profile=hobby_profile if isinstance(hobby_profile, dict) else None,
+        hobby_taxonomy=hobby_taxonomy,
         normalization_method=normalization_method,
         candidate_k=candidate_k,
         score_chunk_size=config.eval.score_chunk_size,
@@ -92,6 +93,7 @@ def main() -> None:
         hobby_embeddings=hobby_embeddings,
         popularity_counts=popularity_counts,
         cooccurrence_counts=cooccurrence_counts,
+        bm25_counts=bm25_counts,
     )
     selected_stage1_rankings: dict[int, list[int]] = {}
     for item in feature_contexts:
@@ -104,15 +106,16 @@ def main() -> None:
         selected_stage1_rankings[person_id] = [candidate.hobby_id for candidate in hobby_candidates[: max(config.eval.top_k)]]
     selected_stage1_metrics = summarize_ranking_metrics(truth, selected_stage1_rankings, config.eval.top_k)
     results: list[dict[str, object]] = []
-    for segment_weight, mismatch_weight, popularity_weight in tqdm(search_space, desc="rerank sweep"):
+    for popularity_penalty_weight, novelty_bonus_weight, category_diversity_reward_weight in tqdm(diversity_search_space, desc="rerank sweep"):
         weights = dict(base_weights)
-        weights["segment_popularity_score"] = segment_weight
-        weights["mismatch_penalty"] = mismatch_weight
-        weights["popularity_prior"] = popularity_weight
+        weights["popularity_penalty"] = popularity_penalty_weight
+        weights["novelty_bonus"] = novelty_bonus_weight
+        weights["category_diversity_reward"] = category_diversity_reward_weight
         rankings = _rerank_rankings(
             top_k_values=config.eval.top_k,
             weights=weights,
             feature_contexts=feature_contexts,
+            hobby_taxonomy=hobby_taxonomy,
         )
         metrics = summarize_ranking_metrics(truth, rankings, config.eval.top_k)
         results.append(
@@ -155,6 +158,7 @@ def _rerank_rankings(
     top_k_values: tuple[int, ...],
     weights: dict[str, float],
     feature_contexts: list[dict[str, object]],
+    hobby_taxonomy: dict[str, object] | None,
 ) -> dict[int, list[int]]:
     reranker_weights = build_reranker_config(False, weights).weights
     rerank_rankings: dict[int, list[int]] = {}
@@ -166,18 +170,27 @@ def _rerank_rankings(
         candidate_features = item.get("candidate_features", [])
         if not isinstance(candidate_features, list):
             continue
-        ranked = sorted(
+        scored = sorted(
             (
-                {
-                    "hobby_id": entry["hobby_id"],
-                    "score": score_rerank_features(entry["features"], reranker_weights),
-                }
+                RerankedCandidate(
+                    hobby_id=int(entry["hobby_id"]),
+                    hobby_name=str(entry["hobby_name"]),
+                    final_score=score_rerank_features(entry["features"], reranker_weights),
+                    stage1_score=float(entry.get("stage1_score", 0.0)),
+                    features=entry["features"],
+                    source_scores=dict(entry.get("source_scores", {})) if isinstance(entry.get("source_scores"), dict) else {},
+                    reason_features={},
+                )
                 for entry in candidate_features
-                if isinstance(entry, dict) and isinstance(entry.get("features"), dict)
+                if isinstance(entry, dict)
+                and isinstance(entry.get("features"), dict)
+                and "hobby_id" in entry
+                and "hobby_name" in entry
             ),
-            key=lambda entry: (-float(entry["score"]), int(entry["hobby_id"])),
+            key=lambda entry: (-entry.final_score, entry.hobby_id),
         )
-        rerank_rankings[person_id] = [int(entry["hobby_id"]) for entry in ranked[:max_k]]
+        ranked = _diversity_aware_sort(scored, hobby_taxonomy, reranker_weights)
+        rerank_rankings[person_id] = [entry.hobby_id for entry in ranked[:max_k]]
     return rerank_rankings
 
 
@@ -192,6 +205,7 @@ def _precompute_stage2_features(
     id_to_person: dict[int, str],
     contexts: dict[str, PersonContext],
     hobby_profile: dict[str, object] | None,
+    hobby_taxonomy: dict[str, object] | None,
     normalization_method: str,
     candidate_k: int,
     score_chunk_size: int,
@@ -200,8 +214,10 @@ def _precompute_stage2_features(
     hobby_embeddings: torch.Tensor,
     popularity_counts: Counter[int],
     cooccurrence_counts: dict[int, Counter[int]],
+    bm25_counts: dict[int, dict[int, float]],
 ) -> list[dict[str, object]]:
     precomputed: list[dict[str, object]] = []
+    _ = hobby_taxonomy
     feature_config = build_reranker_config(False, {})
     if hobby_profile is None:
         raise ValueError("hobby_profile is required for Stage2 weight sweep")
@@ -222,6 +238,7 @@ def _precompute_stage2_features(
             hobby_embeddings=hobby_embeddings,
             popularity_counts=popularity_counts,
             cooccurrence_counts=cooccurrence_counts,
+            bm25_counts=bm25_counts,
         )
         selected_provider_candidates = _selected_stage1_provider_candidates(provider_candidates)
         merged = merge_candidates_by_hobby(selected_provider_candidates, candidate_k)
@@ -233,6 +250,9 @@ def _precompute_stage2_features(
         candidate_features = [
             {
                 "hobby_id": candidate.hobby_id,
+                "hobby_name": candidate.hobby_name,
+                "stage1_score": max(candidate.source_scores.values()) if candidate.source_scores else 0.0,
+                "source_scores": candidate.source_scores,
                 "features": build_rerank_features(context, candidate, hobby_profile, known_names, feature_config),
             }
             for candidate in hobby_candidates
@@ -266,6 +286,15 @@ def _metric_value(result: dict[str, object], key: str) -> float:
         return 0.0
     value = metrics.get(key, 0.0)
     return float(value) if isinstance(value, int | float | str) else 0.0
+
+
+def _load_hobby_taxonomy(configured_path: Path, artifact_dir: Path) -> dict[str, object] | None:
+    for path in (configured_path, artifact_dir / "hobby_taxonomy.json"):
+        if path.exists():
+            value = load_json(path)
+            if isinstance(value, dict):
+                return value
+    return None
 
 
 def _safe_int(value: object) -> int:

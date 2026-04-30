@@ -1,5 +1,9 @@
 # Nemotron-Personas-Korea Dataset Explain
 
+> **문서 역할**: 이 문서는 데이터셋 특성, 스키마, 그래프 매핑 맥락을 설명하는 보조 문서입니다. 추천 시스템의 기준 요구사항/실행 규칙은 `GNN_Neural_Network/PRD.md`와 `GNN_Neural_Network/CHECKLIST.md`를 우선 적용합니다.
+> 
+> **문서 우선순위**: 충돌 시 **`GNN_Neural_Network/PRD.md` → `GNN_Neural_Network/CHECKLIST.md` → `README`**를 우선으로 적용하고, 본 문서는 보조 근거자료로만 사용합니다.
+
 ## Dataset Shape
 
 `nvidia/Nemotron-Personas-Korea`는 한국어 synthetic persona 데이터셋이다.
