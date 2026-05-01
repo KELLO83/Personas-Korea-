@@ -253,31 +253,32 @@ Diversity note: v2 LightGBM has lower coverage/novelty than v1 deterministic.
 > **Feature importance 현황**: cooccurrence_score(53.5%) + popularity_prior(37.5%) = 91% 독점. 나머지 11개 feature는 현재 설정에서 실질 기여가 작음 (무의미가 아님).
 
 ### 2.5-A. Regularization Tuning
-- [ ] `scripts/tune_ranker_regularization.py` — Sequential greedy search
-  - [ ] num_leaves=[7,15,31], min_data_in_leaf=[20,50,100], max_depth=[3,5,-1]
-  - [ ] feature_fraction=[0.7,0.8,0.9,1.0], bagging_fraction=[0.7,0.8,1.0]
-  - [ ] reg_alpha=[0.05,0.1,0.5,1.0], reg_lambda=[0.05,0.1,0.5,1.0]
-  - [ ] **핵심**: feature_fraction 0.7~0.8로 cooccurrence/popularity 독점(91%) 완화
-  - [ ] Validation recall@10 기준 best config 탐색 (최대 3 round greedy)
-  - [ ] 산출물: `artifacts/regularization_tuning.json`, `artifacts/regularization_tuning_summary.md`
+- [x] `scripts/tune_ranker_regularization.py` — Sequential greedy search 구현
+  - [x] num_leaves=[7,15,31], min_data_in_leaf=[20,50,100], max_depth=[3,5,-1]
+  - [x] feature_fraction=[0.7,0.8,0.9,1.0], bagging_fraction=[0.7,0.8,1.0]
+  - [x] reg_alpha=[0.05,0.1,0.5,1.0], reg_lambda=[0.05,0.1,0.5,1.0]
+  - [x] **핵심**: feature_fraction 0.7~0.8로 cooccurrence/popularity 독점(91%) 완화
+  - [x] Validation recall@10 기준 best config 탐색 (최대 3 round greedy)
+  - [ ] 산출물 생성: `artifacts/regularization_tuning.json`, `artifacts/regularization_tuning_summary.md`
 
 ### 2.5-B. Negative Sampling Ablation
-- [ ] `scripts/ablation_neg_sampling.py` — Phase 1 + Phase 2 ablation
-  - [ ] Phase 1: neg_ratio [1,2,4,8] × hard_ratio=0.8 (기본값)
-  - [ ] Phase 2: best neg_ratio × hard_ratio [0.5,0.8,1.0]
-  - [ ] **핵심**: hard/easy 비율이 popularity bias에 미치는 영향 측정
-  - [ ] accuracy + coverage@10 동시 평가
-  - [ ] 산출물: `artifacts/neg_sampling_ablation.json`, `artifacts/neg_sampling_ablation_summary.md`
+- [x] `scripts/ablation_neg_sampling.py` — Phase 1 + Phase 2 ablation 구현
+  - [x] Phase 1: neg_ratio [1,2,4,8] × hard_ratio=0.8 (기본값)
+  - [x] Phase 2: best neg_ratio × hard_ratio [0.5,0.8,1.0]
+  - [x] **핵심**: hard/easy 비율이 popularity bias에 미치는 영향 측정
+  - [x] accuracy + coverage@10 동시 평가
+  - [ ] 산출물 생성: `artifacts/neg_sampling_ablation.json`, `artifacts/neg_sampling_ablation_summary.md`
 
 ### 2.5-C. Source One-Hot Feature Ablation
-- [ ] `gnn_recommender/rerank.py`에 source one-hot feature 3개 추가
-  - [ ] `source_is_popularity` (0/1): 후보가 popularity provider에서 왔는지
-  - [ ] `source_is_cooccurrence` (0/1): 후보가 cooccurrence provider에서 왔는지
-  - [ ] `source_count` (1~2): 후보를 생성한 provider 수
-  - [ ] `RANKER_FEATURE_COLUMNS` 및 `RANKER_CATEGORICAL_FEATURES` 업데이트
-- [ ] Source one-hot 포함/미포함 비교 평가 (coverage@10 변화 측정)
-- [ ] 산출물: `artifacts/source_onehot_ablation.json`
-- [ ] **참고**: source_scores에 이미 연속형 점수로 정보가 인코딩되어 효과 제한적일 수 있음
+- [x] `gnn_recommender/rerank.py`에 source one-hot feature 3개 추가
+  - [x] `source_is_popularity` (0/1): 후보가 popularity provider에서 왔는지
+  - [x] `source_is_cooccurrence` (0/1): 후보가 cooccurrence provider에서 왔는지
+  - [x] `source_count` (1~2): 후보를 생성한 provider 수
+  - [x] `RANKER_FEATURE_COLUMNS` 및 `RANKER_CATEGORICAL_FEATURES` 업데이트
+- [x] `scripts/source_onehot_ablation.py` — source one-hot 포함/미포함 비교 스크립트 구현
+- [ ] Source one-hot 포함/미포함 비교 평가 실행 (coverage@10 변화 측정)
+- [ ] 산출물 생성: `artifacts/source_onehot_ablation.json`
+- [x] **참고**: source_scores에 이미 연속형 점수로 정보가 인코딩되어 효과 제한적일 수 있음
 
 ---
 
@@ -453,7 +454,8 @@ Diversity note: v2 LightGBM has lower coverage/novelty than v1 deterministic.
   - [ ] SHAP explanation 사용법 (`--explain`)
   - [ ] Text embedding 사용법 (`--use-text-embedding`, leakage 주의)
 - [ ] `PRD_GNN_Reranker_v2.md` 상태 업데이트 (완료된 항목 체크)
-- [ ] `CHANGELOG.md`에 v2 추가
+- [ ] `artifacts/experiment_decisions.json`에 v2 최종 결정 기록
+- [ ] `artifacts/experiment_run_summary.md`에 v2 실행 요약 기록
 
 ---
 

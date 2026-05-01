@@ -7,9 +7,9 @@
 ## 문서 역할 및 충돌 우선순위
 
 - `PRD.md`: 시스템 요구사항, 범위, 아키텍처 결정, 운영/검수 기준의 단일 진실원천입니다.
-- `CHECKLIST.md`: 본 PRD의 항목을 실행 관점에서 추적·검증하는 진행 상태 문서입니다.
+- `TASKS.md`: 본 PRD의 항목을 실행 관점에서 추적·검증하는 진행 상태 문서입니다.
 - `README.md`: 설치/실행 명령, 현재 구현 요약, 참고 링크를 담는 실행 안내 문서입니다.
-- 충돌이 발생할 때의 우선순위는 **`PRD.md` → `CHECKLIST.md` → `README.md`** 입니다.
+- 충돌이 발생할 때의 우선순위는 **`PRD.md` → `TASKS.md` → `README.md`** 입니다.
 - 보조 문서(`docs/`, 실험/리뷰 노트)는 본 우선순위를 바꾸지 못하며, 충돌 시 위 규칙을 우선 적용합니다.
 
 ---
@@ -29,7 +29,7 @@ NVIDIA Nemotron-Personas-Korea의 100만 한국인 페르소나 데이터를 Neo
 | **Phase 1** | GraphRAG 인사이트, 유사 페르소나 매칭, 커뮤니티 탐지, 관계 경로 | ✅ 완료 | `docs/prd-archive/prd-v1.0-phase1.md` |
 | **Phase 2** | 검색/필터(F5), 통계 대시보드(F6), 프로필 상세(F7), 세그먼트 비교(F8), 서브그래프 시각화(F9) | ✅ 완료 | `docs/prd-archive/prd-v1.5-phase2.md` |
 | **Phase 3** | 네트워크 영향력(F10), 추천 엔진(F11), 대화형 챗봇(F12) | ✅ 핵심 구현 완료 | 본 문서 §3~5 |
-| **Phase 4** | 대규모 운영검증(F13), 확장/고도화(F14), 챗봇 LLM 합성(F15) | 📝 계획/검수 단계 | 본 문서 §11 |
+| **Phase 4** | 대규모 운영검증(F13), 확장/고도화(F14), 챗봇 LLM 합성(F15), Target Persona Generator(F16), Cross-domain Lifestyle Map(F17), Career Transition Map(F18) | 📝 계획/검수 단계 | 본 문서 §11 |
 
 ### 1.4 검수 이력 (Review History)
 
@@ -64,6 +64,9 @@ NVIDIA Nemotron-Personas-Korea의 100만 한국인 페르소나 데이터를 Neo
 | **F13** | **대규모 운영검증** | 운영 runbook / smoke / benchmark | **4** | 📝 | **1M 성능, 배치 안정성, QA 게이트** |
 | **F14** | **확장 및 고도화 로드맵** | TBD | **4** | 📝 | **챗봇 orchestration, 고급 추천, 관측성** |
 | **F15** | **챗봇 LLM 응답 합성** | `POST /api/chat` (확장) | **4** | 📝 | **Rule 우선 + LLM 합성, InsightRouter 흡수** |
+| **F16** | **Target Persona Generator** | 신규 | **4** | 📝 | **조건 기반 유사 페르소나 텍스트 LLM 합성** |
+| **F17** | **Cross-domain Lifestyle Map** | 신규 | **4** | 📝 | **7개 domain persona 텍스트 간 상관관계 통계** |
+| **F18** | **Career Transition Map** | 신규 | **4** | 📝 | **직업·목표·스킬 교차 분석** |
 
 ---
 
@@ -190,8 +193,9 @@ class CentralityBatchJob:
 ### 4.1 목표 및 성공 지표
 - **목표**: 유사 페르소나가 가진 속성 중 대상에게 없는 항목을 추천
 - **성공 지표**:
-  - API 응답 시간 < 500ms (템플릿 기반 reasoning)
-  - 추천 정확도: 유사 페르소나의 70%+가 해당 속성 보유
+   - API 응답 시간 < 500ms (템플릿 기반 reasoning)
+   - 추천 정확도: 유사 페르소나의 70%+가 해당 속성 보유
+- **대체 접근**: 오프라인 GNN 기반 취미 추천이 `GNN_Neural_Network/PRD.md`에서 PoC 진행 중. Phase 2.5 튜닝 완료 후 F11 Cypher 기반 추천과 GNN 기반 추천의 A/B 테스트 예정.
 
 ### 4.2 아키텍처 결정 (ADR-002 반영)
 ⚠️ **추천 사유(Reasoning)는 LLM 동기 호출 금지 → 템플릿 기반**
@@ -416,6 +420,14 @@ CREATE INDEX district_key FOR (d:District) ON (d.key);
 
 주의: `province`는 `Person` 속성이 아니라 `(:District)-[:IN_PROVINCE]->(:Province)` 계층으로 저장됩니다. 지역 필터/추천은 `District.key` 또는 `Province.name`을 명시적으로 사용해야 하며, `p.province` 기반 composite index는 사용하지 않습니다.
 
+### 7.2.1 데이터 품질 관련 그래프 정리
+
+| 노드 | Cardinality | 문제 | 권장 조치 |
+|:---|:---:|:---|:---|
+| `Country` | 1 | 값이 `대한민국` 하나뿐. 그래프 노드로서 정보량 0. 모든 Person이 동일한 Country에 속함 | 노드 제거, District→Province 직접 연결 |
+| `MilitaryStatus` | 2 | `비현역`이 압도적 비중. 여성 전원 비현역으로 분산 거의 없음 | 필터/시각화에서 제외 또는 숨김 |
+| `bachelors_field` | 11 | `해당없음` 비중 높을 가능성. 실제 전공 정보는 subset에만 있음 | 노드 유지하되 프론트에서 중요도 하향 |
+
 ### 7.3 배치 작업 스케줄
 | 작업 | 주기 | 파일 | 설명 |
 |:---|:---|:---|:---|
@@ -465,7 +477,6 @@ CREATE INDEX district_key FOR (d:District) ON (d.key);
 | R6 | LLM이 제공 데이터 무시하고 사전학습 지식으로 답변 | 🔴 높음 | 시스템 프롬프트 강화, 응답에 수치 포함 여부 검증 | 백엔드 |
 | R7 | Neo4j 결과 대량 시 토큰 비용/지연 급증 | 🟡 중간 | 결과 상위 N건 제한, 집계 요약 후 전달 | 백엔드 |
 | R8 | LLM API 장애 시 챗봇 응답 불가 | 🟡 중간 | LLM 실패 시 기존 템플릿 문자열로 graceful fallback | 백엔드 |
-
 ---
 
 ## 10. 운영, 오류 처리, 롤백 기준
@@ -584,7 +595,7 @@ CREATE INDEX person_degree IF NOT EXISTS FOR (p:Person) ON (p.degree);
 
 ### 11.3 운영검증 절차
 
-1. **검수 계획 승인**: 본 PRD와 `CHECKLIST.md` Phase 19 항목을 먼저 리뷰합니다.
+1. **검수 계획 승인**: 본 PRD와 `TASKS.md` Phase 19 항목을 먼저 리뷰합니다.
 2. **환경 고정**: Neo4j heap/pagecache, GDS 버전, 데이터 크기, GPU/CPU 환경을 기록합니다.
 3. **데이터 준비 검증**: Person/관계/SIMILAR_TO/중심성 속성의 기준 수량을 확인합니다.
 4. **배치 벤치마크**: PageRank, Degree, Betweenness를 독립 실행하고 run_id별 결과를 보존합니다.
@@ -605,13 +616,19 @@ CREATE INDEX person_degree IF NOT EXISTS FOR (p:Person) ON (p.degree);
 | P2 | 고급 추천 스코어링 | 중심성/커뮤니티/유사도 가중치 혼합 | F10/F11 교차 검증 |
 | P2 | 비동기 장기 작업 | removal simulation/Betweenness를 job queue로 분리 | job status API 설계 |
 | P2 | 관측성 강화 | metrics, structured logs, alerting | 운영 로그 표준 |
+| P2 | GNN Phase 2.5 연동 | LightGBM regularization tuning / negative sampling ablation / source one-hot 튜닝 결과를 GNN 추천 파이프라인에 반영. 상세: `GNN_Neural_Network/PRD.md` §11 | GNN 평가 완료 |
+| P2 | Country 노드 제거 | `Country` 노드는 1개 값(`대한민국`)으로 정보량 0. 그래프에서 제거하고 District→Province 직접 연결로 단순화 | Schema 협의 |
+| P2 | MilitaryStatus/bachelors_field 노드 검토 | `MilitaryStatus`(분산 낮음), `bachelors_field`(`해당없음` 비중 높음) 불필요한 노드 정리 | 데이터 분포 분석 |
+| P3 | Target Persona Generator | 입력 조건(연령/지역/직업 등)과 일치하는 페르소나 5~10명의 텍스트를 KURE 검색 + LLM 합성으로 대표 프로필 생성 | `similar.py`, KURE vector index |
+| P3 | Cross-domain Lifestyle Map | 7개 domain persona 텍스트 간 통계 상관관계 시각화 (예: sports_persona 언급 X → culinary_persona 언급 Y 확률) | Persona text 7개 필드 |
+| P3 | Career Transition Map | `occupation` + `career_goals_and_ambitions` + `skills_and_expertise_list` 교차 분석으로 직무 전환 패턴 도출 | occupation(500+ class), goals, skills |
 
 ### 11.5 구현 전 검수 게이트
 
 Phase 4의 코드는 아래 산출물이 승인되기 전 작성하지 않습니다.
 
 - PRD Phase 4 요구사항 검수 완료
-- CHECKLIST Phase 19/20 항목 검수 완료
+- TASKS Phase 19/20 항목 검수 완료
 - 대규모 운영검증 실행 계획 승인
 - 성능 목표와 실패 시 fallback 기준 합의
 - UI/UX empty/loading/error 문구 승인
@@ -782,8 +799,7 @@ Phase 4의 코드는 아래 산출물이 승인되기 전 작성하지 않습니
 ### 13.1 파일 구조
 ```
 PRD.md                    ← 본 문서 (현재 상태, 단일 진실 공급원)
-CHANGELOG.md              ← 변경 이력
-CHECKLIST.md              ← 구현 진행 상황
+TASKS.md                  ← 구현 진행 상황
 docs/
   prd-archive/            ← 과거 PRD 버전
     prd-v1.0-phase1.md
@@ -797,13 +813,14 @@ docs/
 
 ### 13.2 변경 프로세스
 1. PRD 수정 필요 시 **본 파일(PRD.md)만** 수정
-2. 변경 사항은 `CHANGELOG.md`에 기록
+2. 실행 상태와 완료 조건 변경은 `TASKS.md`에 함께 반영
 3. 중대한 아키텍처 결정은 `docs/decisions/ADR-###` 신규 작성
-4. Phase 완료 시 해당 Phase의 아카이브 파일은 **수정하지 않음** (읽기 전용)
+4. GNN 오프라인 추천 실험 결정은 `GNN_Neural_Network/artifacts/experiment_decisions.json` 및 `experiment_run_summary.md`에 기록
+5. Phase 완료 시 해당 Phase의 아카이브 파일은 **수정하지 않음** (읽기 전용)
 
 ---
 
 **작성일**: 2026-04-28  
-**버전**: v2.3-f15-llm-synthesis  
-**상태**: Phase 3 핵심 구현 완료 / Phase 4 계획 검수 대기 / F15 챗봇 LLM 합성 계획 추가  
-**다음 단계**: F15 구현 계획 검수 → 1단계(LLM 합성) 구현 → 2단계(InsightRouter 흡수) 구현
+**버전**: v2.4-f16-f18-expansion  
+**상태**: Phase 3 핵심 구현 완료 / Phase 4 계획 검수 대기 / F16-F18 확장 계획 추가  
+**다음 단계**: F16-F18 구현 계획 검수 → Country/MilitaryStatus/bachelors_field 그래프 정리 검수 → GNN Phase 2.5 결과 기반 F11 연동 검토

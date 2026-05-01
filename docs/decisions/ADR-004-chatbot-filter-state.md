@@ -199,5 +199,5 @@ F12 코드 구현 시 최소 테스트는 다음을 포함해야 합니다.
 ## 관련 문서
 
 - `PRD.md` §5 Feature 12
-- `CHECKLIST.md` Phase 17
+- `TASKS.md` Phase 17
 - `docs/decisions/ADR-003-chatbot-memory.md`

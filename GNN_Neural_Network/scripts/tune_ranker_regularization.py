@@ -354,8 +354,7 @@ def main() -> None:
     if not isinstance(hobby_profile, dict):
         raise ValueError("hobby_profile.json required")
 
-    from GNN_Neural_Network.gnn_recommender.rerank import _load_hobby_taxonomy as _lht
-    hobby_taxonomy = _lht(config.paths.hobby_taxonomy, config.paths.artifact_dir) if hasattr(config.paths, 'hobby_taxonomy') else None
+    hobby_taxonomy = None
     # Try loading hobby_taxonomy directly
     for p in (config.paths.hobby_taxonomy, config.paths.artifact_dir / "hobby_taxonomy.json"):
         if p.exists():

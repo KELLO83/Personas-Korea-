@@ -24,9 +24,25 @@ pytest tests
 - `src/api/` - FastAPI backend (routes, main)
 - `src/rag/` - LangChain/LangGraph RAG engine
 - `src/graph/` - Neo4j graph operations, GDS algorithms
+- `src/gds/` - Neo4j Graph Data Science pipelines (FastRP, KNN, Leiden, PageRank)
+- `src/embeddings/` - KURE-v1 Korean text embedding model + vector index
 - `src/data/` - Data loader, parser, preprocessor
-- `tests/` - PyTest test suite (67+ tests)
+- `src/jobs/` - Batch jobs (centrality computation)
+- `GNN_Neural_Network/` - GNN hobby recommender PoC (LightGCN + LightGBM)
+- `configs/` - YAML/JSON config files
+- `scripts/` - Data pipeline, test scripts
+- `tests/` - PyTest test suite (212+ tests)
 
+## Key Documents
+
+- `PRD.md` - Root product requirements for the full Korean Persona Knowledge Graph platform (FastAPI, Neo4j, RAG, frontend)
+- `TASKS.md` - Root implementation checklist for the platform features
+- `GNN_Neural_Network/PRD.md` - GNN offline hobby recommender system requirements (LightGCN + LightGBM ranker)
+- `GNN_Neural_Network/CHECKLIST.md` - GNN offline model implementation checklist
+- `GNN_Neural_Network/DATASET_EXPLAIN.md` - 26개 컬럼, 1M row, 그래프 매핑 등 전체 데이터셋 구조 설명
+
+**Important**: Root documents cover the API/web platform. GNN_Neural_Network/ documents cover the offline model training system independently.
+ 
 ## Build, Test, and Run Commands
 
 ```powershell
@@ -38,6 +54,18 @@ pytest tests
 
 # Start backend (FastAPI on :8000)
 .\.venv\Scripts\python.exe -m uvicorn src.api.main:app --host 0.0.0.0 --port 8000
+
+# GNN: train LightGCN
+.\.venv\Scripts\python.exe GNN_Neural_Network\scripts\train_lightgcn.py
+
+# GNN: train/evaluate LightGBM ranker
+.\.venv\Scripts\python.exe GNN_Neural_Network\scripts\train_ranker.py
+.\.venv\Scripts\python.exe GNN_Neural_Network\scripts\evaluate_ranker.py --split test
+
+# GNN: run Phase 2.5 tuning experiments
+.\.venv\Scripts\python.exe GNN_Neural_Network\scripts\tune_ranker_regularization.py
+.\.venv\Scripts\python.exe GNN_Neural_Network\scripts\ablation_neg_sampling.py
+.\.venv\Scripts\python.exe GNN_Neural_Network\scripts\source_onehot_ablation.py
 ```
 
 ## Infrastructure
@@ -95,7 +123,7 @@ When running or modifying training/evaluation code under `GNN_Neural_Network/`:
 - Keep a human-readable experiment summary artifact in addition to raw JSON metrics when the decision changes the default recommendation path.
 - Update both `experiment_decisions.json` and `experiment_run_summary.md` whenever a training/evaluation run changes the default recommendation path or closes an experiment with a clear decision.
 - If a result is inconclusive, record that explicitly as `experimental` or `needs_followup` instead of leaving the decision implicit.
-- If the default Stage 1 baseline, Stage 2 promotion status, provider policy, or taxonomy policy changes, update the relevant `README.md`, `PRD.md`, and `CHECKLIST.md` entries in the same task.
+- If the default Stage 1 baseline, Stage 2 promotion status, provider policy, or taxonomy policy changes, update the relevant `README.md`, `PRD.md`, and `TASKS.md` entries in the same task.
 - Prefer short decision logs over long narrative notes. The goal is reproducibility and later review.
 
 ## Coding Conventions
@@ -103,4 +131,3 @@ When running or modifying training/evaluation code under `GNN_Neural_Network/`:
 - Python 4-space indentation, `snake_case` file/function names, `PascalCase` classes
 - Type hints for all new/edited functions
 - Korean UI text, English code/comments
-- Streamlit session state keys: `selected_uuid`, `graph_uuid`, `profile_uuid`, `similar_uuid`, `path_uuid1`, etc.

@@ -5,9 +5,9 @@
 ## 문서 역할 및 충돌 우선순위
 
 - `PRD.md`: 본 프로젝트의 요구사항, 범위, 설계 결정 및 품질 게이트를 결정하는 문서입니다.
-- `CHECKLIST.md`: PRD 실행 상태와 완료 조건을 추적·검증하는 단일 진행 규칙 문서입니다.
+- `TASKS.md`: PRD 실행 상태와 완료 조건을 추적·검증하는 단일 진행 규칙 문서입니다. (구 CHECKLIST.md)
 - `README.md`: 실행 방법, 상태 가시화, 참고 자료를 제공하는 실무 안내서입니다.
-- 문서 충돌 시 우선순위는 **`PRD.md` → `CHECKLIST.md` → `README.md`** 입니다.
+- 문서 충돌 시 우선순위는 **`PRD.md` → `TASKS.md` → `README.md`** 입니다.
 - 보조 산출물(`docs/`, 실험/리뷰 기록)은 본 우선순위를 무시해 대체할 수 없습니다.
 
 ---
@@ -115,7 +115,7 @@
 
 ---
 
-> Note: Phase 15~18은 신규 Phase 3 구현 우선순위가 높아 Phase 8 바로 뒤에 배치한다. Phase 9~14는 이미 구현된 Phase 2 후속 기록이다.
+> Note: Phase 15~22는 신규 Phase 3/4 구현 우선순위가 높아 Phase 8 바로 뒤에 배치한다. Phase 9~14는 이미 구현된 Phase 2 후속 기록이다.
 
 ## Phase 15: 네트워크 영향력 및 핵심 인물 분석 (F10)
 
@@ -157,10 +157,10 @@
   - [ ] Betweenness 샘플링 배치 계산 시간 < 2시간 기준 검증 항목 정의
   - [x] `/api/influence/top` 조회 시간 < 100ms 기준 검증
 - [x] `tests/test_influence.py` — API 테스트
-  - [x] `/api/influence/top` 응답 구조 검증
-  - [x] `/api/influence/top` 응답에 `last_updated_at` 포함
-  - [x] 시뮬레이션 응답 (original > current)
-  - [x] 잘못된 metric → 400
+   - [x] `/api/influence/top` 응답 구조 검증
+   - [x] `/api/influence/top` 응답에 `last_updated_at` 포함
+   - [x] 시뮬레이션 응답 (original > current)
+   - [x] 잘못된 metric → 400
 
 ---
 
@@ -188,10 +188,10 @@
   - [x] 추천 결과 없음 empty state 문구 표시
   - [x] 추천 데이터 미준비/503 error state 문구 표시
 - [x] `tests/test_recommendation.py` — 단위 테스트
-  - [x] 취미 추천 (대상이 없는 취미 상위 노출)
-  - [x] 스킬 추천 (유사 페르소나 공통 스킬)
-  - [x] 추천 항목이 대상의 기존 속성과 중복되지 않음
-  - [x] 응답 시간 < 500ms
+   - [x] 취미 추천 (대상이 없는 취미 상위 노출)
+   - [x] 스킬 추천 (유사 페르소나 공통 스킬)
+   - [x] 추천 항목이 대상의 기존 속성과 중복되지 않음
+   - [x] 응답 시간 < 500ms
 
 ---
 
@@ -228,8 +228,8 @@
   - [x] 필터 병합 검증 (AND 조건 누적)
   - [x] 세션 분리 (session_id별 독립 맥락)
 - [x] `tests/test_api_chat.py` — API 테스트
-  - [x] `/api/chat` 응답 구조 검증
-  - [x] context_filters 포함 확인
+   - [x] `/api/chat` 응답 구조 검증
+   - [x] context_filters 포함 확인
 
 ---
 
@@ -254,9 +254,9 @@
   - [ ] GDS projection 미준비 상태에서 사용자 API가 전체 재계산을 트리거하지 않음
   - [ ] SIMILAR_TO 미준비 상태에서 추천 API가 503 오류를 명확히 반환
 - [ ] 문서화
-  - [ ] PRD 업데이트 (구현 완료 항목 반영)
-  - [ ] API 문서 업데이트 (신규 엔드포인트)
-  - [ ] 사용 가이드 작성
+   - [ ] PRD 업데이트 (구현 완료 항목 반영)
+   - [ ] API 문서 업데이트 (신규 엔드포인트)
+   - [ ] 사용 가이드 작성
 
 ---
 
@@ -328,7 +328,7 @@
 - [ ] 고도화 검수 게이트
   - [ ] P1 구현 우선순위 승인
   - [ ] P2 연구/실험 항목 분리
-  - [ ] 구현 착수 전 PRD/CHECKLIST 재검수 완료
+  - [ ] 구현 착수 전 PRD/TASKS 재검수 완료
 
 ---
 
@@ -383,6 +383,67 @@
   - [ ] PRD §11.7 요구사항과 구현 일치 확인
   - [ ] 기존 테스트 전체 통과 (회귀 없음)
   - [ ] LLM hallucination 방지 프롬프트 검증 (golden set 10개 이상)
+
+---
+
+## Phase 22: 그래프 정리 및 신규 분석 기능 계획 검수 (F16-F18)
+
+> PRD §7.2.1, §11.4 — 코드 구현 전 데이터 품질 정리와 신규 분석 기능의 범위/완료 조건을 검수한다.
+
+- [ ] 그래프 스키마 정리 계획
+  - [ ] `Country` 노드 제거 영향 범위 확인 (`District → Province → Country` 이력 유지 여부 포함)
+  - [ ] `District → Province` 직접 연결 전환 방식 정의
+  - [ ] 기존 API/쿼리/프론트 필터에서 `Country` 의존 여부 점검
+  - [ ] 마이그레이션 후 노드/관계 수 검증 기준 작성
+- [ ] 낮은 정보량 노드/필터 검토
+  - [ ] `MilitaryStatus` 분포 확인 및 필터/시각화 제외 또는 숨김 기준 결정
+  - [ ] `bachelors_field`의 `해당없음` 비중 확인 및 프론트 중요도 하향 기준 결정
+  - [ ] 검색/통계/프로필/그래프 시각화에서 노출 정책 정리
+- [ ] F16 Target Persona Generator 계획
+  - [ ] 입력 조건 범위 정의 (연령, 지역, 직업, 취미, 기술 등)
+  - [ ] KURE 유사 페르소나 검색 기준과 top-k 근거 노출 방식 정의
+  - [ ] LLM 합성 프롬프트/금지 사항/근거 보존 규칙 작성
+  - [ ] API 응답 스키마와 프론트 표시 범위 초안 작성
+  - [ ] 품질 검수 golden set 작성
+- [ ] F17 Cross-domain Lifestyle Map 계획
+  - [ ] 사용할 7개 domain persona 텍스트 필드 확정
+  - [ ] 상관관계/동시 언급/조건부 확률 산출 방식 정의
+  - [ ] 세그먼트 필터와 시각화 범위 정의
+  - [ ] 낮은 빈도/노이즈 term 처리 기준 작성
+- [ ] F18 Career Transition Map 계획
+  - [ ] `occupation`, `career_goals_and_ambitions`, `skills_and_expertise_list` 매핑 방식 정의
+  - [ ] 직무 전환 패턴 산출 기준 작성
+  - [ ] 목표/스킬 기반 추천 또는 비교 화면 범위 결정
+  - [ ] 직업 500+ class 처리와 top-k 제한 기준 작성
+- [ ] 검수 게이트
+  - [ ] F16-F18 구현 착수 전 PRD/TASKS 일치 확인
+  - [ ] 새 API/프론트 구현 범위와 제외 범위 승인
+  - [ ] 그래프 정리 작업과 신규 기능 작업의 실행 순서 결정
+
+---
+
+## Phase 23: GNN Phase 2.5 결과 기반 추천 연동 검수 (F11)
+
+> PRD §2.1 F11, §11.4 — `GNN_Neural_Network/` 오프라인 추천 PoC 결과를 루트 추천 기능과 연동할지 검수한다. 코드 구현은 GNN 실험 결과 확정 이후에만 진행한다.
+
+- [ ] Phase 2.5 실험 결과 확인
+  - [ ] LightGBM regularization tuning 결과 확인
+  - [ ] negative sampling ablation 결과 확인
+  - [ ] source one-hot ablation 결과 확인
+  - [ ] ranking collapse 완화 여부 확인 (coverage/novelty/recall 동시 검토)
+- [ ] 실험 결정 기록 확인
+  - [ ] `GNN_Neural_Network/artifacts/experiment_decisions.json` 업데이트 여부 확인
+  - [ ] `GNN_Neural_Network/artifacts/experiment_run_summary.md` 업데이트 여부 확인
+  - [ ] default recommendation path 변경 여부 확인
+- [ ] F11 A/B 연동 계획
+  - [ ] 기존 Cypher 기반 추천과 GNN 기반 추천의 비교 지표 정의
+  - [ ] API 연동 방식 결정 (오프라인 artifact 조회, 별도 service, batch export 중 선택)
+  - [ ] fallback 정책 정의 (GNN artifact 미준비/누락/버전 불일치)
+  - [ ] 개인정보/누수 방지 기준 재확인 (text feature 기본 비활성 유지 여부 포함)
+- [ ] 검수 게이트
+  - [ ] GNN 추천을 기본 경로로 승격할지, 실험 옵션으로 둘지 결정
+  - [ ] 루트 `README.md`, `PRD.md`, `TASKS.md` 업데이트 필요 여부 확인
+  - [ ] 구현 착수 승인 여부 기록
 
 ---
 

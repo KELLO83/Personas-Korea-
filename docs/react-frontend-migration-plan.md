@@ -340,8 +340,8 @@ Streamlit `session_state`에서 React 상태로 이동할 항목:
 ## 9. 삭제/보관 정책
 
 - 과거 Streamlit UI 코드는 더 이상 저장소에 남아 있지 않다.
-- 회귀 검증은 API 테스트, PRD, CHECKLIST, 프론트 구현 결과를 기준으로 수행한다.
-- React가 parity에 도달한 이후에도 회귀 검증 기준은 PRD, CHECKLIST, API 테스트, 현재 프론트 구현 결과로 유지한다.
+- 회귀 검증은 API 테스트, PRD, TASKS, 프론트 구현 결과를 기준으로 수행한다.
+- React가 parity에 도달한 이후에도 회귀 검증 기준은 PRD, TASKS, API 테스트, 현재 프론트 구현 결과로 유지한다.
 - historical UI 맥락이 필요하면 별도 문서 기록으로만 남기고, 삭제된 프론트 경로를 다시 기준선으로 복원하지 않는다.
 
 ---
