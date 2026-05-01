@@ -1,5 +1,13 @@
 from __future__ import annotations
 
+"""
+LEGACY / ANALYSIS-ONLY: runs two train/evaluate jobs in one invocation.
+
+Do not use this as the default Phase 2.5 promotion path. The default path is
+single-config train_ranker.py plus single-split evaluate_ranker.py, with one
+explicit hyperparameter setting per invocation.
+"""
+
 import argparse
 import json
 import subprocess

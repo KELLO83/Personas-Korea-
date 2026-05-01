@@ -6,11 +6,21 @@ from src.gds.centrality import SimulationTimeoutError
 
 
 class FakeCentralityService:
-    def __init__(self, has_scores: bool = True) -> None:
+    def __init__(self, has_scores: bool = True, status: str = "success") -> None:
         self._has_scores = has_scores
+        self._status = status
+        self.ensure_projection_called = False
 
     def read_status(self) -> dict[str, object]:
-        return {"last_success_at": "2026-04-28T02:00:00+00:00", "status": "success"}
+        return {
+            "last_success_at": "2026-04-28T02:00:00+00:00",
+            "run_id": "run-20260428020000",
+            "status": self._status,
+        }
+
+    def ensure_projection(self, *args: object, **kwargs: object) -> dict[str, object]:
+        self.ensure_projection_called = True
+        return {"graphName": "persona_graph", "already_exists": True}
 
     def has_scores(self, metric: str) -> bool:
         return self._has_scores
@@ -56,7 +66,8 @@ class TimeoutCentralityService(FakeCentralityService):
 
 
 def test_influence_top(monkeypatch) -> None:
-    monkeypatch.setattr(influence, "get_centrality_service", lambda: FakeCentralityService())
+    service = FakeCentralityService()
+    monkeypatch.setattr(influence, "get_centrality_service", lambda: service)
     client = TestClient(create_app())
 
     response = client.get("/api/influence/top?metric=pagerank&limit=10")
@@ -65,8 +76,34 @@ def test_influence_top(monkeypatch) -> None:
     body = response.json()
     assert body["metric"] == "pagerank"
     assert body["last_updated_at"] == "2026-04-28T02:00:00+00:00"
+    assert body["run_id"] == "run-20260428020000"
+    assert body["stale_warning"] is False
     assert body["results"][0]["uuid"] == "u1"
     assert body["results"][0]["rank"] == 1
+    assert service.ensure_projection_called is False
+
+
+def test_influence_top_reports_stale_warning_for_failed_status(monkeypatch) -> None:
+    monkeypatch.setattr(influence, "get_centrality_service", lambda: FakeCentralityService(status="failed"))
+    client = TestClient(create_app())
+
+    response = client.get("/api/influence/top?metric=pagerank&limit=10")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["run_id"] == "run-20260428020000"
+    assert body["stale_warning"] is True
+
+
+def test_influence_top_does_not_recompute_projection(monkeypatch) -> None:
+    service = FakeCentralityService()
+    monkeypatch.setattr(influence, "get_centrality_service", lambda: service)
+    client = TestClient(create_app())
+
+    response = client.get("/api/influence/top?metric=degree&limit=5")
+
+    assert response.status_code == 200
+    assert service.ensure_projection_called is False
 
 
 def test_influence_top_rejects_invalid_metric(monkeypatch) -> None:

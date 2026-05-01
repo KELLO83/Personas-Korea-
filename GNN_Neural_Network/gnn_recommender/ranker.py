@@ -1,16 +1,20 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import random
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, cast
 
 import lightgbm as lgb
 import numpy as np
+from tqdm import tqdm
 
 from .data import PersonContext
 from .rerank import (
-    HobbyCandidate, RerankerConfig, build_rerank_features,
+    HobbyCandidate, RerankerConfig, build_rerank_features, merge_stage1_candidates,
 )
 
 
@@ -322,3 +326,143 @@ class LightGBMRanker:
         if self.model is None:
             return list(RANKER_FEATURE_COLUMNS)
         return [str(name) for name in self.model.feature_name()]
+
+
+def _pool_cache_key(
+    person_ids: list[int],
+    train_edges: list[tuple[int, int]],
+    id_to_hobby: dict[int, str],
+    candidate_k: int,
+    normalization_method: str,
+    label: str,
+) -> str:
+    pid_hash = hashlib.md5(str(sorted(person_ids)).encode()).hexdigest()[:8]
+    edge_hash = _hash_indexed_edges(train_edges)
+    hobby_hash = _hash_id_mapping(id_to_hobby)
+    providers = "popularity-cooccurrence"
+    return f"pool_{label}_{providers}_k{candidate_k}_{normalization_method}_e{edge_hash}_h{hobby_hash}_p{pid_hash}"
+
+
+def get_candidate_pool_cache_key(
+    person_ids: list[int],
+    train_edges: list[tuple[int, int]],
+    id_to_hobby: dict[int, str],
+    candidate_k: int,
+    normalization_method: str,
+    label: str,
+) -> str:
+    return _pool_cache_key(
+        person_ids=person_ids,
+        train_edges=train_edges,
+        id_to_hobby=id_to_hobby,
+        candidate_k=candidate_k,
+        normalization_method=normalization_method,
+        label=label,
+    )
+
+
+def _hash_indexed_edges(edges: list[tuple[int, int]]) -> str:
+    hasher = hashlib.md5()
+    for person_id, hobby_id in sorted(edges):
+        hasher.update(f"{person_id}:{hobby_id};".encode("utf-8"))
+    return hasher.hexdigest()[:12]
+
+
+def _hash_id_mapping(id_to_hobby: dict[int, str]) -> str:
+    payload = json.dumps(sorted(id_to_hobby.items()), ensure_ascii=False, separators=(",", ":"))
+    return hashlib.md5(payload.encode("utf-8")).hexdigest()[:8]
+
+
+def _coerce_score_dict(value: object) -> dict[str, float]:
+    if not isinstance(value, dict):
+        return {}
+    result: dict[str, float] = {}
+    for key, raw_value in value.items():
+        try:
+            result[str(key)] = float(raw_value)
+        except (TypeError, ValueError):
+            continue
+    return result
+
+
+def load_or_build_candidate_pool(
+    person_ids: list[int],
+    train_edges: list[tuple[int, int]],
+    train_known: dict[int, set[int]],
+    candidate_k: int,
+    id_to_hobby: dict[int, str],
+    popularity_counts: Counter[int],
+    cooccurrence_counts: dict[int, Counter[int]],
+    normalization_method: str,
+    cache_dir: Path | None = None,
+    label: str = "validation",
+    disable_progress: bool = False,
+) -> dict[int, list[HobbyCandidate]]:
+    from .baseline import (
+        cooccurrence_candidate_provider,
+        popularity_candidate_provider,
+    )
+    from .recommend import merge_candidates_by_hobby, normalize_candidate_scores
+
+    cache_key = _pool_cache_key(person_ids, train_edges, id_to_hobby, candidate_k, normalization_method, label)
+
+    if cache_dir is not None:
+        cache_path = cache_dir / "cache" / f"{cache_key}.json"
+        if cache_path.exists():
+            try:
+                raw = json.loads(cache_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                print(f"Candidate pool cache read failed, rebuilding: {cache_path} ({exc})")
+            else:
+                if isinstance(raw, dict):
+                    try:
+                        pools: dict[int, list[HobbyCandidate]] = {}
+                        for pid_str, entries in raw.items():
+                            pid = int(pid_str)
+                            if not isinstance(entries, list):
+                                raise TypeError(f"Candidate entries for person {pid} are not a list")
+                            pools[pid] = [
+                                HobbyCandidate(
+                                    hobby_id=int(e[0]),
+                                    hobby_name=id_to_hobby.get(int(e[0]), ""),
+                                    source_scores=_coerce_score_dict(e[1] if len(e) >= 2 else None),
+                                    raw_source_scores=_coerce_score_dict(e[2] if len(e) > 2 else None),
+                                    reason_features={},
+                                )
+                                for e in entries
+                                if isinstance(e, list)
+                                and len(e) >= 2
+                            ]
+                        print(f"Loaded candidate pool from cache: {cache_path}")
+                        return pools
+                    except (TypeError, ValueError, KeyError) as exc:
+                        print(f"Candidate pool cache format invalid, rebuilding: {cache_path} ({exc})")
+                else:
+                    print(f"Candidate pool cache format invalid, rebuilding: {cache_path}")
+
+    pools = {}
+    for person_id in tqdm(person_ids, desc=f"candidate pools ({label})", disable=disable_progress):
+        known = train_known.get(person_id, set())
+        pop = normalize_candidate_scores(
+            popularity_candidate_provider(train_edges, person_id, known, candidate_k, popularity_counts=popularity_counts),
+            normalization_method,
+        )
+        cooc = normalize_candidate_scores(
+            cooccurrence_candidate_provider(train_edges, person_id, known, candidate_k, cooccurrence_counts=cooccurrence_counts),
+            normalization_method,
+        )
+        merged = merge_candidates_by_hobby({"popularity": pop, "cooccurrence": cooc}, candidate_k)
+        pools[person_id] = merge_stage1_candidates(merged, id_to_hobby)
+
+    if cache_dir is not None:
+        cache_path = cache_dir / "cache" / f"{cache_key}.json"
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        serializable: dict[str, list[list[Any]]] = {}
+        for pid, candidates in pools.items():
+            serializable[str(pid)] = [
+                [c.hobby_id, dict(c.source_scores), dict(c.raw_source_scores)] for c in candidates
+            ]
+        cache_path.write_text(json.dumps(serializable, ensure_ascii=False), encoding="utf-8")
+        print(f"Candidate pool cached: {cache_path}")
+
+    return pools

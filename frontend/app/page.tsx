@@ -12,8 +12,9 @@ import { SearchFilters, SearchSection } from "@/components/search-section";
 import { ProfileSection } from "@/components/profile-section";
 import { GraphSection } from "@/components/graph-section";
 import { ChatSection } from "@/components/chat-section";
+import { InsightsSection } from "@/components/insights-section";
 
-type ViewKey = "dashboard" | "search" | "profile" | "graph" | "chat";
+type ViewKey = "dashboard" | "search" | "profile" | "graph" | "chat" | "insights";
 
 const views: Array<{ key: ViewKey; label: string; caption: string }> = [
   { key: "dashboard", label: "대시보드", caption: "전체 분포" },
@@ -21,6 +22,7 @@ const views: Array<{ key: ViewKey; label: string; caption: string }> = [
   { key: "profile", label: "프로필", caption: "상세 정보" },
   { key: "graph", label: "그래프", caption: "관계 맵" },
   { key: "chat", label: "대화형 탐색", caption: "질문 기반 분석" },
+  { key: "insights", label: "확장 분석", caption: "F16-F18 검수" },
 ];
 
 const emptySearchFilters: SearchFilters = {
@@ -158,6 +160,7 @@ export default function Home() {
         {activeView === "profile" && <ProfileSection profile={profile} selectedUuid={selectedUuid} onUuidChange={(uuid) => selectPersona(uuid, null)} onSelectPersona={selectPersona} />}
         {activeView === "graph" && <GraphSection graph={graph} profile={profile.data} onSelectPersona={selectGraphPersona} />}
         {activeView === "chat" && <ChatSection messages={chatMessages} input={chatInput} loading={chatLoading} error={chatError} onInputChange={setChatInput} onSubmit={submitChat} onReset={resetChat} />}
+        {activeView === "insights" && <InsightsSection />}
       </main>
     </div>
   );

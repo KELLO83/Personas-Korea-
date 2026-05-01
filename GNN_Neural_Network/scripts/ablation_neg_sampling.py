@@ -1,12 +1,21 @@
 """Negative Sampling Ablation: Compare neg_ratio and hard_ratio configurations.
 
+⚠️ LEGACY / ANALYSIS-ONLY ⚠️
+
+Per PRD §2.5 execution policy, hyperparameter sweep scripts are no longer part
+of the default experiment path. Use `train_ranker.py` with single config
+(--neg-ratio, --hard-ratio) + `evaluate_ranker.py --split validation` instead.
+
+This script is retained for ad-hoc historical comparison only.
+Do NOT use it for promotion decisions.
+
 Phase 1: Test neg_ratio in [1, 2, 4, 8] with default hard_ratio=0.8
 Phase 2: Test hard_ratio in [0.5, 0.8, 1.0] with best neg_ratio from Phase 1
 
 Each configuration is trained and evaluated on both validation and test splits,
 with results compared against the v1 deterministic baseline.
 
-Usage:
+Usage (legacy only):
     python GNN_Neural_Network/scripts/ablation_neg_sampling.py
 """
 

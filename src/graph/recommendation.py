@@ -7,6 +7,7 @@ from neo4j import GraphDatabase, Query
 from ..config import settings
 
 VALID_RECOMMENDATION_CATEGORIES = {"hobby", "skill", "occupation", "district"}
+VALID_CENTRALITY_METRICS = {"pagerank", "betweenness", "degree"}
 
 PERSON_EXISTS_QUERY = """
 MATCH (p:Person {uuid: $uuid})
@@ -19,99 +20,69 @@ MATCH (:Person {uuid: $uuid})-[:SIMILAR_TO]->(sim:Person)
 RETURN count(sim) AS count
 """
 
+def _build_recommendation_query(category: str) -> str:
+    relation = {
+        "hobby": "ENJOYS_HOBBY",
+        "skill": "HAS_SKILL",
+        "occupation": "WORKS_AS",
+        "district": "LIVES_IN",
+    }[category]
+
+    item_label = {
+        "hobby": "Hobby",
+        "skill": "Skill",
+        "occupation": "Occupation",
+        "district": "District",
+    }[category]
+
+    item_expr = {
+        "hobby": "item.name",
+        "skill": "item.name",
+        "occupation": "item.name",
+        "district": "coalesce(item.key, item.name)",
+    }[category]
+
+    return f"""
+        MATCH (source:Person {{uuid: $uuid}})-[rel:SIMILAR_TO]->(sim:Person)
+        WITH source, sim, coalesce(rel.score, 0.0) AS similarity
+        MATCH (sim)-[:{relation}]->(item:{item_label})
+        WHERE NOT (source)-[:{relation}]->(item)
+        WITH {item_expr} AS item_name,
+             sim,
+             similarity
+        WITH item_name,
+             sim,
+             similarity,
+             CASE
+                 WHEN $score_property IS NULL OR $score_property = '' THEN toFloat(similarity)
+                 ELSE toFloat(similarity) * (1.0 + coalesce(sim[$score_property], 0.0))
+             END AS weighted_similarity
+        ORDER BY item_name, similarity DESC
+        WITH item_name,
+             count(DISTINCT sim) AS similar_users_count,
+             sum(toFloat(weighted_similarity)) AS weighted_score,
+             collect({{uuid: sim.uuid, display_name: sim.display_name, similarity: toFloat(similarity)}})[..5] AS supporting_personas
+        MATCH (:Person {{uuid: $uuid}})-[:SIMILAR_TO]->(all_sim:Person)
+        WITH item_name,
+             similar_users_count,
+             weighted_score,
+             supporting_personas,
+             count(DISTINCT all_sim) AS total_similar
+        RETURN item_name,
+               similar_users_count,
+               CASE WHEN total_similar = 0 THEN 0.0 ELSE toFloat(similar_users_count) / total_similar END AS reason_score,
+               weighted_score,
+               supporting_personas
+        ORDER BY reason_score DESC, weighted_score DESC, item_name
+        LIMIT $top_n
+    """
+
+
 RECOMMENDATION_QUERIES: dict[str, str] = {
-    "hobby": """
-        MATCH (source:Person {uuid: $uuid})-[rel:SIMILAR_TO]->(sim:Person)
-        WITH source, sim, coalesce(rel.score, 0.0) AS similarity
-        MATCH (sim)-[:ENJOYS_HOBBY]->(item:Hobby)
-        WHERE NOT (source)-[:ENJOYS_HOBBY]->(item)
-        WITH item.name AS item_name,
-             sim,
-             similarity
-        ORDER BY item_name, similarity DESC
-        WITH item_name,
-             count(DISTINCT sim) AS similar_users_count,
-             sum(toFloat(similarity)) AS weighted_score,
-             collect({uuid: sim.uuid, display_name: sim.display_name, similarity: toFloat(similarity)})[..5] AS supporting_personas
-        MATCH (:Person {uuid: $uuid})-[:SIMILAR_TO]->(all_sim:Person)
-        WITH item_name, similar_users_count, weighted_score, supporting_personas, count(DISTINCT all_sim) AS total_similar
-        RETURN item_name,
-               similar_users_count,
-               CASE WHEN total_similar = 0 THEN 0.0 ELSE toFloat(similar_users_count) / total_similar END AS reason_score,
-               weighted_score,
-               supporting_personas
-        ORDER BY reason_score DESC, weighted_score DESC, item_name
-        LIMIT $top_n
-    """,
-    "skill": """
-        MATCH (source:Person {uuid: $uuid})-[rel:SIMILAR_TO]->(sim:Person)
-        WITH source, sim, coalesce(rel.score, 0.0) AS similarity
-        MATCH (sim)-[:HAS_SKILL]->(item:Skill)
-        WHERE NOT (source)-[:HAS_SKILL]->(item)
-        WITH item.name AS item_name,
-             sim,
-             similarity
-        ORDER BY item_name, similarity DESC
-        WITH item_name,
-             count(DISTINCT sim) AS similar_users_count,
-             sum(toFloat(similarity)) AS weighted_score,
-             collect({uuid: sim.uuid, display_name: sim.display_name, similarity: toFloat(similarity)})[..5] AS supporting_personas
-        MATCH (:Person {uuid: $uuid})-[:SIMILAR_TO]->(all_sim:Person)
-        WITH item_name, similar_users_count, weighted_score, supporting_personas, count(DISTINCT all_sim) AS total_similar
-        RETURN item_name,
-               similar_users_count,
-               CASE WHEN total_similar = 0 THEN 0.0 ELSE toFloat(similar_users_count) / total_similar END AS reason_score,
-               weighted_score,
-               supporting_personas
-        ORDER BY reason_score DESC, weighted_score DESC, item_name
-        LIMIT $top_n
-    """,
-    "occupation": """
-        MATCH (source:Person {uuid: $uuid})-[rel:SIMILAR_TO]->(sim:Person)
-        WITH source, sim, coalesce(rel.score, 0.0) AS similarity
-        MATCH (sim)-[:WORKS_AS]->(item:Occupation)
-        WHERE NOT (source)-[:WORKS_AS]->(item)
-        WITH item.name AS item_name,
-             sim,
-             similarity
-        ORDER BY item_name, similarity DESC
-        WITH item_name,
-             count(DISTINCT sim) AS similar_users_count,
-             sum(toFloat(similarity)) AS weighted_score,
-             collect({uuid: sim.uuid, display_name: sim.display_name, similarity: toFloat(similarity)})[..5] AS supporting_personas
-        MATCH (:Person {uuid: $uuid})-[:SIMILAR_TO]->(all_sim:Person)
-        WITH item_name, similar_users_count, weighted_score, supporting_personas, count(DISTINCT all_sim) AS total_similar
-        RETURN item_name,
-               similar_users_count,
-               CASE WHEN total_similar = 0 THEN 0.0 ELSE toFloat(similar_users_count) / total_similar END AS reason_score,
-               weighted_score,
-               supporting_personas
-        ORDER BY reason_score DESC, weighted_score DESC, item_name
-        LIMIT $top_n
-    """,
-    "district": """
-        MATCH (source:Person {uuid: $uuid})-[rel:SIMILAR_TO]->(sim:Person)
-        WITH source, sim, coalesce(rel.score, 0.0) AS similarity
-        MATCH (sim)-[:LIVES_IN]->(item:District)
-        WHERE NOT (source)-[:LIVES_IN]->(item)
-        WITH coalesce(item.key, item.name) AS item_name,
-             sim,
-             similarity
-        ORDER BY item_name, similarity DESC
-        WITH item_name,
-             count(DISTINCT sim) AS similar_users_count,
-             sum(toFloat(similarity)) AS weighted_score,
-             collect({uuid: sim.uuid, display_name: sim.display_name, similarity: toFloat(similarity)})[..5] AS supporting_personas
-        MATCH (:Person {uuid: $uuid})-[:SIMILAR_TO]->(all_sim:Person)
-        WITH item_name, similar_users_count, weighted_score, supporting_personas, count(DISTINCT all_sim) AS total_similar
-        RETURN item_name,
-               similar_users_count,
-               CASE WHEN total_similar = 0 THEN 0.0 ELSE toFloat(similar_users_count) / total_similar END AS reason_score,
-               weighted_score,
-               supporting_personas
-        ORDER BY reason_score DESC, weighted_score DESC, item_name
-        LIMIT $top_n
-    """,
+    "hobby": _build_recommendation_query("hobby"),
+    "skill": _build_recommendation_query("skill"),
+    "occupation": _build_recommendation_query("occupation"),
+    "district": _build_recommendation_query("district"),
 }
 
 REASON_TEMPLATES = {
@@ -146,12 +117,29 @@ class RecommendationService:
             record = session.run(SIMILAR_COUNT_QUERY, uuid=uuid).single()
             return bool(record and int(record["count"]) > 0)
 
-    def recommend(self, uuid: str, category: str, top_n: int = 5) -> list[dict[str, Any]]:
+    def recommend(
+        self,
+        uuid: str,
+        category: str,
+        top_n: int = 5,
+        *,
+        influence_metric: str | None = None,
+    ) -> list[dict[str, Any]]:
         if category not in VALID_RECOMMENDATION_CATEGORIES:
             raise ValueError(f"Invalid recommendation category: {category}")
+        if influence_metric is not None and influence_metric not in VALID_CENTRALITY_METRICS:
+            raise ValueError(f"Invalid influence metric: {influence_metric}")
         query = RECOMMENDATION_QUERIES[category]
         with self.driver.session(database=self.database) as session:
-            rows = [dict(record) for record in session.run(Query(cast(LiteralString, query)), uuid=uuid, top_n=top_n)]
+            rows = [
+                dict(record)
+                for record in session.run(
+                    Query(cast(LiteralString, query)),
+                    uuid=uuid,
+                    top_n=top_n,
+                    score_property=influence_metric,
+                )
+            ]
         return [_format_recommendation(row, category) for row in rows]
 
 

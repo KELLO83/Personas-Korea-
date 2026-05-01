@@ -1,8 +1,8 @@
 # Nemotron-Personas-Korea Dataset Explain
 
-> **문서 역할**: 이 문서는 데이터셋 특성, 스키마, 그래프 매핑 맥락을 설명하는 보조 문서입니다. 추천 시스템의 기준 요구사항/실행 규칙은 `GNN_Neural_Network/PRD.md`와 `GNN_Neural_Network/CHECKLIST.md`를 우선 적용합니다.
+> **문서 역할**: 이 문서는 데이터셋 특성, 스키마, 그래프 매핑 맥락을 설명하는 보조 문서입니다. 추천 시스템의 기준 요구사항/실행 규칙은 `GNN_Neural_Network/PRD.md`와 `GNN_Neural_Network/TASKS.md`를 우선 적용합니다.
 > 
-> **문서 우선순위**: 충돌 시 **`GNN_Neural_Network/PRD.md` → `GNN_Neural_Network/CHECKLIST.md` → `README`**를 우선으로 적용하고, 본 문서는 보조 근거자료로만 사용합니다.
+> **문서 우선순위**: 충돌 시 **`GNN_Neural_Network/PRD.md` → `GNN_Neural_Network/TASKS.md` → `README`**를 우선으로 적용하고, 본 문서는 보조 근거자료로만 사용합니다.
 
 ## Dataset Shape
 
@@ -367,7 +367,7 @@ For graph recommendation, raw hobby strings should not be used blindly:
 - vocabulary report with raw/canonical/retained counts
 - fallback for dropped long-tail items/persons
 
-## Current System Architecture (as of 2026-04-30)
+## Current System Architecture (as of 2026-05-01)
 
 ```text
 Dataset row (100만 rows, 26 columns)
@@ -382,7 +382,7 @@ Stage 1 candidate generation (selected baseline: popularity + cooccurrence)
   -> [disabled] BM25/PMI/IDF/Jaccard/pop-capped (below baseline)
 
 Stage 2 persona-aware reranking
-  -> [promoted default] LightGBM learned ranker (AUC=0.8893)
+  -> [promoted default] LightGBM learned ranker (AUC=0.8890555966387075)
   -> [fallback] v1 deterministic reranker (weighted scoring)
   -> [disabled] persona_text_fit (leakage 29%, no-text mode)
 
@@ -399,12 +399,12 @@ Final Top-K recommendation
 | Component | Status | Key Metric |
 |-----------|--------|-----------|
 | Stage 1 baseline | `popularity + cooccurrence` | recall@10=0.694, candidate_recall@50=0.978 |
-| Stage 2 default | LightGBM learned ranker (promoted) | recall@10=0.730 (val), 0.708 (test) |
+| Stage 2 default | LightGBM learned ranker (promoted) | recall@10=0.7391 (val), 0.7097 (test) |
 | Stage 2 fallback | v1 deterministic reranker | recall@10=0.710 (val), 0.704 (test) |
 | MMR | optional flag only (default off) | NO-GO (category one-hot 한계) |
 | LightGCN | auxiliary/analysis only | recall@10=0.677 (+ cooc/pop 0.691) |
 
-**Known issue**: LightGBM ranking collapse — coverage@10 0.150 (v1: 0.517), novelty@10 4.580 (v1: 4.732). Feature importance 91% concentrated on cooccurrence_score + popularity_prior.
+**Known issue**: LightGBM ranking collapse — coverage@10 0.1556 (v1: 0.517), novelty@10 4.5843 (v1: 4.732). Feature importance is concentrated on cooccurrence_score + popularity_prior (60.73% + 28.14%).
 
 In short:
 

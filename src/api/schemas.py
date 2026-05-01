@@ -264,6 +264,8 @@ class InfluenceTopItem(BaseModel):
 class InfluenceResponse(BaseModel):
     metric: str
     last_updated_at: str | None = None
+    run_id: str | None = None
+    stale_warning: bool = False
     results: list[InfluenceTopItem] = Field(default_factory=list)
 
 
@@ -292,6 +294,102 @@ class RecommendResponse(BaseModel):
     uuid: str
     category: str
     recommendations: list[RecommendItem] = Field(default_factory=list)
+
+
+class TargetPersonaSample(BaseModel):
+    uuid: str
+    display_name: str | None = None
+    age: int | None = None
+    sex: str | None = None
+    province: str | None = None
+    district: str | None = None
+    occupation: str | None = None
+    persona: str | None = None
+
+
+class TargetPersonaResponse(BaseModel):
+    filters: dict[str, str] = Field(default_factory=dict)
+    matched_count: int = 0
+    sample_size: int = 0
+    representative_persona: str = ""
+    representative_hobbies: list[str] = Field(default_factory=list)
+    representative_skills: list[str] = Field(default_factory=list)
+    sample_personas: list[TargetPersonaSample] = Field(default_factory=list)
+    evidence_uuids: list[str] = Field(default_factory=list)
+    generation_method: str = "deterministic"
+    synthesis_prompt: str = ""
+    guardrails: list[str] = Field(default_factory=list)
+    input_policy: str = ""
+
+
+class LifestyleMapEdge(BaseModel):
+    source_field: str
+    target_field: str
+    source_keyword: str
+    target_keyword: str
+    overlap_count: int
+    target_support_count: int
+    conditional_ratio: float
+
+
+class LifestyleMapResponse(BaseModel):
+    filters: dict[str, str] = Field(default_factory=dict)
+    source_field: str
+    target_field: str
+    source_keyword: str
+    matched_source_count: int = 0
+    available_fields: list[str] = Field(default_factory=list)
+    keyword_policy: str = ""
+    segment_policy: str = ""
+    visualization_policy: str = ""
+    edges: list[LifestyleMapEdge] = Field(default_factory=list)
+
+
+class CareerTransitionItem(BaseModel):
+    name: str
+    count: int
+    ratio: float
+
+
+class CareerTransitionResponse(BaseModel):
+    filters: dict[str, str] = Field(default_factory=dict)
+    matched_count: int = 0
+    top_goals: list[CareerTransitionItem] = Field(default_factory=list)
+    top_skills: list[CareerTransitionItem] = Field(default_factory=list)
+    top_neighbor_occupations: list[CareerTransitionItem] = Field(default_factory=list)
+    segment_distribution: list[CareerTransitionItem] = Field(default_factory=list)
+    mapping_policy: str = ""
+    top_k_limit: int = 30
+    analysis_scope: str = ""
+
+
+class GraphMigrationStep(BaseModel):
+    name: str
+    cypher: str
+    validation: str
+
+
+class GraphQualityDistributionItem(BaseModel):
+    label: str
+    count: int
+    ratio: float
+
+
+class GraphQualityCheck(BaseModel):
+    name: str
+    cardinality: int
+    total_count: int
+    issue: str
+    recommendation: str
+    action: str
+    severity: str
+    dominant_ratio: float = 0.0
+    distribution: list[GraphQualityDistributionItem] = Field(default_factory=list)
+
+
+class GraphQualityResponse(BaseModel):
+    checks: list[GraphQualityCheck] = Field(default_factory=list)
+    migration_plan: list[GraphMigrationStep] = Field(default_factory=list)
 
 
 class ChatRequest(BaseModel):

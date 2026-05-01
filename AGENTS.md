@@ -38,10 +38,40 @@ pytest tests
 - `PRD.md` - Root product requirements for the full Korean Persona Knowledge Graph platform (FastAPI, Neo4j, RAG, frontend)
 - `TASKS.md` - Root implementation checklist for the platform features
 - `GNN_Neural_Network/PRD.md` - GNN offline hobby recommender system requirements (LightGCN + LightGBM ranker)
-- `GNN_Neural_Network/CHECKLIST.md` - GNN offline model implementation checklist
+- `GNN_Neural_Network/TASKS.md` - GNN offline model implementation checklist
+- `GNN_Neural_Network/CHECKLIST_GNN_Reranker_v2.md` - GNN Stage 2.5 reranker experiment and reranker checklist
 - `GNN_Neural_Network/DATASET_EXPLAIN.md` - 26개 컬럼, 1M row, 그래프 매핑 등 전체 데이터셋 구조 설명
 
-**Important**: Root documents cover the API/web platform. GNN_Neural_Network/ documents cover the offline model training system independently.
+**Important**: `PRD.md` + `TASKS.md` are the root platform source of truth for API/web product scope.
+- `GNN_Neural_Network/PRD.md` and `GNN_Neural_Network/TASKS.md` are the source of truth for offline recommender experiments and implementation state.
+- `GNN_Neural_Network/CHECKLIST_GNN_Reranker_v2.md` tracks Stage 2.5 reranker-specific experiment checkpoints.
+
+When root `TASKS.md` references root tasks that depend on GNN results (for example, F11), gate completion should be documented based on the latest `GNN_Neural_Network` experiment decision artifacts.
+
+## Document Routing Rules
+
+- Root `PRD.md` and `TASKS.md` are only for platform/product scope:
+  - FastAPI APIs
+  - Neo4j graph operations
+  - RAG/chatbot
+  - frontend
+  - root-level integration gates such as F11
+- All GNN recommender model training/evaluation work MUST be documented under `GNN_Neural_Network/`:
+  - `GNN_Neural_Network/PRD.md` for requirements, experiment policy, promotion gates, and baseline decisions
+  - `GNN_Neural_Network/TASKS.md` for executable experiment tasks and checklists
+  - `GNN_Neural_Network/CHECKLIST_GNN_Reranker_v2.md` for reranker-specific historical/sub-checklists
+- Do NOT add detailed GNN experiment plans, metric tables, model hyperparameter plans, training/evaluation gates, or artifact schemas to root `PRD.md` or root `TASKS.md`.
+- Root `TASKS.md` may reference GNN work only as a platform integration gate, for example:
+  - check latest GNN decision artifacts
+  - decide whether GNN should integrate with F11
+  - link to `GNN_Neural_Network/PRD.md` and `GNN_Neural_Network/TASKS.md`
+- If a task changes GNN default recommendation behavior, update:
+  - `GNN_Neural_Network/PRD.md`
+  - `GNN_Neural_Network/TASKS.md`
+  - `GNN_Neural_Network/artifacts/experiment_decisions.json`
+  - `GNN_Neural_Network/artifacts/experiment_run_summary.md`
+  - `GNN_Neural_Network/README.md` if user-facing run instructions or current status changed
+- Update root `PRD.md`/`TASKS.md` only when the change affects platform integration, API behavior, frontend behavior, or root F11 acceptance state.
  
 ## Build, Test, and Run Commands
 

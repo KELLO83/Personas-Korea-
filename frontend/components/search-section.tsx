@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent }
 import type { PersonaProfileResponse, SearchResponse } from "@/lib/api-types";
 import type { Loadable } from "@/hooks/use-loadable";
 import { personaApi } from "@/lib/api-client";
+import { lowPriorityLabel, profileExposurePolicy } from "@/lib/exposure-policy";
 import { fullNumber, joinDefined, shortUuid } from "@/lib/formatters";
 
 export interface SearchFilters {
@@ -179,14 +180,15 @@ function SearchDetailProfile({ profile, onSelect }: { profile: PersonaProfileRes
           <h3>인구통계</h3>
           <div className="pill-row">
             <span className="pill">연령대 {profile.demographics.age_group ?? "-"}</span>
-            <span className="pill">국가 {profile.location.country ?? "-"}</span>
             <span className="pill">학력 {profile.demographics.education_level ?? "-"}</span>
-            <span className="pill">전공 {profile.demographics.bachelors_field ?? "-"}</span>
+            {profileExposurePolicy.lowerPriorityBachelorsField && <span className="pill muted">{lowPriorityLabel(profile.demographics.bachelors_field)}</span>}
             <span className="pill">혼인 {profile.demographics.marital_status ?? "-"}</span>
-            <span className="pill">병역 {profile.demographics.military_status ?? "-"}</span>
+            {!profileExposurePolicy.hideMilitaryStatus && <span className="pill">병역 {profile.demographics.military_status ?? "-"}</span>}
             <span className="pill">가구 {profile.demographics.family_type ?? "-"}</span>
             <span className="pill">주거 {profile.demographics.housing_type ?? "-"}</span>
+            {!profileExposurePolicy.hideCountry && <span className="pill">국가 {profile.location.country ?? "-"}</span>}
           </div>
+          <p className="small muted">Country와 MilitaryStatus는 정보량 낮음 정책에 따라 기본 숨김 처리됩니다.</p>
         </div>
       </div>
       <div className="grid two">

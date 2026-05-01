@@ -89,7 +89,19 @@ API 확인:
 curl "http://localhost:8000/api/influence/top?metric=pagerank&limit=10"
 ```
 
-정상 상태에서는 `results`가 비어 있지 않고 `last_updated_at`이 포함됩니다.
+예상 응답 예시:
+
+```json
+{
+  "metric": "pagerank",
+  "last_updated_at": "2026-04-28T02:00:00+00:00",
+  "run_id": "centrality-20260428-020000",
+  "stale_warning": false,
+  "results": []
+}
+```
+
+정상 상태에서는 `results`가 비어 있지 않고 `last_updated_at`, `run_id`가 포함됩니다.
 
 ## 6) 실패 시 처리
 

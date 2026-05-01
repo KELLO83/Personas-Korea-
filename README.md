@@ -219,6 +219,8 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 - `TASKS.md`: 구현 진행 상황
 - `docs/embedding-storage-workflow.md`: 임베딩 저장 및 적재 절차
 - `docs/centrality-batch-operations.md`: F10 중심성 배치 실행 및 외부 스케줄러 운영 절차
+- `docs/usage-guide.md`: 사용자/운영 사용 가이드(요약)
+- `docs/phase20-f14-chatbot-ux-integration-plan.md`: F14 통합 챗봇 UX/오케스트레이션 설계안
 - `docs/f12-chatbot-implementation-plan.md`: F12 대화형 탐색 챗봇 구현 계획
 - `docs/decisions/`: 주요 아키텍처 결정 기록
 

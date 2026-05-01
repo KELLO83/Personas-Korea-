@@ -18,9 +18,12 @@ from GNN_Neural_Network.gnn_recommender.ranker import (
     RankerDataset,
     RankerRow,
     build_ranker_dataset,
+    load_or_build_candidate_pool,
+    get_candidate_pool_cache_key,
     get_ranker_categorical_features,
     sample_negatives,
 )
+from GNN_Neural_Network.gnn_recommender.baseline import build_cooccurrence_counts, build_popularity_counts
 from GNN_Neural_Network.gnn_recommender.rerank import (
     HobbyCandidate,
     RerankerConfig,
@@ -302,3 +305,90 @@ class TestLightGBMRanker:
         loaded = LightGBMRanker.load(model_path)
         loaded_preds = loaded.predict(X_val)
         np.testing.assert_array_almost_equal(preds, loaded_preds, decimal=6)
+
+
+class TestCandidatePoolCache:
+    def test_cache_hit_and_miss_when_loading_candidate_pool(self, tmp_path: Path) -> None:
+        person_ids = [1]
+        train_edges = [(1, 101), (2, 102), (2, 103)]
+        train_known = {1: {101}, 2: {102, 103}}
+        candidate_k = 5
+        id_to_hobby = {101: "축구", 102: "농구", 103: "요리"}
+
+        popularity_counts = build_popularity_counts(train_edges)
+        cooccurrence_counts = build_cooccurrence_counts(train_edges)
+        pool_dir = tmp_path / "cache_root"
+        pool_dir.mkdir(parents=True)
+
+        first = load_or_build_candidate_pool(
+            person_ids=person_ids,
+            train_edges=train_edges,
+            train_known=train_known,
+            candidate_k=candidate_k,
+            id_to_hobby=id_to_hobby,
+            popularity_counts=popularity_counts,
+            cooccurrence_counts=cooccurrence_counts,
+            normalization_method="rank_percentile",
+            cache_dir=pool_dir,
+            label="validation_internal_ranker_split",
+        )
+        assert 1 in first
+        assert len(first[1]) >= 1
+        cache_files = list((pool_dir / "cache").glob("pool_*.json"))
+        assert len(cache_files) == 1
+
+        second = load_or_build_candidate_pool(
+            person_ids=person_ids,
+            train_edges=train_edges,
+            train_known=train_known,
+            candidate_k=candidate_k,
+            id_to_hobby=id_to_hobby,
+            popularity_counts=popularity_counts,
+            cooccurrence_counts=cooccurrence_counts,
+            normalization_method="rank_percentile",
+            cache_dir=pool_dir,
+            label="validation_internal_ranker_split",
+        )
+        assert [candidate.hobby_id for candidate in second[1]] == [candidate.hobby_id for candidate in first[1]]
+        assert second[1][0].raw_source_scores == first[1][0].raw_source_scores
+
+        assert first[1][0].raw_source_scores is not None
+
+    def test_invalid_candidate_pool_cache_is_rebuilt(self, tmp_path: Path) -> None:
+        person_ids = [1]
+        train_edges = [(1, 101), (2, 102)]
+        train_known = {1: {101}, 2: {102}}
+        candidate_k = 5
+        id_to_hobby = {101: "축구", 102: "농구"}
+
+        popularity_counts = build_popularity_counts(train_edges)
+        cooccurrence_counts = build_cooccurrence_counts(train_edges)
+        pool_dir = tmp_path / "cache_root"
+        pool_dir.mkdir(parents=True)
+
+        cache_key = get_candidate_pool_cache_key(
+            person_ids=person_ids,
+            train_edges=train_edges,
+            id_to_hobby=id_to_hobby,
+            candidate_k=candidate_k,
+            normalization_method="rank_percentile",
+            label="validation_internal_ranker_split",
+        )
+        (pool_dir / "cache").mkdir(parents=True)
+        corrupted_cache = pool_dir / "cache" / f"{cache_key}.json"
+        corrupted_cache.write_text('{"bad_person": {}}', encoding="utf-8")
+
+        loaded = load_or_build_candidate_pool(
+            person_ids=person_ids,
+            train_edges=train_edges,
+            train_known=train_known,
+            candidate_k=candidate_k,
+            id_to_hobby=id_to_hobby,
+            popularity_counts=popularity_counts,
+            cooccurrence_counts=cooccurrence_counts,
+            normalization_method="rank_percentile",
+            cache_dir=pool_dir,
+            label="validation_internal_ranker_split",
+        )
+        assert 1 in loaded
+        assert len(loaded[1]) >= 1

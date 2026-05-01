@@ -4,12 +4,12 @@ import argparse
 import csv
 import random
 import sys
-from collections import Counter, defaultdict
+import time
+from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
 import torch
-from tqdm import tqdm
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -18,18 +18,20 @@ if str(ROOT) not in sys.path:
 from GNN_Neural_Network.gnn_recommender.baseline import (  # noqa: E402
     build_cooccurrence_counts,
     build_popularity_counts,
-    cooccurrence_candidate_provider,
-    popularity_candidate_provider,
 )
 from GNN_Neural_Network.gnn_recommender.config import load_config  # noqa: E402
 from GNN_Neural_Network.gnn_recommender.data import load_json, load_person_contexts, save_json  # noqa: E402
-from GNN_Neural_Network.gnn_recommender.ranker import LightGBMRanker, build_ranker_dataset  # noqa: E402
-from GNN_Neural_Network.gnn_recommender.recommend import merge_candidates_by_hobby, normalize_candidate_scores  # noqa: E402
-from GNN_Neural_Network.gnn_recommender.rerank import HobbyCandidate, build_reranker_config, merge_stage1_candidates  # noqa: E402
+from GNN_Neural_Network.gnn_recommender.ranker import (
+    LightGBMRanker,
+    build_ranker_dataset,
+    load_or_build_candidate_pool,
+    get_candidate_pool_cache_key,
+)  # noqa: E402
+from GNN_Neural_Network.gnn_recommender.rerank import HobbyCandidate, build_reranker_config  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Train LightGBM learned ranker.")
+    parser = argparse.ArgumentParser(description="Train LightGBM learned ranker with a single config.")
     parser.add_argument("--config", type=Path, default=Path("GNN_Neural_Network/configs/lightgcn_hobby.yaml"))
     parser.add_argument("--output-dir", type=Path, default=Path("GNN_Neural_Network/artifacts"))
     parser.add_argument("--neg-ratio", type=int, default=4)
@@ -39,11 +41,23 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--ranker-val-ratio", type=float, default=0.2)
     parser.add_argument("--include-source-features", action="store_true")
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--num-leaves", type=int, default=None, help="LightGBM num_leaves")
+    parser.add_argument("--min-data-in-leaf", type=int, default=None, help="LightGBM min_data_in_leaf")
+    parser.add_argument("--learning-rate", type=float, default=None, help="LightGBM learning_rate")
+    parser.add_argument("--feature-fraction", type=float, default=None, help="LightGBM feature_fraction")
+    parser.add_argument("--bagging-fraction", type=float, default=None, help="LightGBM bagging_fraction")
+    parser.add_argument("--bagging-freq", type=int, default=None, help="LightGBM bagging_freq")
+    parser.add_argument("--reg-alpha", type=float, default=None, help="LightGBM reg_alpha (L1)")
+    parser.add_argument("--reg-lambda", type=float, default=None, help="LightGBM reg_lambda (L2)")
+    parser.add_argument("--experiment-id", type=str, default="", help="Optional experiment identifier")
+    parser.add_argument("--pool-cache-dir", type=Path, default=None, help="Directory for candidate pool cache artifacts")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    start_time = time.perf_counter()
+    data_split = "validation_internal_ranker_split"
     config = load_config(args.config)
     candidate_k = config.rerank.candidate_pool_size
     if candidate_k <= 0:
@@ -58,13 +72,21 @@ def main() -> None:
     train_edges = _read_indexed_edges(config.paths.train_edges)
     val_edges = _read_indexed_edges(config.paths.validation_edges)
     train_known = _known_from_edges(train_edges)
+    normalization_method = _normalization_method(config.paths.score_normalization)
+
+    input_config_summary = _input_config_summary(
+        args.config,
+        candidate_pool_size=candidate_k,
+        score_normalization=normalization_method,
+    )
+
+    _write_status(args, "started", data_split=data_split, runtime_seconds=0.0, input_config_summary=input_config_summary)
 
     contexts = load_person_contexts(config.paths.person_context_csv) if config.paths.person_context_csv.exists() else {}
     hobby_profile = load_json(config.paths.hobby_profile) if config.paths.hobby_profile.exists() else None
     if not isinstance(hobby_profile, dict):
         raise ValueError("hobby_profile.json required")
 
-    normalization_method = _normalization_method(config.paths.score_normalization)
     reranker_config = build_reranker_config(config.rerank.use_text_fit, config.rerank.weights)
 
     popularity_counts = build_popularity_counts(train_edges)
@@ -72,6 +94,16 @@ def main() -> None:
     all_hobby_ids = list(hobby_to_id.values())
 
     val_person_ids = sorted({pid for pid, _ in val_edges})
+    pool_cache_dir = args.pool_cache_dir or config.paths.artifact_dir
+    pool_cache_key = get_candidate_pool_cache_key(
+        person_ids=val_person_ids,
+        train_edges=train_edges,
+        id_to_hobby=id_to_hobby,
+        candidate_k=candidate_k,
+        normalization_method=normalization_method,
+        label=data_split,
+    )
+    pool_cache_path = pool_cache_dir / "cache" / f"{pool_cache_key}.json"
     rng = random.Random(args.seed)
     shuffled = list(val_person_ids)
     rng.shuffle(shuffled)
@@ -83,13 +115,46 @@ def main() -> None:
     ranker_train_edges = [(pid, hid) for pid, hid in val_edges if pid in ranker_train_persons]
     ranker_val_edges = [(pid, hid) for pid, hid in val_edges if pid in ranker_val_persons]
 
-    print(f"Generating candidate pools for {len(val_person_ids)} val persons...")
-    pools = _generate_candidate_pools(
-        val_person_ids, train_edges, train_known, candidate_k,
-        id_to_hobby, popularity_counts, cooccurrence_counts, normalization_method,
+    pools = load_or_build_candidate_pool(
+        person_ids=val_person_ids,
+        train_edges=train_edges,
+        train_known=train_known,
+        candidate_k=candidate_k,
+        id_to_hobby=id_to_hobby,
+        popularity_counts=popularity_counts,
+        cooccurrence_counts=cooccurrence_counts,
+        normalization_method=normalization_method,
+        cache_dir=pool_cache_dir,
+        label=data_split,
     )
 
-    print("Building ranker train dataset...")
+    candidate_pool_policy = _candidate_pool_policy(
+        pools,
+        candidate_k=candidate_k,
+        normalization_method=normalization_method,
+        cache_key=pool_cache_key,
+        cache_path=pool_cache_path,
+    )
+
+    params = dict(LightGBMRanker.DEFAULT_PARAMS)
+    if args.num_leaves is not None:
+        params["num_leaves"] = args.num_leaves
+    if args.min_data_in_leaf is not None:
+        params["min_data_in_leaf"] = args.min_data_in_leaf
+    if args.learning_rate is not None:
+        params["learning_rate"] = args.learning_rate
+    if args.feature_fraction is not None:
+        params["feature_fraction"] = args.feature_fraction
+    if args.bagging_fraction is not None:
+        params["bagging_fraction"] = args.bagging_fraction
+    if args.bagging_freq is not None:
+        params["bagging_freq"] = args.bagging_freq
+    if args.reg_alpha is not None:
+        params["reg_alpha"] = args.reg_alpha
+    if args.reg_lambda is not None:
+        params["reg_lambda"] = args.reg_lambda
+
+    print(f"Building ranker train dataset (neg_ratio={args.neg_ratio}, hard_ratio={args.hard_ratio})...")
     train_ds = build_ranker_dataset(
         ranker_train_edges, pools, all_hobby_ids, train_known,
         id_to_hobby, contexts, id_to_person, hobby_profile, reranker_config,
@@ -112,8 +177,8 @@ def main() -> None:
     train_lgb = train_ds.to_lgb_dataset()
     val_lgb = val_ds.to_lgb_dataset(reference=train_lgb)
 
-    print("Training LightGBM...")
-    ranker = LightGBMRanker()
+    print(f"Training LightGBM with params: {params}")
+    ranker = LightGBMRanker(params=params)
     metadata = ranker.fit(
         train_lgb, val_lgb,
         num_boost_round=args.num_boost_round,
@@ -123,9 +188,12 @@ def main() -> None:
     output_dir = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
     ranker.save(output_dir / "ranker_model.txt")
+    runtime_seconds = time.perf_counter() - start_time
+
     save_json(output_dir / "ranker_params.json", {
         "best_iteration": metadata["best_iteration"],
         "best_score": metadata["best_score"],
+        "params": params,
         "neg_ratio": args.neg_ratio,
         "hard_ratio": args.hard_ratio,
         "ranker_val_ratio": args.ranker_val_ratio,
@@ -136,8 +204,27 @@ def main() -> None:
         "val_rows": len(val_ds.rows),
         "feature_columns": train_ds.feature_columns,
         "include_source_features": args.include_source_features,
+        "experiment_id": args.experiment_id,
+        "status": "trained",
+        "runtime_seconds": runtime_seconds,
+        "data_split": data_split,
+        "input_config_summary": input_config_summary,
+        "model_path": str(output_dir / "ranker_model.txt"),
+        "lightgbm_params": params,
+        "feature_policy": {
+            "include_source_features": args.include_source_features,
+            "include_text_embedding_feature": False,
+        },
+        "candidate_pool_policy": candidate_pool_policy,
     })
     save_json(output_dir / "ranker_feature_importance.json", metadata["feature_importance"])
+    _write_status(
+        args,
+        "trained",
+        runtime_seconds=runtime_seconds,
+        data_split=data_split,
+        input_config_summary=input_config_summary,
+    )
 
     print(f"\nBest iteration: {metadata['best_iteration']}")
     print(f"Best AUC: {metadata['best_score']:.6f}")
@@ -146,30 +233,64 @@ def main() -> None:
         print(f"  {name}: {imp:.4f}")
 
 
-def _generate_candidate_pools(
-    person_ids: list[int],
-    train_edges: list[tuple[int, int]],
-    train_known: dict[int, set[int]],
+def _write_status(
+    args: argparse.Namespace,
+    status: str,
+    runtime_seconds: float | None = None,
+    data_split: str | None = None,
+    input_config_summary: dict[str, object] | None = None,
+) -> None:
+    status_path = args.output_dir / "ranker_train.status.json"
+    status_path.parent.mkdir(parents=True, exist_ok=True)
+    payload: dict[str, object] = {
+        "experiment_id": args.experiment_id,
+        "status": status,
+    }
+    if data_split is not None:
+        payload["data_split"] = data_split
+    if input_config_summary is not None:
+        payload["input_config_summary"] = input_config_summary
+    if runtime_seconds is not None:
+        payload["runtime_seconds"] = runtime_seconds
+    save_json(status_path, payload)
+
+
+def _candidate_pool_policy(
+    pools: dict[int, list[HobbyCandidate]],
     candidate_k: int,
-    id_to_hobby: dict[int, str],
-    popularity_counts: Counter[int],
-    cooccurrence_counts: dict[int, Counter[int]],
     normalization_method: str,
-) -> dict[int, list[HobbyCandidate]]:
-    pools: dict[int, list[HobbyCandidate]] = {}
-    for person_id in tqdm(person_ids, desc="candidate pools"):
-        known = train_known.get(person_id, set())
-        pop = normalize_candidate_scores(
-            popularity_candidate_provider(train_edges, person_id, known, candidate_k, popularity_counts=popularity_counts),
-            normalization_method,
-        )
-        cooc = normalize_candidate_scores(
-            cooccurrence_candidate_provider(train_edges, person_id, known, candidate_k, cooccurrence_counts=cooccurrence_counts),
-            normalization_method,
-        )
-        merged = merge_candidates_by_hobby({"popularity": pop, "cooccurrence": cooc}, candidate_k)
-        pools[person_id] = merge_stage1_candidates(merged, id_to_hobby)
-    return pools
+    cache_key: str,
+    cache_path: Path,
+) -> dict[str, object]:
+    providers: list[str] = []
+    seen: set[str] = set()
+    for candidates in pools.values():
+        for candidate in candidates:
+            for provider in candidate.source_scores:
+                if provider not in seen:
+                    seen.add(provider)
+                    providers.append(provider)
+
+    return {
+        "providers": providers,
+        "candidate_k": candidate_k,
+        "normalization_method": normalization_method,
+        "cache_key": cache_key,
+        "cache_path": str(cache_path),
+    }
+
+
+def _input_config_summary(
+    config_path: Path,
+    *,
+    candidate_pool_size: int,
+    score_normalization: str,
+) -> dict[str, object]:
+    return {
+        "config_path": str(config_path),
+        "candidate_pool_size": candidate_pool_size,
+        "score_normalization": score_normalization,
+    }
 
 
 def _safe_torch_load(path: Path) -> dict[str, Any]:

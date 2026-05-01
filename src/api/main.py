@@ -5,7 +5,24 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from ..logging_config import configure_logging
 from .exceptions import add_exception_handlers
-from .routes import chat, communities, compare, graph_viz, influence, insight, path, persona, recommend, search, similar, stats
+from .routes import (
+    chat,
+    career_transition,
+    communities,
+    compare,
+    graph_quality,
+    graph_viz,
+    influence,
+    insight,
+    lifestyle_map,
+    path,
+    persona,
+    recommend,
+    search,
+    similar,
+    stats,
+    target_persona,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +49,10 @@ def create_app() -> FastAPI:
     app.include_router(influence.router)
     app.include_router(recommend.router)
     app.include_router(chat.router)
+    app.include_router(target_persona.router)
+    app.include_router(lifestyle_map.router)
+    app.include_router(career_transition.router)
+    app.include_router(graph_quality.router)
     add_exception_handlers(app)
     logger.info("FastAPI application initialized")
     return app

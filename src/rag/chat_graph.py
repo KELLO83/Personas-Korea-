@@ -11,8 +11,11 @@ from langgraph.graph import END, StateGraph
 from neo4j import GraphDatabase, Query
 
 from src.config import settings
+from src.graph.persona_queries import GRAPH_STATS_QUERY, PROFILE_QUERY, SIMILAR_PREVIEW_QUERY
+from src.graph.recommendation import RecommendationService, VALID_RECOMMENDATION_CATEGORIES
 from src.graph.search_queries import build_search_query
 from src.graph.stats_queries import VALID_DIMENSIONS, build_dimension_query
+from src.gds.centrality import CentralityService
 from src.rag.llm import create_llm
 from src.rag.router import get_insight_router
 
@@ -38,6 +41,11 @@ MAX_SYNTHESIS_RESULTS = 20
 RESET_KEYWORDS = ("리셋", "초기화", "처음부터", "새로 시작")
 ACCUMULATE_KEYWORDS = ("그중", "그 중", "거기서", "추가로", "그리고", "또", "더")
 REPLACE_KEYWORDS = ("대신", "말고", "아니고")
+RECOMMEND_KEYWORDS = ("추천", "추천해", "추천해줘", "추천좀", "추천할")
+PROFILE_KEYWORDS = ("프로필", "상세", "상세보기", "정보", "요약")
+INFLUENCE_KEYWORDS = ("핵심 인물", "영향력", "중심", "중심성", "영향력 높은")
+UUID_PATTERN = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+NUMBER_PATTERN = re.compile(r"(\\d+)\s*개")
 DESCRIPTIVE_SEARCH_MARKERS = ("같은 사람", "비슷한 사람", "성향", "라이프스타일", "누구인지", "누구야")
 DESCRIPTIVE_KEYWORD_CANDIDATES = (
     "디저트",
@@ -116,6 +124,7 @@ class ChatState(TypedDict, total=False):
     history: list[ChatMessage]
     current_filters: FilterState
     last_intent: Intent | None
+    selected_uuid: str
     turn_count: int
     pending_message: str
     intent: Intent
@@ -145,6 +154,7 @@ class ChatGraph:
                 "history": result.get("history", []),
                 "current_filters": result.get("current_filters", {}),
                 "last_intent": result.get("last_intent"),
+                "selected_uuid": result.get("selected_uuid", state.get("selected_uuid")),
                 "turn_count": int(result.get("turn_count", 0)),
             }
         )
@@ -216,9 +226,14 @@ class ChatGraph:
                 "response": "필터를 초기화했습니다. 새 조건으로 다시 탐색할 수 있습니다.",
                 "sources": [{"type": "reset"}],
                 "raw_results": [],
+                "selected_uuid": None,
             }
         response, sources, raw_results = self._respond(intent, state)
-        return {"response": response, "sources": sources, "raw_results": raw_results}
+        updates: ChatState = {"response": response, "sources": sources, "raw_results": raw_results}
+        selected_uuid = _select_selected_uuid(state, intent, raw_results)
+        if selected_uuid:
+            updates["selected_uuid"] = selected_uuid
+        return updates
 
     def _synthesize_node(self, state: ChatState) -> ChatState:
         intent = state.get("intent", "general")
@@ -259,10 +274,17 @@ class ChatGraph:
 
     def _respond(self, intent: Intent, state: ChatState) -> tuple[str, list[dict[str, Any]], list[dict[str, Any]]]:
         current_filters = state.get("current_filters", {})
+        selected_uuid = _get_selected_uuid(state)
         if intent == "stats":
             return self._run_stats(current_filters, state.get("stats_dimension"))
         if intent == "search":
             return self._run_search(current_filters)
+        if intent == "profile":
+            return self._run_profile(message=state.get("pending_message", ""), selected_uuid=selected_uuid)
+        if intent == "recommend":
+            return self._run_recommend(message=state.get("pending_message", ""), selected_uuid=selected_uuid)
+        if intent == "influence":
+            return self._run_influence(state.get("pending_message", ""))
         if intent == "general":
             return self._run_general(state.get("pending_message", ""), current_filters)
         return _general_response(), [{"type": "general"}], []
@@ -288,6 +310,158 @@ class ChatGraph:
                 }
             ],
             [],
+        )
+
+    def _run_profile(self, message: str, selected_uuid: str | None = None) -> tuple[str, list[dict[str, Any]], list[dict[str, Any]]]:
+        target_uuid = _extract_uuid(message) or (selected_uuid or "").strip()
+        if not target_uuid:
+            return (
+                "프로필을 조회하려면 UUID가 필요합니다. 예: 'test-uuid의 프로필을 보여줘'",
+                [{"type": "profile", "error": "missing_uuid"}],
+                [],
+            )
+
+        driver = GraphDatabase.driver(settings.NEO4J_URI, auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD))
+        try:
+            with driver.session(database=settings.NEO4J_DATABASE) as session:
+                profile_record = session.run(Query(cast(LiteralString, PROFILE_QUERY)), uuid=target_uuid).single()
+                if not profile_record:
+                    return (
+                        f"해당 UUID의 페르소나를 찾을 수 없습니다: {target_uuid}",
+                        [{"type": "profile", "uuid": target_uuid}],
+                        [],
+                    )
+
+                similar_records = [dict(record) for record in session.run(Query(cast(LiteralString, SIMILAR_PREVIEW_QUERY)), uuid=target_uuid)]
+                stats_record = session.run(Query(cast(LiteralString, GRAPH_STATS_QUERY)), uuid=target_uuid).single()
+        finally:
+            driver.close()
+
+        p = dict(profile_record["p"]) if profile_record else {}
+        lines = [
+            f"프로필: {p.get('display_name') or target_uuid}",
+            f"UUID: {target_uuid}",
+            f"연령대: {p.get('age_group') or '미설정'} / 성별: {p.get('sex') or '미설정'}", 
+            f"직업: {profile_record.get('occupation_name') or '미설정'}", 
+            f"지역: {profile_record.get('province_name') or '미설정'} - {profile_record.get('district_name') or ''}".rstrip(" -"),
+        ]
+        skills = profile_record.get("skills") or []
+        hobbies = profile_record.get("hobbies") or []
+        if skills:
+            lines.append(f"보유 스킬: {', '.join(str(item) for item in skills[:6])}")
+        if hobbies:
+            lines.append(f"취미: {', '.join(str(item) for item in hobbies[:6])}")
+
+        total_connections = int(stats_record["total_connections"]) if stats_record else 0
+        hobby_count = int(stats_record["hobby_count"]) if stats_record else 0
+        skill_count = int(stats_record["skill_count"]) if stats_record else 0
+        lines.append(f"총 연결: {total_connections}명 / 취미 수: {hobby_count}개 / 스킬 수: {skill_count}개")
+
+        similar_preview_lines: list[str] = []
+        if similar_records:
+            for index, record in enumerate(similar_records[:3], start=1):
+                similar_preview_lines.append(
+                    f"{index}. {record.get('display_name') or '이름 없음'} ({record.get('age') or '-'}세) - 유사도 {round(float(record.get('similarity') or 0.0), 4)}"
+                )
+            lines.append("유사인물: " + " / ".join(similar_preview_lines))
+
+        return ("\n".join(lines), [{"type": "profile", "uuid": target_uuid, "similar_count": len(similar_records)}], [])
+
+    def _run_recommend(self, message: str, selected_uuid: str | None = None) -> tuple[str, list[dict[str, Any]], list[dict[str, Any]]]:
+        target_uuid = _extract_uuid(message) or (selected_uuid or "").strip()
+        if not target_uuid:
+            return (
+                "추천을 위해서는 대상 UUID가 필요합니다. 예: 'uuid의 취미를 추천해줘'",
+                [{"type": "recommend", "error": "missing_uuid"}],
+                [],
+            )
+
+        category = _infer_recommend_category(message)
+        top_n = min(5, _extract_limit(message, default=5))
+        influence_metric = _infer_recommend_influence_metric(message)
+
+        service = RecommendationService()
+        try:
+            if not service.persona_exists(target_uuid):
+                return (
+                    f"해당 UUID의 페르소나를 찾을 수 없습니다: {target_uuid}",
+                    [{"type": "recommend", "uuid": target_uuid, "category": category, "error": "not_found"}],
+                    [],
+                )
+            if not service.has_similarity_data(target_uuid):
+                return (
+                    "유사도 매칭 데이터가 없어 추천할 수 없습니다. 관리자에게 KNN 파이프라인 실행을 요청하세요.",
+                    [{"type": "recommend", "uuid": target_uuid, "category": category, "error": "missing_similarity"}],
+                    [],
+                )
+
+            recommendation_rows = service.recommend(
+                uuid=target_uuid,
+                category=category,
+                top_n=top_n,
+                influence_metric=influence_metric,
+            )
+        finally:
+            service.close()
+
+        if not recommendation_rows:
+            return (
+                f"{target_uuid} 기준으로 추천 항목이 없습니다.",
+                [{"type": "recommend", "uuid": target_uuid, "category": category}],
+                [],
+            )
+
+        lines = [
+            f"{target_uuid}의 { _category_label(category) } 추천 결과({top_n}개):",
+        ]
+        for index, item in enumerate(recommendation_rows, start=1):
+            lines.append(f"{index}. {item['item_name']} - {item['reason']}")
+        return (
+            "\n".join(lines),
+            [{"type": "recommend", "uuid": target_uuid, "category": category, "count": len(recommendation_rows)}],
+            recommendation_rows,
+        )
+
+    def _run_influence(self, message: str) -> tuple[str, list[dict[str, Any]], list[dict[str, Any]]]:
+        metric = _infer_influence_metric(message)
+        if not metric:
+            metric = "pagerank"
+        limit = min(10, _extract_limit(message, default=5))
+        community_id = _extract_community_id(message)
+
+        service = CentralityService()
+        try:
+            status = service.read_status()
+            if not service.has_scores(metric):
+                last_updated_at = str(status.get("last_success_at")) if status and status.get("last_success_at") else None
+                status_text = f"마지막 성공 시각: {last_updated_at}" if last_updated_at else "중심성 계산 결과가 없습니다."
+                return (
+                    f"중심성 점수가 아직 준비되지 않았습니다. ({status_text})",
+                    [{"type": "influence", "metric": metric, "error": "not_ready", "status": bool(status)}],
+                    [],
+                )
+
+            rows = service.find_top(metric=metric, limit=limit, community_id=community_id)
+        finally:
+            service.close()
+
+        if not rows:
+            return (
+                f"핵심 인물이 없습니다. (metric={metric})",
+                [{"type": "influence", "metric": metric, "count": 0}],
+                [],
+            )
+
+        lines = [f"중심성 지표 {metric} 기준 핵심 인물 상위 {len(rows)}명"]
+        for index, row in enumerate(rows, start=1):
+            display_name = row.get("display_name") or "이름 없음"
+            score = round(float(row.get("score") or 0.0), 4)
+            lines.append(f"{index}. {display_name} ({row.get('uuid')}) - 점수: {score}")
+
+        return (
+            "\n".join(lines),
+            [{"type": "influence", "metric": metric, "count": len(rows), "limit": limit, "community_id": community_id}],
+            rows,
         )
 
     def _run_search(self, filters: FilterState) -> tuple[str, list[dict[str, Any]], list[dict[str, Any]]]:
@@ -420,6 +594,18 @@ class ChatGraph:
 def classify_intent(message: str, state: ChatState | None = None) -> Intent:
     if _has_any(message, RESET_KEYWORDS):
         return "reset"
+    selected_uuid = _extract_uuid(message)
+    previous_uuid = state.get("selected_uuid") if state else None
+
+    if _has_any(message, PROFILE_KEYWORDS) and (selected_uuid or previous_uuid):
+        return "profile"
+
+    if _has_any(message, RECOMMEND_KEYWORDS) and (selected_uuid or previous_uuid):
+        return "recommend"
+
+    if _has_any(message, INFLUENCE_KEYWORDS) and not selected_uuid:
+        return "influence"
+
     if state and state.get("last_intent") in ("search", "stats") and (
         _has_any(message, ACCUMULATE_KEYWORDS) or _has_any(message, REPLACE_KEYWORDS)
     ):
@@ -606,6 +792,77 @@ def _clean_occupation_phrase(value: str) -> str:
 
 def _has_any(message: str, keywords: tuple[str, ...]) -> bool:
     return any(keyword in message for keyword in keywords)
+
+
+def _extract_uuid(message: str) -> str | None:
+    match = UUID_PATTERN.search(message)
+    return match.group(0) if match else None
+
+
+def _extract_limit(message: str, *, default: int = 5) -> int:
+    match = NUMBER_PATTERN.search(message)
+    if not match:
+        return default
+    value = int(match.group(1))
+    if value <= 0:
+        return default
+    return value
+
+
+def _extract_community_id(message: str) -> int | None:
+    match = re.search(r"(?:커뮤니티|community)\s*([0-9]+)", message)
+    if not match:
+        return None
+    try:
+        return int(match.group(1))
+    except ValueError:
+        return None
+
+
+def _infer_recommend_category(message: str) -> str:
+    if any(token in message for token in ("스킬", "기술")):
+        return "skill"
+    if "직업" in message or "직무" in message:
+        return "occupation"
+    if "지역" in message:
+        return "district"
+    return "hobby"
+
+
+def _infer_influence_metric(message: str) -> str | None:
+    if "베트위" in message or "betweenness" in message or "브릿지" in message:
+        return "betweenness"
+    if "degree" in message or "연결" in message:
+        return "degree"
+    if "pagerank" in message or "페이지랭크" in message or "중심" in message or "핵심" in message:
+        return "pagerank"
+    return None
+
+
+def _infer_recommend_influence_metric(message: str) -> str | None:
+    return _infer_influence_metric(message)
+
+
+def _category_label(category: str) -> str:
+    return {"hobby": "취미", "skill": "기술", "occupation": "직업", "district": "지역"}.get(category, category)
+
+
+def _get_selected_uuid(state: ChatState) -> str | None:
+    value = state.get("selected_uuid")
+    return str(value) if isinstance(value, str) and value else None
+
+
+def _select_selected_uuid(state: ChatState, intent: str, raw_results: list[dict[str, Any]]) -> str | None:
+    if intent == "search" and raw_results:
+        first_uuid = raw_results[0].get("uuid")
+        if len(raw_results) == 1 and first_uuid:
+            return str(first_uuid)
+        return _get_selected_uuid(state)
+
+    selected_uuid = _extract_uuid(state.get("pending_message", ""))
+    if selected_uuid:
+        return selected_uuid
+    return _get_selected_uuid(state)
 
 
 def _as_list(value: str | None) -> list[str] | None:

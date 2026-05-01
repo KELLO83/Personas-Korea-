@@ -1,5 +1,14 @@
 """LightGBM Regularization Hyperparameter Tuning Script.
 
+⚠️ LEGACY / ANALYSIS-ONLY ⚠️
+
+Per PRD §2.5 execution policy, hyperparameter sweep scripts are no longer part
+of the default experiment path. Use `train_ranker.py` with single-config CLI
+params + `evaluate_ranker.py --split validation` instead.
+
+This script is retained for ad-hoc exploration / historical comparison only.
+Do NOT use it for promotion decisions.
+
 Sequential greedy search over regularization parameters to reduce overfitting
 on small data while maintaining or improving validation metrics.
 
@@ -10,17 +19,20 @@ Strategy:
 4. Repeat until no improvement
 5. Evaluate final config on test split
 
-Usage:
+Usage (legacy only):
     python -m GNN_Neural_Network.scripts.tune_ranker_regularization
     python GNN_Neural_Network/scripts/tune_ranker_regularization.py
 """
 
 from __future__ import annotations
 
+import ast
 import argparse
 import csv
 import random
+import shlex
 import sys
+import time
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
@@ -75,6 +87,54 @@ TUNING_GRID: dict[str, list[Any]] = {
     "reg_lambda": [0.05, 0.1, 0.5, 1.0],
 }
 
+_TQDM_KWARGS = {
+    "miniters": 200,
+    "mininterval": 5.0,
+    "maxinterval": 30.0,
+    "dynamic_ncols": False,
+    "ascii": True,
+    "leave": False,
+    "file": sys.stderr,
+}
+
+
+def _iter_with_progress(args, iterable, desc: str):
+    if args.progress_mode == "off":
+        return iterable
+    if args.progress_mode == "auto" and not sys.stderr.isatty():
+        return iterable
+
+    try:
+        total = len(iterable)  # type: ignore[arg-type]
+    except Exception:
+        total = None
+
+    kwargs = dict(_TQDM_KWARGS)
+    kwargs.update(
+        {
+            "desc": desc,
+            "total": total,
+            "mininterval": float(args.progress_mininterval),
+            "maxinterval": float(args.progress_maxinterval),
+            "miniters": int(args.progress_miniters),
+        }
+    )
+    return tqdm(iterable, **kwargs)
+
+
+def _log_policy(args: argparse.Namespace) -> dict[str, object]:
+    return {
+        "progress_mode": args.progress_mode,
+        "progress_mininterval": float(args.progress_mininterval),
+        "progress_maxinterval": float(args.progress_maxinterval),
+        "progress_miniters": int(args.progress_miniters),
+        "tqdm_enabled": args.progress_mode != "off",
+    }
+
+
+def _command_signature() -> str:
+    return " ".join([Path(sys.argv[0]).name, *(shlex.quote(arg) for arg in sys.argv[1:])])
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Tune LightGBM regularization parameters.")
@@ -87,8 +147,137 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--ranker-val-ratio", type=float, default=0.2)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--max-rounds", type=int, default=3, help="Max sequential greedy rounds")
+    parser.add_argument(
+        "--tuning-params",
+        type=str,
+        default="",
+        help="Comma-separated subset of tuning params to evaluate. Defaults to the full grid.",
+    )
+    parser.add_argument(
+        "--tuning-values",
+        type=str,
+        default="",
+        help=(
+            "Optional explicit override values in the form "
+            "'num_leaves=31' or 'num_leaves=15,31;reg_alpha=0.1'. "
+            "Only selected --tuning-params are allowed."
+        ),
+    )
     parser.add_argument("--include-source-features", action="store_true")
+    parser.add_argument("--experiment-id", type=str, default="", help="Optional experiment identifier")
+    parser.add_argument(
+        "--progress-mode",
+        choices=["auto", "on", "off"],
+        default="off",
+        help="Progress output mode: off (default), auto (tty only), on (always).",
+    )
+    parser.add_argument("--progress-mininterval", type=float, default=5.0, help="Minimum seconds between progress updates")
+    parser.add_argument("--progress-maxinterval", type=float, default=30.0, help="Maximum seconds between progress updates")
+    parser.add_argument("--progress-miniters", type=int, default=200, help="Minimum updates between progress refresh")
     return parser.parse_args()
+
+
+def _status_path(args: argparse.Namespace) -> Path:
+    return args.output_dir / "regularization_tuning.status.json"
+
+
+def _write_status(
+    args: argparse.Namespace,
+    status: str,
+    runtime_seconds: float | None = None,
+    summary: dict[str, object] | None = None,
+    input_config_summary: dict[str, object] | None = None,
+) -> None:
+    status_path = _status_path(args)
+    status_path.parent.mkdir(parents=True, exist_ok=True)
+    payload: dict[str, object] = {
+        "experiment_id": args.experiment_id,
+        "status": status,
+        "command_signature": _command_signature(),
+        "log_policy": _log_policy(args),
+        "event_timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "artifact_path": str(status_path),
+    }
+    if runtime_seconds is not None:
+        payload["runtime_seconds"] = runtime_seconds
+    if summary is not None:
+        payload["summary"] = summary
+    if input_config_summary is not None:
+        payload["input_config_summary"] = input_config_summary
+    status_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _parse_tuning_value(raw_value: str) -> Any:
+    value = raw_value.strip()
+    if not value:
+        raise ValueError("Tuning value is empty")
+
+    lowered = value.lower()
+    if lowered in {"true", "false"}:
+        return lowered == "true"
+
+    try:
+        parsed = ast.literal_eval(value)
+    except (SyntaxError, ValueError):
+        if "." in value or "e" in lowered or "E" in value:
+            try:
+                return float(value)
+            except ValueError:
+                return value
+        try:
+            return int(value)
+        except ValueError:
+            return value
+    return parsed
+
+
+def _parse_tuning_override_values(raw_values: str) -> dict[str, list[Any]]:
+    override_map: dict[str, list[Any]] = {}
+    for token in raw_values.split(";"):
+        item = token.strip()
+        if not item:
+            continue
+        if "=" not in item:
+            raise ValueError(f"Invalid tuning-values token: {item}")
+        name, raw_v = [x.strip() for x in item.split("=", 1)]
+        if not name:
+            raise ValueError(f"Invalid tuning-values token with empty param: {item}")
+        if name not in TUNING_GRID:
+            raise ValueError(f"Unknown tuning param in --tuning-values: {name}")
+        if not raw_v:
+            raise ValueError(f"No tuning values provided for {name} in --tuning-values")
+
+        values = [_parse_tuning_value(v) for v in raw_v.split(",") if v.strip()]
+        if not values:
+            raise ValueError(f"No tuning values provided for {name} in --tuning-values")
+
+        override_map[name] = values
+    return override_map
+
+
+def _selected_tuning_grid(raw_names: str, raw_values: str) -> dict[str, list[Any]]:
+    if not raw_names.strip():
+        selected_names = list(TUNING_GRID.keys())
+    else:
+        selected_names = [name.strip() for name in raw_names.split(",") if name.strip()]
+        unknown = sorted(set(selected_names) - set(TUNING_GRID))
+        if unknown:
+            raise ValueError(f"Unknown tuning params: {', '.join(unknown)}")
+
+    selected = {name: TUNING_GRID[name] for name in selected_names}
+
+    if raw_values.strip():
+        overrides = _parse_tuning_override_values(raw_values)
+        unknown_override = sorted(set(overrides) - set(selected))
+        if unknown_override:
+            raise ValueError(
+                "Cannot override non-selected tuning params: "
+                f"{', '.join(unknown_override)}"
+            )
+        for name, values in overrides.items():
+            selected[name] = values
+
+    return selected
 
 
 # ---------------------------------------------------------------------------
@@ -138,6 +327,7 @@ def _normalization_method(path: Path) -> str:
 # ---------------------------------------------------------------------------
 
 def _generate_candidate_pools(
+    args: argparse.Namespace,
     person_ids: list[int],
     train_edges: list[tuple[int, int]],
     train_known: dict[int, set[int]],
@@ -148,7 +338,7 @@ def _generate_candidate_pools(
     normalization_method: str,
 ) -> dict[int, list[HobbyCandidate]]:
     pools: dict[int, list[HobbyCandidate]] = {}
-    for person_id in tqdm(person_ids, desc="candidate pools"):
+    for person_id in _iter_with_progress(args, person_ids, "candidate pools"):
         known = train_known.get(person_id, set())
         pop = normalize_candidate_scores(
             popularity_candidate_provider(train_edges, person_id, known, candidate_k, popularity_counts=popularity_counts),
@@ -221,6 +411,7 @@ def _metric_value(metrics: dict[str, object], key: str) -> float:
 # ---------------------------------------------------------------------------
 
 def train_and_evaluate(
+    args: argparse.Namespace,
     params: dict[str, Any],
     train_ds,
     val_ds,
@@ -255,7 +446,7 @@ def train_and_evaluate(
     v1_rankings: dict[int, list[int]] = {}
     from GNN_Neural_Network.gnn_recommender.rerank import build_rerank_features, rerank_candidates
 
-    for person_id in tqdm(truth, desc=f"eval ({split_name})", leave=False):
+    for person_id in _iter_with_progress(args, truth, f"eval ({split_name})"):
         known = train_known.get(person_id, set())
         pool_candidates = pools.get(person_id, [])
         if not pool_candidates:
@@ -330,10 +521,24 @@ def train_and_evaluate(
 
 def main() -> None:
     args = parse_args()
+    start_time = time.perf_counter()
     config = load_config(args.config)
+    tuning_grid = _selected_tuning_grid(args.tuning_params, args.tuning_values)
     candidate_k = config.rerank.candidate_pool_size
     if candidate_k <= 0:
         raise ValueError("candidate_pool_size must be positive")
+
+    _write_status(
+        args,
+        "started",
+        runtime_seconds=0.0,
+        summary={
+            "phase": "started",
+            "config_path": str(args.config),
+            "max_rounds": args.max_rounds,
+        },
+        input_config_summary={"candidate_pool_size": candidate_k},
+    )
 
     # ------------------------------------------------------------------
     # 1. Load data (same as train_ranker.py)
@@ -387,6 +592,7 @@ def main() -> None:
     print(f"Ranker split: {len(ranker_train_persons)} train, {len(ranker_val_persons)} val")
 
     train_pools = _generate_candidate_pools(
+        args,
         val_person_ids, train_edges, train_known, candidate_k,
         id_to_hobby, popularity_counts, cooccurrence_counts, normalization_method,
     )
@@ -408,6 +614,18 @@ def main() -> None:
         include_source_features=args.include_source_features,
     )
     print(f"  val rows={len(val_ds.rows)}")
+    _write_status(
+        args,
+        "datasets_ready",
+        summary={
+            "phase": "datasets_ready",
+            "train_rows": len(train_ds.rows),
+            "val_rows": len(val_ds.rows),
+            "num_val_persons": len(val_person_ids),
+            "num_test_persons": len(test_edges),
+        },
+        input_config_summary={"candidate_pool_size": candidate_k, "top_k": max(config.eval.top_k)},
+    )
 
     train_lgb = train_ds.to_lgb_dataset()
     val_lgb = val_ds.to_lgb_dataset(reference=train_lgb)
@@ -436,11 +654,13 @@ def main() -> None:
     # Generate pools for val and test splits
     print("Generating candidate pools for validation split...")
     val_pools = _generate_candidate_pools(
+        args,
         sorted(val_truth.keys()), train_edges, train_known, candidate_k,
         id_to_hobby, popularity_counts, cooccurrence_counts, normalization_method,
     )
     print("Generating candidate pools for test split...")
     test_pools = _generate_candidate_pools(
+        args,
         sorted(test_truth.keys()), train_edges, train_known, candidate_k,
         id_to_hobby, popularity_counts, cooccurrence_counts, normalization_method,
     )
@@ -449,7 +669,7 @@ def main() -> None:
     print("\n=== Baseline configuration ===")
     print(f"  Params: {best_params}")
     baseline_result = train_and_evaluate(
-        best_params, train_ds, val_ds, train_lgb, val_lgb,
+        args, best_params, train_ds, val_ds, train_lgb, val_lgb,
         "validation", val_truth, val_pools, all_hobby_ids, train_known,
         id_to_hobby, id_to_person, contexts, hobby_profile, reranker_config,
         val_hobby_categories, val_person_segments_val, num_hobbies,
@@ -460,16 +680,29 @@ def main() -> None:
     best_ndcg = baseline_result["v2_ndcg@10"]
     all_results.append({"round": 0, "param_changed": "baseline", **baseline_result})
     print(f"  Baseline: val recall@10={best_recall:.4f}, ndcg@10={best_ndcg:.4f}, AUC={baseline_result['best_auc']:.4f}")
+    _write_status(
+        args,
+        "baseline_done",
+        summary={
+            "phase": "baseline_done",
+            "baseline_recall@10": _metric_value(baseline_result["v2_metrics"], "recall@10") if isinstance(baseline_result.get("v2_metrics"), dict) else baseline_result.get("v2_recall@10", 0.0),
+            "baseline_ndcg@10": _metric_value(baseline_result["v2_metrics"], "ndcg@10") if isinstance(baseline_result.get("v2_metrics"), dict) else baseline_result.get("v2_ndcg@10", 0.0),
+            "baseline_auc": baseline_result.get("best_auc", 0.0),
+            "best_params": best_params,
+        },
+        input_config_summary={"candidate_pool_size": candidate_k, "top_k": max(config.eval.top_k)},
+    )
 
     # Greedy tuning rounds
     for round_num in range(1, args.max_rounds + 1):
         print(f"\n=== Round {round_num} ===")
         improved = False
 
-        for param_name, values in TUNING_GRID.items():
+        for param_name, values in tuning_grid.items():
             print(f"\n--- Tuning {param_name} ---")
             round_best_value = best_params.get(param_name)
             round_best_recall = best_recall
+            round_best_ndcg = best_ndcg
 
             for value in values:
                 trial_params = dict(best_params)
@@ -481,7 +714,7 @@ def main() -> None:
                 print(f"  Trying {param_name}={value}...", end=" ", flush=True)
 
                 result = train_and_evaluate(
-                    trial_params, train_ds, val_ds, train_lgb, val_lgb,
+                    args, trial_params, train_ds, val_ds, train_lgb, val_lgb,
                     "validation", val_truth, val_pools, all_hobby_ids, train_known,
                     id_to_hobby, id_to_person, contexts, hobby_profile, reranker_config,
                     val_hobby_categories, val_person_segments_val, num_hobbies,
@@ -505,20 +738,51 @@ def main() -> None:
                 if recall > round_best_recall + 1e-6:
                     round_best_recall = recall
                     round_best_value = value
+                    round_best_ndcg = ndcg
 
             # Check if this param improved over current best
             if round_best_recall > best_recall + 1e-6:
                 print(f"  ** {param_name}={round_best_value} improved recall@10: {best_recall:.4f} -> {round_best_recall:.4f}")
                 best_params[param_name] = round_best_value
                 best_recall = round_best_recall
-                best_ndcg = round_best_recall
+                best_ndcg = round_best_ndcg
+                tuning_log.append({
+                    "round": round_num,
+                    "param_changed": param_name,
+                    "selected_value": round_best_value,
+                    "best_recall@10": best_recall,
+                    "best_ndcg@10": best_ndcg,
+                })
                 improved = True
             else:
                 print(f"  No improvement from {param_name} (best recall@10={round_best_recall:.4f} vs current={best_recall:.4f})")
 
         if not improved:
             print(f"\nNo improvement in round {round_num}. Stopping early.")
+            _write_status(
+                args,
+                "round_stopped",
+                summary={
+                    "phase": "round_stopped",
+                    "round": round_num,
+                    "best_params": dict(best_params),
+                    "best_recall@10": best_recall,
+                    "best_ndcg@10": best_ndcg,
+                    "status": "no_improvement",
+                },
+            )
             break
+        _write_status(
+            args,
+            "round_done",
+            summary={
+                "phase": "round_done",
+                "round": round_num,
+                "best_params": dict(best_params),
+                "best_recall@10": best_recall,
+                "best_ndcg@10": best_ndcg,
+            },
+        )
 
     # ------------------------------------------------------------------
     # 4. Final evaluation: best config on validation AND test
@@ -526,10 +790,15 @@ def main() -> None:
     print("\n" + "=" * 60)
     print("  FINAL EVALUATION: Best regularization config")
     print("=" * 60)
+    _write_status(
+        args,
+        "final_evaluation_started",
+        summary={"phase": "final_evaluation_started", "splits": ["validation", "test"], "rounds": args.max_rounds},
+    )
 
     # Re-evaluate best config on validation
     val_result = train_and_evaluate(
-        best_params, train_ds, val_ds, train_lgb, val_lgb,
+        args, best_params, train_ds, val_ds, train_lgb, val_lgb,
         "validation", val_truth, val_pools, all_hobby_ids, train_known,
         id_to_hobby, id_to_person, contexts, hobby_profile, reranker_config,
         val_hobby_categories, val_person_segments_val, num_hobbies,
@@ -539,12 +808,24 @@ def main() -> None:
 
     # Evaluate best config on test
     test_result = train_and_evaluate(
-        best_params, train_ds, val_ds, train_lgb, val_lgb,
+        args, best_params, train_ds, val_ds, train_lgb, val_lgb,
         "test", test_truth, test_pools, all_hobby_ids, train_known,
         id_to_hobby, id_to_person, contexts, hobby_profile, reranker_config,
         val_hobby_categories, val_person_segments_test, num_hobbies,
         popularity_counts, config, candidate_k, max_k,
         num_boost_round=args.num_boost_round, early_stopping_rounds=args.early_stopping,
+    )
+    _write_status(
+        args,
+        "final_evaluation_done",
+        summary={
+            "phase": "final_evaluation_done",
+            "validation_recall@10": val_result["v2_recall@10"],
+            "test_recall@10": test_result["v2_recall@10"],
+            "validation_ndcg@10": val_result["v2_ndcg@10"],
+            "test_ndcg@10": test_result["v2_ndcg@10"],
+            "best_params": dict(best_params),
+        },
     )
 
     # Overfitting gap
@@ -576,6 +857,8 @@ def main() -> None:
     payload = {
         "baseline_params": BASELINE_PARAMS,
         "best_params": best_params,
+        "log_policy": _log_policy(args),
+        "command_signature": _command_signature(),
         "tuning_log": tuning_log,
         "all_results": all_results,
         "final_validation": val_result,
@@ -585,6 +868,20 @@ def main() -> None:
     }
 
     save_json(output_dir / "regularization_tuning.json", payload)
+    _write_status(
+        args,
+        "results_saved",
+        summary={
+            "phase": "results_saved",
+            "artifact_path": str(output_dir / "regularization_tuning.json"),
+            "summary_path": str(output_dir / "regularization_tuning_summary.md"),
+            "status": status,
+            "best_recall_delta@10": test_result["delta_recall@10"],
+            "best_ndcg_delta@10": test_result["delta_ndcg@10"],
+            "best_params": dict(best_params),
+        },
+        input_config_summary={"candidate_pool_size": candidate_k, "top_k": max_k},
+    )
 
     # Human-readable summary
     summary_lines = [
@@ -647,6 +944,23 @@ def main() -> None:
     print(f"Best val recall@10: {val_result['v2_recall@10']:.4f}")
     print(f"Test recall@10: {test_result['v2_recall@10']:.4f}")
     print(f"Promotion: {status}")
+    _write_status(
+        args,
+        "completed",
+        runtime_seconds=time.perf_counter() - start_time,
+        summary={
+            "phase": "completed",
+            "status": status,
+            "best_recall@10": test_result["v2_recall@10"],
+            "best_ndcg@10": test_result["v2_ndcg@10"],
+            "recall_delta@10": test_result["delta_recall@10"],
+            "ndcg_delta@10": test_result["delta_ndcg@10"],
+            "result_artifacts": {
+                "json": str(output_dir / "regularization_tuning.json"),
+                "summary": str(output_dir / "regularization_tuning_summary.md"),
+            },
+        },
+    )
 
 
 if __name__ == "__main__":

@@ -7,13 +7,13 @@ Offline LightGCN hobby/leisure recommendation PoC for `Nemotron-Personas-Korea`.
 - This README is a **single source of truth for execution commands and current recommendation status**.
 - For requirements and implementation decisions, follow:
   - `PRD.md` (scope, architecture, goals)
-  - `CHECKLIST.md` (planned and executed checklist)
+  - `TASKS.md` (execution gate and completion status)
 - v2 experimental docs are supplementary:
   - `PRD_GNN_Reranker_v2.md`
   - `CHECKLIST_GNN_Reranker_v2.md`
 - Dataset and schema description is contextual reference:
   - `DATASET_EXPLAIN.md`
-- Conflict rule: if a conflict appears, prioritize the requirements/checklist set above and then align this README.
+- Conflict rule: if a conflict appears, prioritize requirements/gates above and then align this README.
 
 ## Scope
 
@@ -88,7 +88,7 @@ Preparation writes train/validation/test splits plus leakage-safe offline artifa
 - `score_normalization.json`: initial provider score normalization contract
 - `fallback_usage.json`: placeholder updated by recommendation fallback execution
 - `experiment_decisions.json`: current accepted/rejected provider decisions and final recommendation status snapshot
-- `experiment_run_summary.md`: human-readable summary of the latest selected baseline, promoted reranker, and failed ablations
+- `experiment_run_summary.md`: human-readable engineering summary of the selected baseline, promoted reranker, model architecture, data input pipeline, feature schema, current metrics, and failed ablations
 
 ## Train
 
@@ -156,11 +156,14 @@ Evaluate the promoted LightGBM ranking path with:
 **Status:** The Stage 2 reranker has evolved through two phases:
 
 1. **v1 Deterministic reranker** — weighted scoring, passed initial promotion gate.
-2. **v2 LightGBM learned ranker** — binary classifier (AUC=0.8893, best_iteration=122), **PASSED** the promotion gate on both validation and test splits. **Now the promoted default recommendation strategy.**
+2. **v2 LightGBM learned ranker** — binary classifier (AUC=0.8890555966387075, best_iteration=84), **PASSED** the promotion gate on both validation and test splits. **Now the promoted default recommendation strategy.**
 
-   - Validation: recall@10=0.7300 (+0.020), ndcg@10=0.4552 (+0.013) vs v1
-   - Test: recall@10=0.7080 (+0.004), ndcg@10=0.4473 (+0.007) vs v1
-   - Note: coverage@10=0.150 and novelty@10=4.580 are lower than v1 (0.517, 4.732) — diversity improvement is deferred to KURE dense embeddings.
+   - Validation: recall@10=0.7391 (+0.029), ndcg@10=0.4580 (+0.0156) vs v1
+   - Test: recall@10=0.7097 (+0.0054), ndcg@10=0.4477 (+0.0074) vs v1
+   - Note: coverage@10=0.1556 and novelty@10=4.5843 are lower than v1 (0.517, 4.732) — diversity improvement is deferred to KURE dense embeddings.
+   - Negative sampling ablation: completed. `neg_ratio=4, hard_ratio=1.0` won validation but underperformed the current `hard_ratio=0.8` default on final test Recall/NDCG, so the default remains `neg_ratio=4, hard_ratio=0.8`.
+   - Source one-hot ablation: completed and rejected. `include_source_features=true` lowered validation Recall/NDCG and coverage, so the default remains `include_source_features=false`.
+   - Phase 2.5 default decision closure: completed. This config is the fixed baseline for KURE dense embedding MMR and leakage-safe text embedding experiments.
 
 3. **MMR diversity reordering** — **NO-GO**. Category one-hot embedding produces binary cosine similarity (0 or 1), making MMR a no-op within same-category items. All lambda values (0.1–0.9) produce identical results to the baseline. MMR remains available as `--use-mmr` flag (default: false), but effective diversity requires KURE dense embeddings (planned for Phase 5).
 
@@ -174,11 +177,9 @@ MMR     = off (optional flag only)
 
 **Next priorities:**
 
-1. LightGBM regularization tuning (reduce overfitting risk on small data)
-2. Negative sampling ablation (compare 1:1, 4:1, 8:1 ratios)
-3. Source one-hot ablation (`source_popularity`, `source_cooccurrence`, `source_lightgcn`)
-4. KURE dense embedding cache → MMR re-evaluation with meaningful similarity
-5. Leakage-safe text embedding feature ablation after audit passes
+1. KURE dense embedding cache → MMR re-evaluation with meaningful similarity
+2. Leakage-safe text embedding feature ablation after audit passes
+3. Use the closed Phase 2.5 default (`num_leaves=31`, `neg_ratio=4`, `hard_ratio=0.8`, `include_source_features=false`, `MMR=false`) as the fixed comparison baseline
 
 ## Evaluate Stage 1 ablation (including item-item providers)
 
@@ -198,6 +199,6 @@ Key experiment outputs are persisted under `GNN_Neural_Network/artifacts/` rathe
 - `recommendation_quality_audit.json`: coverage, entropy, popularity-bias, and segment audit
 - `sample_recommendations_review.json`: qualitative sample review payload
 - `experiment_decisions.json`: explicit accepted/rejected component decisions
-- `experiment_run_summary.md`: compact narrative summary for later review
+- `experiment_run_summary.md`: detailed narrative summary for later review, including architecture, row schema, negative sampling, feature policy, cache policy, metrics, and current diagnosis
 
 If a provider or model is rejected, record the reason in `experiment_decisions.json` and reflect the current default path in this README.

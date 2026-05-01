@@ -1,0 +1,92 @@
+{
+  "version": "phase22-f16-v1",
+  "purpose": "Target Persona Generator 품질 검수용 golden set. 각 케이스는 필터 입력, 기대 응답 특성, 금지 조건을 정의한다.",
+  "quality_gates": {
+    "min_cases": 5,
+    "required_response_fields": [
+      "matched_count",
+      "sample_size",
+      "representative_persona",
+      "representative_hobbies",
+      "representative_skills",
+      "evidence_uuids",
+      "guardrails"
+    ],
+    "must_preserve_evidence": true,
+    "must_avoid_unsupported_claims": true
+  },
+  "cases": [
+    {
+      "id": "f16-seoul-30s-developer",
+      "description": "서울 30대 개발자 계열 대표 페르소나",
+      "params": {
+        "age_group": "30대",
+        "province": "서울",
+        "occupation": "개발자",
+        "top_k": 5
+      },
+      "expected": {
+        "filters": ["age_group", "province", "occupation"],
+        "min_sample_size": 1,
+        "required_guardrail_terms": ["근거", "새로 만들지 않습니다"]
+      },
+      "forbidden": ["근거 UUID 없이 단정", "필터에 없는 지역 생성"]
+    },
+    {
+      "id": "f16-busan-40s-hobby",
+      "description": "부산 40대 취미 기반 대표 페르소나",
+      "params": {
+        "age_group": "40대",
+        "province": "부산",
+        "hobby": "등산",
+        "top_k": 5
+      },
+      "expected": {
+        "filters": ["age_group", "province", "hobby"],
+        "min_sample_size": 1,
+        "required_guardrail_terms": ["근거", "취미"]
+      },
+      "forbidden": ["표본에 없는 취미를 대표 취미로 추가", "실제 인물처럼 표현"]
+    },
+    {
+      "id": "f16-semantic-data-analysis",
+      "description": "semantic query로 데이터 분석 성향 후보를 좁히는 케이스",
+      "params": {
+        "age_group": "30대",
+        "semantic_query": "데이터 분석과 자동화를 좋아하는 직장인",
+        "semantic_top_k": 50,
+        "top_k": 5
+      },
+      "expected": {
+        "filters": ["age_group", "semantic_query"],
+        "min_sample_size": 1,
+        "required_guardrail_terms": ["근거", "불확실"]
+      },
+      "forbidden": ["semantic query만으로 직업을 확정", "근거에 없는 기술 추가"]
+    },
+    {
+      "id": "f16-skill-python",
+      "description": "Python 스킬 보유자 대표 페르소나",
+      "params": {
+        "skill": "Python",
+        "top_k": 5
+      },
+      "expected": {
+        "filters": ["skill"],
+        "min_sample_size": 1,
+        "required_guardrail_terms": ["스킬", "근거"]
+      },
+      "forbidden": ["지원하지 않는 자격증 보유 단정", "없는 경력 생성"]
+    },
+    {
+      "id": "f16-empty-filter-rejection",
+      "description": "필터가 없는 요청은 거부해야 한다.",
+      "params": {},
+      "expected": {
+        "status_code": 400,
+        "error_contains": "최소 1개"
+      },
+      "forbidden": ["전체 데이터 기준 무제한 대표 생성"]
+    }
+  ]
+}

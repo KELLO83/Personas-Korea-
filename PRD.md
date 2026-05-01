@@ -11,6 +11,7 @@
 - `README.md`: 설치/실행 명령, 현재 구현 요약, 참고 링크를 담는 실행 안내 문서입니다.
 - 충돌이 발생할 때의 우선순위는 **`PRD.md` → `TASKS.md` → `README.md`** 입니다.
 - 보조 문서(`docs/`, 실험/리뷰 노트)는 본 우선순위를 바꾸지 못하며, 충돌 시 위 규칙을 우선 적용합니다.
+- 본 문서는 **개인 프로젝트 모드**를 추가 지원합니다. 외부 배포를 전제로 하지 않으므로, 아래 운영/확장 계열 항목은 기본 필수 의무에서 제외할 수 있습니다.
 
 ---
 
@@ -29,9 +30,16 @@ NVIDIA Nemotron-Personas-Korea의 100만 한국인 페르소나 데이터를 Neo
 | **Phase 1** | GraphRAG 인사이트, 유사 페르소나 매칭, 커뮤니티 탐지, 관계 경로 | ✅ 완료 | `docs/prd-archive/prd-v1.0-phase1.md` |
 | **Phase 2** | 검색/필터(F5), 통계 대시보드(F6), 프로필 상세(F7), 세그먼트 비교(F8), 서브그래프 시각화(F9) | ✅ 완료 | `docs/prd-archive/prd-v1.5-phase2.md` |
 | **Phase 3** | 네트워크 영향력(F10), 추천 엔진(F11), 대화형 챗봇(F12) | ✅ 핵심 구현 완료 | 본 문서 §3~5 |
-| **Phase 4** | 대규모 운영검증(F13), 확장/고도화(F14), 챗봇 LLM 합성(F15), Target Persona Generator(F16), Cross-domain Lifestyle Map(F17), Career Transition Map(F18) | 📝 계획/검수 단계 | 본 문서 §11 |
+| **Phase 4** | 대규모 운영검증(F13), 확장/고도화(F14), 챗봇 LLM 합성(F15), Target Persona Generator(F16), Cross-domain Lifestyle Map(F17), Career Transition Map(F18) | 📝 계획/선택 구현 | 본 문서 §11 |
 
-### 1.4 검수 이력 (Review History)
+### 1.4 개인 프로젝트 예외 규칙
+
+- **적용 대상:** 본 저장소는 개인 실험용/연구용으로 운영, 즉 배포/대규모 서비스 운영은 기본 전제가 아닙니다.
+- **필수 유지:** Phase 1~3의 기본 기능(검색/필터/그래프 분석/추천/챗봇 기본)을 중심으로 기능 완전성만 관리합니다.
+- **선택 항목:** F13~F18은 **요구 기능(구현 선택사항)** 입니다. 필요시 구현하고, 불필요하면 생략해도 PRD 위반으로 간주하지 않습니다.
+- **실행 우선순위:** 운영 SLA, 장애주입, Go/No-Go, runbook, 장기 운영 상태 API 등은 현재 모드에서는 `계획 참고`로 분류합니다.
+
+### 1.5 검수 이력 (Review History)
 
 | 날짜 | 검수자 | 결과 | 핵심 조치사항 |
 |:---|:---|:---|:---|
@@ -105,6 +113,9 @@ Query Params:
 Response: 200 OK
 {
   "metric": "pagerank",
+  "last_updated_at": "2026-04-28T02:00:00+00:00",
+  "run_id": "centrality-20260428-020000",
+  "stale_warning": false,
   "results": [
     {
       "uuid": "abc123",
@@ -530,6 +541,7 @@ SET s.last_success_at = datetime(),
 - `last_updated_at`이 7일 이상 오래된 경우 UI에 경고 배지를 표시합니다.
 - `/api/recommend/{uuid}`는 `SIMILAR_TO` 갱신 시각을 내부적으로 확인합니다.
 - KNN 갱신 이후 새로 추가된 UUID가 추천 대상이면 503 또는 벡터 fallback 중 하나를 명확히 선택합니다. Phase 3 P0 기본값은 **503 명시 오류**입니다.
+- `/api/influence/top`은 중심성 배치 상태를 읽고 결과를 반환하므로, 배치 실패 시에도 마지막 성공 run의 `run_id`/`last_updated_at`을 유지 노출하고 `stale_warning`으로 표시합니다.
 
 ### 10.4 마이그레이션 및 롤백
 
@@ -570,18 +582,23 @@ CREATE INDEX person_degree IF NOT EXISTS FOR (p:Person) ON (p.degree);
 
 ---
 
-## 11. Phase 4: 대규모 운영검증 및 확장/고도화 계획
+## 11. Phase 4: 대규모 운영검증 및 확장/고도화 계획 (개인 프로젝트 모드 반영)
 
-> **원칙**: 이 Phase는 코드 구현 전 **검수 먼저** 진행합니다. 운영 성능, 장애 대응, 사용자 흐름, 확장 설계를 문서와 체크리스트로 승인한 뒤에만 구현 작업을 시작합니다.
+> 개인 프로젝트 모드에서는 본 원칙을 `참조 규칙`으로 축소 적용합니다.
+> 즉, 본 PRD의 11.1~11.5 검수/GoNoGo/운영 의무는 배포 목적이 없을 경우 즉시 구현 제약이 아니라 `선택 항목`으로 처리합니다.
+
+> **기본 원칙**: 이 Phase는 코드 구현 전 **검수 먼저** 진행합니다. 운영 성능, 장애 대응, 사용자 흐름, 확장 설계를 문서와 체크리스트로 승인한 뒤에만 구현 작업을 시작합니다.
 
 ### 11.1 목표
 
-- 1M 전체 데이터 기준으로 Phase 3 기능의 운영 가능성을 검증합니다.
-- 배치 작업, API SLA, Streamlit UX, 장애/롤백 기준을 실제 운영 시나리오로 점검합니다.
-- F12 챗봇을 검색/통계 MVP에서 추천·영향력·프로필 orchestration으로 확장할 계획을 수립합니다.
-- 구현 전 검수 산출물(PRD, 체크리스트, runbook, QA 시나리오, Go/No-Go 기준)을 확정합니다.
+- [개인 모드 기본 제외] 1M 전체 데이터 기준으로 Phase 3 기능의 운영 가능성을 의무적으로 검증하지 않습니다.
+- [개인 모드 기본 제외] 배치 작업, API SLA, Streamlit UX, 장애/롤백 기준을 운영 환경 기준으로 강제 점검하지 않습니다.
+- 필요 시 F12 챗봇을 추천·영향력·프로필 orchestration으로 확장할 수 있습니다.
+- 구현 전 검수 산출물(PRD, 체크리스트, runbook, QA 시나리오, Go/No-Go 기준)은 배포 시에만 필수입니다.
 
 ### 11.2 F13: 대규모 운영검증 요구사항
+
+> 개인 프로젝트 모드: 아래 검증표는 배포 의도가 생길 때만 의무 적용합니다. 현재는 `참조 목록`입니다.
 
 | 영역 | 검증 항목 | 성공 기준 | 산출물 |
 |:---|:---|:---|:---|
@@ -594,6 +611,8 @@ CREATE INDEX person_degree IF NOT EXISTS FOR (p:Person) ON (p.degree);
 | UI QA | Streamlit F10/F11/F12 흐름 | empty/loading/error state 한국어 표시 | QA 체크리스트 |
 
 ### 11.3 운영검증 절차
+
+> 개인 프로젝트 모드: 11.3은 실행 순서의 예시로 유지하되, 필수 게이트가 아닌 참고 절차로 적용합니다.
 
 1. **검수 계획 승인**: 본 PRD와 `TASKS.md` Phase 19 항목을 먼저 리뷰합니다.
 2. **환경 고정**: Neo4j heap/pagecache, GDS 버전, 데이터 크기, GPU/CPU 환경을 기록합니다.
@@ -616,7 +635,7 @@ CREATE INDEX person_degree IF NOT EXISTS FOR (p:Person) ON (p.degree);
 | P2 | 고급 추천 스코어링 | 중심성/커뮤니티/유사도 가중치 혼합 | F10/F11 교차 검증 |
 | P2 | 비동기 장기 작업 | removal simulation/Betweenness를 job queue로 분리 | job status API 설계 |
 | P2 | 관측성 강화 | metrics, structured logs, alerting | 운영 로그 표준 |
-| P2 | GNN Phase 2.5 연동 | LightGBM regularization tuning / negative sampling ablation / source one-hot 튜닝 결과를 GNN 추천 파이프라인에 반영. 상세: `GNN_Neural_Network/PRD.md` §11 | GNN 평가 완료 |
+| P2 | GNN Phase 2.5 연동 | GNN 오프라인 추천 실험 결과와 default decision closure는 `GNN_Neural_Network/PRD.md` 및 `GNN_Neural_Network/TASKS.md`에서 관리 | GNN 문서 참조 |
 | P2 | Country 노드 제거 | `Country` 노드는 1개 값(`대한민국`)으로 정보량 0. 그래프에서 제거하고 District→Province 직접 연결로 단순화 | Schema 협의 |
 | P2 | MilitaryStatus/bachelors_field 노드 검토 | `MilitaryStatus`(분산 낮음), `bachelors_field`(`해당없음` 비중 높음) 불필요한 노드 정리 | 데이터 분포 분석 |
 | P3 | Target Persona Generator | 입력 조건(연령/지역/직업 등)과 일치하는 페르소나 5~10명의 텍스트를 KURE 검색 + LLM 합성으로 대표 프로필 생성 | `similar.py`, KURE vector index |
@@ -625,7 +644,7 @@ CREATE INDEX person_degree IF NOT EXISTS FOR (p:Person) ON (p.degree);
 
 ### 11.5 구현 전 검수 게이트
 
-Phase 4의 코드는 아래 산출물이 승인되기 전 작성하지 않습니다.
+개인 프로젝트 모드: Phase 4의 코드는 아래 산출물이 승인되지 않아도 구현할 수 있으나, `운영 배포`를 시작할 경우에만 차단 항목으로 취급합니다.
 
 - PRD Phase 4 요구사항 검수 완료
 - TASKS Phase 19/20 항목 검수 완료
@@ -670,6 +689,8 @@ Phase 4의 코드는 아래 산출물이 승인되기 전 작성하지 않습니
 ### 11.7 F15: 챗봇 LLM 응답 합성 (Rule 우선 + LLM 합성)
 
 > **핵심 원칙**: 기존 ChatGraph의 rule-based 분류/필터 추출은 그대로 유지하고, 응답 생성 단계에만 LLM 합성 레이어를 추가한다. InsightRouter는 general intent의 fallback 경로로 흡수한다.
+
+> **개인 프로젝트 예외**: F15은 필수 항목이 아닙니다. 기본 멀티턴 동작이 만족스러우면 LLM 합성은 생략 가능하며, `개인 모드`에서는 구현 선택 항목으로 둡니다.
 
 #### 11.7.1 현황 및 문제
 

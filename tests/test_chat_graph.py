@@ -1,3 +1,5 @@
+from typing import Any
+
 from src.rag.chat_graph import ChatGraph, FilterState, classify_intent, extract_filters, merge_filters, trim_history
 
 
@@ -553,3 +555,136 @@ def test_trim_history_keeps_last_five_turns() -> None:
 
     assert len(trimmed) == 10
     assert trimmed[0]["content"] == "2"
+
+
+def test_recommend_follow_up_uses_selected_uuid_from_previous_search(monkeypatch) -> None:
+    graph = ChatGraph()
+
+    def fake_run_search(filters):
+        return (
+            "search ok",
+            [{"type": "search", "filters": filters, "total_count": 1}],
+            [{"uuid": "person-111", "display_name": "김길동", "age": 30}],
+        )
+
+    observed_uuids: list[str | None] = []
+
+    def fake_run_recommend(message: str, selected_uuid: str | None = None):
+        observed_uuids.append(selected_uuid)
+        return (
+            f"추천 대상: {selected_uuid}",
+            [{"type": "recommend", "uuid": selected_uuid}],
+            [{"item_name": "클라이밍", "reason": "reason", "reason_score": 0.5, "similar_users_count": 5}],
+        )
+
+    monkeypatch.setattr(graph, "_run_search", fake_run_search)
+    monkeypatch.setattr(graph, "_run_recommend", fake_run_recommend)
+
+    graph.invoke("session-a", "서울 사람 보여줘")
+    result = graph.invoke("session-a", "이 사람에게 추천해줘")
+
+    assert result["response"] == "추천 대상: person-111"
+    assert observed_uuids == ["person-111"]
+    assert result["sources"][0]["uuid"] == "person-111"
+
+
+def test_recommend_follow_up_uses_influence_metric_from_follow_up_message(monkeypatch) -> None:
+    graph = ChatGraph()
+    captured: dict[str, str | None] = {}
+    fake_run_recommend_data = [
+        {
+            "item_name": "클라이밍",
+            "reason": "reason",
+            "reason_score": 0.5,
+            "similar_users_count": 5,
+        }
+    ]
+
+    def fake_run_search(filters):
+        return (
+            "search ok",
+            [{"type": "search", "filters": filters, "total_count": 1}],
+            [{"uuid": "person-333", "display_name": "김성수", "age": 31}],
+        )
+
+    class FakeRecommendationService:
+        def persona_exists(self, uuid: str) -> bool:
+            return True
+
+        def has_similarity_data(self, uuid: str) -> bool:
+            return True
+
+        def recommend(
+            self,
+            uuid: str,
+            category: str,
+            top_n: int,
+            *,
+            influence_metric: str | None = None,
+        ) -> list[dict[str, Any]]:
+            captured["selected_uuid"] = uuid
+            captured["influence_metric"] = influence_metric
+            return fake_run_recommend_data
+
+        def close(self) -> None:
+            return None
+
+    import src.rag.chat_graph as chat_graph_module
+
+    monkeypatch.setattr(graph, "_run_search", fake_run_search)
+    monkeypatch.setattr(chat_graph_module, "RecommendationService", lambda: FakeRecommendationService())
+
+    graph.invoke("session-a", "서울 사람 보여줘")
+    result = graph.invoke("session-a", "핵심 인물 기준으로 이 사람에게 취미를 추천해줘")
+
+    assert "1. 클라이밍" in result["response"]
+    assert captured["selected_uuid"] == "person-333"
+    assert captured["influence_metric"] == "pagerank"
+
+
+def test_profile_follow_up_uses_selected_uuid(monkeypatch) -> None:
+    graph = ChatGraph()
+
+    def fake_run_search(filters):
+        return (
+            "search ok",
+            [{"type": "search", "filters": filters, "total_count": 1}],
+            [{"uuid": "person-222", "display_name": "이지원", "age": 28}],
+        )
+
+    observed_uuids: list[str | None] = []
+
+    def fake_run_profile(message: str, selected_uuid: str | None = None):
+        observed_uuids.append(selected_uuid)
+        return (
+            f"프로필 대상: {selected_uuid}",
+            [{"type": "profile", "uuid": selected_uuid}],
+            [],
+        )
+
+    monkeypatch.setattr(graph, "_run_search", fake_run_search)
+    monkeypatch.setattr(graph, "_run_profile", fake_run_profile)
+
+    graph.invoke("session-a", "부산 사람 보여줘")
+    result = graph.invoke("session-a", "그사람의 프로필 보여줘")
+
+    assert result["response"] == "프로필 대상: person-222"
+    assert observed_uuids == ["person-222"]
+
+
+def test_influence_intent_stays_functional(monkeypatch) -> None:
+    graph = ChatGraph()
+
+    def fake_run_influence(message: str):
+        return (
+            "영향력 결과",
+            [{"type": "influence", "metric": "pagerank"}],
+            [{"uuid": "u-x", "score": 0.9}],
+        )
+
+    monkeypatch.setattr(graph, "_run_influence", fake_run_influence)
+
+    result = graph.invoke("session-a", "이 커뮤니티에서 핵심 인물은?")
+
+    assert result["response"] == "영향력 결과"
+    assert result["sources"][0]["type"] == "influence"

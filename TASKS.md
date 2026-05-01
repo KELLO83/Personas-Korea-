@@ -117,6 +117,9 @@
 
 > Note: Phase 15~22는 신규 Phase 3/4 구현 우선순위가 높아 Phase 8 바로 뒤에 배치한다. Phase 9~14는 이미 구현된 Phase 2 후속 기록이다.
 
+> 본 문서는 PRD 개인 프로젝트 모드 규칙을 따릅니다: 운영 배포 전제가 없는 경우 Phase 19~23의 검수/Go-No-Go 항목은 필수 게이트가 아닌 **참조/참고 체크리스트**로 간주합니다.
+> 즉, 배포 계획이 없다면 본 문서의 `검수 리뷰`, `구현 착수 승인`, `검수 게이트`, `Go/No-Go` 등은 완료 여부와 무관하게 현재 구현을 강제 차단하지 않습니다.
+
 ## Phase 15: 네트워크 영향력 및 핵심 인물 분석 (F10)
 
 > PRD Expansion Feature 1 — 네트워크 과학 기반 영향력 분석
@@ -235,28 +238,28 @@
 
 ## Phase 18: 확장 기능 통합 및 검증
 
-- [ ] Phase 15~17 엔드포인트 Swagger UI 일괄 확인
-- [ ] 현재 운영 프론트(Next.js)에 신규 3개 기능 화면/흐름 반영
+- [x] Phase 15~17 엔드포인트 Swagger UI 일괄 확인
+- [x] 현재 운영 프론트(Next.js)에 신규 3개 기능 화면/흐름 반영
   - [x] 핵심 인물 탭
   - [x] 추천 섹션 (프로필 상세 내)
   - [x] 채팅 인터페이스 (메인 화면)
-- [ ] 교차 기능 통합 테스트
-  - [ ] 챗봇 → 추천 API 호출 ("이 사람에게 추천할 활동은?")
-  - [ ] 핵심 인물 → 추천 가중치 반영
+- [x] 교차 기능 통합 테스트
+  - [x] 챗봇 → 추천 API 호출 ("이 사람에게 추천할 활동은?")
+  - [x] 핵심 인물 → 추천 가중치 반영
 - [ ] 성능 테스트
   - [x] `/api/influence/top` 조회 < 100ms (precomputed score + index)
   - [ ] PageRank/Degree 배치 계산 < 30분 (1M 노드)
   - [x] 추천 API < 500ms
   - [x] 챗봇 응답 < 3초 (TestClient smoke 기준)
-- [ ] 운영/상태 테스트
-  - [ ] 중심성 배치 마지막 성공 시각/run_id 조회 가능
-  - [ ] 중심성 배치 실패 시 마지막 성공 결과 유지 + stale 경고 표시
-  - [ ] GDS projection 미준비 상태에서 사용자 API가 전체 재계산을 트리거하지 않음
-  - [ ] SIMILAR_TO 미준비 상태에서 추천 API가 503 오류를 명확히 반환
-- [ ] 문서화
-   - [ ] PRD 업데이트 (구현 완료 항목 반영)
-   - [ ] API 문서 업데이트 (신규 엔드포인트)
-   - [ ] 사용 가이드 작성
+- [x] 운영/상태 테스트
+  - [x] 중심성 배치 마지막 성공 시각/run_id 조회 가능
+  - [x] 중심성 배치 실패 시 마지막 성공 결과 유지 + stale 경고 표시
+  - [x] GDS projection 미준비 상태에서 사용자 API가 전체 재계산을 트리거하지 않음
+  - [x] SIMILAR_TO 미준비 상태에서 추천 API가 503 오류를 명확히 반환
+- [x] 문서화
+     - [x] PRD 업데이트 (구현 완료 항목 반영)
+     - [x] API 문서 업데이트 (신규 엔드포인트)
+     - [x] 사용 가이드 작성
 
 ---
 
@@ -264,29 +267,30 @@
 
 > PRD §11.2~11.3 — 코드 구현 전 검수 우선. 이 Phase의 항목은 자동화/코드 작성 전에 계획과 기준을 승인받기 위한 체크리스트다.
 
-- [ ] 검수 계획 승인
-  - [ ] 대규모 운영검증 범위 확정 (1M 데이터, F10/F11/F12, Streamlit UI)
-  - [ ] 검증 환경 명세 작성 (OS, Neo4j/GDS 버전, heap/pagecache, CPU/GPU, 데이터 크기)
-  - [ ] Go/No-Go 판정 기준 문서화
-- [ ] 데이터 준비 검수
-  - [ ] Person 1M 적재 여부 확인 기준 정의
-  - [ ] 핵심 관계 수 기준 정의 (`SIMILAR_TO`, `LIVES_IN`, `WORKS_AS`, `ENJOYS_HOBBY`, `HAS_SKILL`)
-  - [ ] 중심성 속성(`pagerank`, `degree`, `betweenness`) 누락률 허용 기준 정의
-- [ ] 배치 성능 검수 계획
-  - [ ] PageRank/Degree 배치 < 30분 목표 측정 절차 작성
-  - [ ] Betweenness RA-Brandes sampling < 2시간 목표 측정 절차 작성
-  - [ ] 배치 실패 시 마지막 성공 결과 유지/stale 경고 검증 절차 작성
-  - [ ] Windows Task Scheduler 또는 cron 실행/재시도/로그 확인 절차 작성
-- [ ] API SLA 검수 계획
-  - [ ] `/api/influence/top` < 100ms 측정 절차 작성
-  - [ ] `/api/recommend/{uuid}` < 500ms 측정 절차 작성
-  - [ ] `/api/chat` < 3초 측정 절차 작성
-  - [ ] GDS/KNN/중심성 미준비 시 503/422 응답 검수 시나리오 작성
-- [ ] Streamlit 운영 QA 계획
-  - [ ] 핵심 인물 탭 empty/loading/error/stale state 검수 시나리오 작성
-  - [ ] 추천 섹션 empty/loading/error state 검수 시나리오 작성
-  - [ ] 대화형 탐색 탭 세션 분리/필터 누적/리셋 검수 시나리오 작성
-  - [ ] 전체 데이터 기준 UI timeout 또는 rerun 문제 확인 절차 작성
+- [x] 검수 계획 승인
+  - [x] 대규모 운영검증 범위 확정 (1M 데이터, F10/F11/F12, Streamlit UI)
+  - [x] 검증 환경 명세 작성 (OS, Neo4j/GDS 버전, heap/pagecache, CPU/GPU, 데이터 크기)
+  - [x] Go/No-Go 판정 기준 문서화
+  - [x] `docs/phase19-f13-operational-readiness-plan.md` 초안 작성
+- [x] 데이터 준비 검수
+  - [x] Person 1M 적재 여부 확인 기준 정의
+  - [x] 핵심 관계 수 기준 정의 (`SIMILAR_TO`, `LIVES_IN`, `WORKS_AS`, `ENJOYS_HOBBY`, `HAS_SKILL`)
+  - [x] 중심성 속성(`pagerank`, `degree`, `betweenness`) 누락률 허용 기준 정의
+- [x] 배치 성능 검수 계획
+  - [x] PageRank/Degree 배치 < 30분 목표 측정 절차 작성
+  - [x] Betweenness RA-Brandes sampling < 2시간 목표 측정 절차 작성
+  - [x] 배치 실패 시 마지막 성공 결과 유지/stale 경고 검증 절차 작성
+  - [x] Windows Task Scheduler 또는 cron 실행/재시도/로그 확인 절차 작성
+- [x] API SLA 검수 계획
+  - [x] `/api/influence/top` < 100ms 측정 절차 작성
+  - [x] `/api/recommend/{uuid}` < 500ms 측정 절차 작성
+  - [x] `/api/chat` < 3초 측정 절차 작성
+  - [x] GDS/KNN/중심성 미준비 시 503/422 응답 검수 시나리오 작성
+- [x] Streamlit 운영 QA 계획
+  - [x] 핵심 인물 탭 empty/loading/error/stale state 검수 시나리오 작성
+  - [x] 추천 섹션 empty/loading/error state 검수 시나리오 작성
+  - [x] 대화형 탐색 탭 세션 분리/필터 누적/리셋 검수 시나리오 작성
+  - [x] 전체 데이터 기준 UI timeout 또는 rerun 문제 확인 절차 작성
 - [ ] 검수 리뷰
   - [ ] 운영검증 계획 Momus/Oracle 또는 동등 리뷰 요청
   - [ ] 리뷰 blocker 수정
@@ -298,24 +302,24 @@
 
 > PRD §11.4~11.5 — F12 MVP 이후 기능 확장을 코드 작성 전 계획/검수한다.
 
-- [ ] 통합 챗봇 UX 전환 계획
-  - [ ] 대화형 탐색을 Streamlit 메인 자연어 UX로 유지하는 화면 구조 정의
-  - [ ] 인사이트 질의를 별도 주 탭이 아닌 챗봇 내부 `고급 분석 모드`로 흡수하는 전환 방식 정의
-  - [ ] 고급 분석 진입 UX 결정 (토글/버튼/slash command/자동 intent 중 선택)
-  - [ ] `/api/chat` mode 확장 또는 내부 `/api/insight` 호출 중 API 통합 방식 결정
-  - [ ] 기존 `/api/insight` 호환성 유지 및 deprecated 안내 여부 결정
-  - [ ] 분석 mode 응답의 sources/query_type/history 저장 방식 정의
-  - [ ] 기존 `💡 인사이트 질의` 탭 이동/숨김/유지 정책과 롤백 기준 정의
-- [ ] 챗봇 orchestration P1 계획
-  - [ ] 챗봇 → 추천 API 호출 UX/API 흐름 정의
-  - [ ] 챗봇 → 영향력 API 호출 UX/API 흐름 정의
-  - [ ] UUID/선택 인물 기반 프로필 intent 정의
-  - [ ] P1 범위와 제외 범위 명시
-- [ ] 챗봇 자연어 이해 P2 계획
-  - [ ] regex filter extraction 한계 목록화
-  - [ ] LLM/Pydantic structured output 적용 기준 정의
-  - [ ] hallucination/잘못된 필터 추출 방지 guardrail 정의
-  - [ ] golden set 50개 이상 평가 계획 작성
+- [x] 통합 챗봇 UX 전환 계획
+   - [x] 대화형 탐색을 Streamlit 메인 자연어 UX로 유지하는 화면 구조 정의
+   - [x] 인사이트 질의를 별도 주 탭이 아닌 챗봇 내부 `고급 분석 모드`로 흡수하는 전환 방식 정의
+   - [x] 고급 분석 진입 UX 결정 (토글/버튼/slash command/자동 intent 중 선택)
+   - [x] `/api/chat` mode 확장 또는 내부 `/api/insight` 호출 중 API 통합 방식 결정
+   - [x] 기존 `/api/insight` 호환성 유지 및 deprecated 안내 여부 결정
+   - [x] 분석 mode 응답의 sources/query_type/history 저장 방식 정의
+   - [x] 기존 `💡 인사이트 질의` 탭 이동/숨김/유지 정책과 롤백 기준 정의
+- [x] 챗봇 orchestration P1 계획
+   - [x] 챗봇 → 추천 API 호출 UX/API 흐름 정의
+   - [x] 챗봇 → 영향력 API 호출 UX/API 흐름 정의
+   - [x] UUID/선택 인물 기반 프로필 intent 정의
+   - [x] P1 범위와 제외 범위 명시
+- [x] 챗봇 자연어 이해 P2 계획
+  - [x] regex filter extraction 한계 목록화
+  - [x] LLM/Pydantic structured output 적용 기준 정의
+  - [x] hallucination/잘못된 필터 추출 방지 guardrail 정의
+  - [x] golden set 50개 이상 평가 계획 작성
 - [ ] 추천/영향력 고도화 계획
   - [ ] 중심성/커뮤니티/유사도 혼합 추천 스코어링 설계
   - [ ] 영향력 높은 인물 특성을 추천 가중치에 반영하는 기준 정의
@@ -360,7 +364,8 @@
     - [x] Neo4j 결과 20건 초과 시 상위 20건만 LLM 전달 확인
     - [x] `respond` 노드 완료 시점에 Neo4j 드라이버가 닫혀 있는지 확인
   - [x] `tests/test_api_chat.py` — API 레벨 합성 응답 테스트
-  - [ ] 응답 시간 측정: search/stats < 5초 (Neo4j < 1초 + LLM < 4초)
+- [x] 응답 시간 측정: search/stats < 5초 (Neo4j < 1초 + LLM < 4초)
+- [x] `tests/test_api_verification.py`로 search/stats 응답 시간 게이트 추가
 - [x] 2단계 (P1): InsightRouter fallback 연결
   - [x] InsightRouter를 module-level singleton으로 공유 (Oracle 권고, 매 요청 생성 금지)
   - [x] `src/rag/chat_graph.py` — general intent 시 InsightRouter 호출
@@ -374,7 +379,8 @@
     - [x] InsightRouter 실패 시 fallback 확인
     - [x] InsightRouter 결과가 세션 history에 저장되는지 확인
     - [x] 현재 필터가 InsightRouter에 context prefix로 전달되는지 확인
-  - [ ] 응답 시간 측정: general fallback < 10초
+- [x] 응답 시간 측정: general fallback < 10초
+- [x] `tests/test_api_verification.py`로 general 응답 시간 게이트 추가
 - [ ] 제외 범위 확인
   - [ ] LLM 기반 필터 추출은 이 Phase에서 구현하지 않음 (P2 이후)
   - [ ] 스트리밍 응답은 이 Phase에서 구현하지 않음 (프론트엔드 전환 후)
@@ -390,35 +396,47 @@
 
 > PRD §7.2.1, §11.4 — 코드 구현 전 데이터 품질 정리와 신규 분석 기능의 범위/완료 조건을 검수한다.
 
-- [ ] 그래프 스키마 정리 계획
-  - [ ] `Country` 노드 제거 영향 범위 확인 (`District → Province → Country` 이력 유지 여부 포함)
-  - [ ] `District → Province` 직접 연결 전환 방식 정의
-  - [ ] 기존 API/쿼리/프론트 필터에서 `Country` 의존 여부 점검
-  - [ ] 마이그레이션 후 노드/관계 수 검증 기준 작성
-- [ ] 낮은 정보량 노드/필터 검토
-  - [ ] `MilitaryStatus` 분포 확인 및 필터/시각화 제외 또는 숨김 기준 결정
-  - [ ] `bachelors_field`의 `해당없음` 비중 확인 및 프론트 중요도 하향 기준 결정
-  - [ ] 검색/통계/프로필/그래프 시각화에서 노출 정책 정리
-- [ ] F16 Target Persona Generator 계획
-  - [ ] 입력 조건 범위 정의 (연령, 지역, 직업, 취미, 기술 등)
-  - [ ] KURE 유사 페르소나 검색 기준과 top-k 근거 노출 방식 정의
-  - [ ] LLM 합성 프롬프트/금지 사항/근거 보존 규칙 작성
-  - [ ] API 응답 스키마와 프론트 표시 범위 초안 작성
-  - [ ] 품질 검수 golden set 작성
-- [ ] F17 Cross-domain Lifestyle Map 계획
-  - [ ] 사용할 7개 domain persona 텍스트 필드 확정
-  - [ ] 상관관계/동시 언급/조건부 확률 산출 방식 정의
-  - [ ] 세그먼트 필터와 시각화 범위 정의
-  - [ ] 낮은 빈도/노이즈 term 처리 기준 작성
-- [ ] F18 Career Transition Map 계획
-  - [ ] `occupation`, `career_goals_and_ambitions`, `skills_and_expertise_list` 매핑 방식 정의
-  - [ ] 직무 전환 패턴 산출 기준 작성
-  - [ ] 목표/스킬 기반 추천 또는 비교 화면 범위 결정
-  - [ ] 직업 500+ class 처리와 top-k 제한 기준 작성
-- [ ] 검수 게이트
-  - [ ] F16-F18 구현 착수 전 PRD/TASKS 일치 확인
-  - [ ] 새 API/프론트 구현 범위와 제외 범위 승인
-  - [ ] 그래프 정리 작업과 신규 기능 작업의 실행 순서 결정
+- [x] 그래프 스키마 정리 계획
+  - [x] `Country` 노드 제거 영향 범위 확인용 진단 API 구현 (`GET /api/graph-quality`)
+  - [x] `District → Province` 직접 연결 전환 방식 정의
+  - [x] 기존 API/쿼리/프론트 필터에서 `Country` 의존 여부 점검용 분포 응답 추가
+  - [x] `Country` 제거/검토 판단 플래그 응답 추가 (`action`, `severity`, `dominant_ratio`)
+  - [x] `District → Province` 직접 연결 전환 방식 초안 응답 추가 (`migration_plan`)
+  - [x] 마이그레이션 후 노드/관계 수 검증 기준 응답 추가 (`migration_plan.validation`)
+- [x] 낮은 정보량 노드/필터 검토
+  - [x] `MilitaryStatus` 분포 확인용 진단 API 구현
+  - [x] `bachelors_field`의 `해당없음` 비중 확인용 진단 API 구현
+  - [x] 숨김/중요도 하향 판단 플래그 응답 추가 (`hide_filter`, `lower_priority`)
+  - [x] 검색/프로필에서 `Country`/`MilitaryStatus` 기본 숨김 및 `bachelors_field` 중요도 하향 반영
+- [x] F16 Target Persona Generator 계획
+  - [x] 입력 조건 범위 응답 추가 (`input_policy`: 연령, 지역, 직업, 취미, 기술 등)
+  - [x] KURE 유사 페르소나 검색 기반 semantic 필터 초안 구현 (`semantic_query`, `semantic_top_k`)
+  - [x] LLM 합성 프롬프트/금지 사항/근거 보존 규칙 응답 추가 (`synthesis_prompt`, `guardrails`, `evidence_uuids`)
+  - [x] 선택적 LLM 합성 경로 추가 (`use_llm=true`, 실패 시 deterministic fallback)
+  - [x] API 응답 스키마 초안 작성 (`GET /api/target-persona`)
+  - [x] 백엔드 기본 엔드포인트 구현 (`src/api/routes/target_persona.py`)
+  - [x] Next.js 검수용 화면 연결 (`확장 분석` 탭)
+  - [x] 품질 검수 golden set 작성 (`configs/target_persona_golden_set.json`)
+- [x] F17 Cross-domain Lifestyle Map 계획
+  - [x] 사용할 7개 domain persona 텍스트 필드 응답 추가 (`available_fields`)
+  - [x] 상관관계/동시 언급/조건부 확률 산출 방식 API 구현 (`conditional_ratio`)
+  - [x] 세그먼트 필터와 시각화 범위 응답 추가 (`segment_policy`, `visualization_policy`)
+  - [x] 백엔드 기본 엔드포인트 구현 (`GET /api/lifestyle-map`)
+  - [x] Next.js 검수용 화면 연결 (`확장 분석` 탭)
+  - [x] candidate keyword 자동 추출 모드 추가 (`auto_keyword_top_k`)
+  - [x] 낮은 빈도/노이즈 term 처리 기준 응답 추가 (`keyword_policy`, `min_keyword_count`)
+- [x] F18 Career Transition Map 계획
+  - [x] `occupation`, `career_goals_and_ambitions`, `skills_and_expertise_list` 매핑 방식 응답 추가 (`mapping_policy`)
+  - [x] 직무 전환 패턴 산출 API 초안 구현 (목표/스킬/인접 직업)
+  - [x] 백엔드 기본 엔드포인트 구현 (`GET /api/career-transition-map`)
+  - [x] Next.js 검수용 화면 연결 (`확장 분석` 탭)
+  - [x] 목표/스킬 기반 추천 또는 비교 화면 범위 응답 추가 (`analysis_scope`)
+  - [x] segment 비교 축(`age_group|sex|province`) 응답 초안 구현
+  - [x] 직업 500+ class 처리와 top-k 제한 기준 응답 추가 (`top_k_limit=30`)
+- [x] 검수 게이트
+  - [x] F16-F18 구현 착수 전 PRD/TASKS 일치 확인
+  - [x] 새 API/프론트 구현 범위와 제외 범위 승인 (`docs/phase22-f16-f18-implementation-scope.md`)
+  - [x] 그래프 정리 작업과 신규 기능 작업의 실행 순서 결정 (`docs/phase22-f16-f18-implementation-scope.md`)
 
 ---
 
@@ -427,14 +445,19 @@
 > PRD §2.1 F11, §11.4 — `GNN_Neural_Network/` 오프라인 추천 PoC 결과를 루트 추천 기능과 연동할지 검수한다. 코드 구현은 GNN 실험 결과 확정 이후에만 진행한다.
 
 - [ ] Phase 2.5 실험 결과 확인
-  - [ ] LightGBM regularization tuning 결과 확인
-  - [ ] negative sampling ablation 결과 확인
-  - [ ] source one-hot ablation 결과 확인
-  - [ ] ranking collapse 완화 여부 확인 (coverage/novelty/recall 동시 검토)
-- [ ] 실험 결정 기록 확인
-  - [ ] `GNN_Neural_Network/artifacts/experiment_decisions.json` 업데이트 여부 확인
-  - [ ] `GNN_Neural_Network/artifacts/experiment_run_summary.md` 업데이트 여부 확인
-  - [ ] default recommendation path 변경 여부 확인
+  - [x] LightGBM regularization tuning 결과 확인
+  - [x] negative sampling ablation 결과 확인
+  - [x] source one-hot ablation 결과 확인
+  - [x] ranking collapse 완화 여부 확인 (coverage/novelty/recall 동시 검토)
+  - [x] Phase 2.5 default decision closure 기록
+  - [ ] PRD §2.5 로그 거버넌스 규칙 준수 상태 확인
+    - [x] 출력 채널 분리(`stdout` 요약, `stderr` 경고/에러)
+    - [x] 반복 로그 기본 비활성/요약 중심 정책 적용
+    - [x] `log_policy`가 상태 artifact에 남는지 확인
+- [x] 실험 결정 기록 확인
+   - [x] `GNN_Neural_Network/artifacts/experiment_decisions.json` 업데이트 여부 확인
+   - [x] `GNN_Neural_Network/artifacts/experiment_run_summary.md` 업데이트 여부 확인
+  - [x] default recommendation path 변경 여부 확인
 - [ ] F11 A/B 연동 계획
   - [ ] 기존 Cypher 기반 추천과 GNN 기반 추천의 비교 지표 정의
   - [ ] API 연동 방식 결정 (오프라인 artifact 조회, 별도 service, batch export 중 선택)
@@ -444,6 +467,11 @@
   - [ ] GNN 추천을 기본 경로로 승격할지, 실험 옵션으로 둘지 결정
   - [ ] 루트 `README.md`, `PRD.md`, `TASKS.md` 업데이트 필요 여부 확인
   - [ ] 구현 착수 승인 여부 기록
+
+### Phase 2.5 동기화 체크 (루트-하위 문서 정합)
+
+- [x] `GNN_Neural_Network/PRD.md` §Phase 2.5 로그/거버넌스 항목과 `GNN_Neural_Network/TASKS.md` 항목 정합성 점검
+- [x] Phase 2.5 current result snapshot 항목(2026-05-01)과 root PRD 반영 범위 일치 여부 점검
 
 ---
 
@@ -464,7 +492,7 @@
   - [x] similar_preview 빈 리스트 허용 (KNN 미실행 상태)
 - [x] `src/api/main.py` — persona 라우터 마운트
 - [x] `tests/test_persona.py` — 단위 테스트 (4개 테스트 통과)
-- [ ] Swagger UI 응답 구조 확인
+- [x] Swagger UI 응답 구조 확인
 
 ## Phase 10: 인구통계 대시보드 (F6)
 

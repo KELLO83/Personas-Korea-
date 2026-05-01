@@ -32,10 +32,15 @@ def influence_top(
     finally:
         service.close()
 
+    status_text = status.get("status") if status else None
     last_updated_at = str(status.get("last_success_at")) if status and status.get("last_success_at") else None
+    run_id = str(status.get("run_id")) if status and status.get("run_id") else None
+    stale_warning = status_text not in {None, "success"}
     return InfluenceResponse(
         metric=metric,
         last_updated_at=last_updated_at,
+        run_id=run_id,
+        stale_warning=stale_warning,
         results=[InfluenceTopItem(**row) for row in rows],
     )
 
