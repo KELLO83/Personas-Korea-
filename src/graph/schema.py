@@ -29,6 +29,7 @@ PERSON_PROPERTY_FIELDS = [
     "culinary_persona",
     "family_persona",
     "cultural_background",
+    "bachelors_field",
     "skills_and_expertise",
     "hobbies_and_interests",
     "career_goals_and_ambitions",

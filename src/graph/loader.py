@@ -5,7 +5,7 @@ import pandas as pd
 from neo4j import GraphDatabase
 
 from src.config import settings
-from src.graph.queries import COUNT_GRAPH_QUERY, CREATE_PERSON_GRAPH_QUERY
+from src.graph.queries import CLEAR_GRAPH_QUERY, COUNT_GRAPH_QUERY, CREATE_PERSON_GRAPH_QUERY
 from src.graph.schema import PERSON_PROPERTY_FIELDS, schema_queries
 
 
@@ -28,19 +28,55 @@ class GraphLoader:
             for query in schema_queries():
                 session.run(query)
 
-    def load_personas(self, df: pd.DataFrame, batch_size: int = 1000) -> int:
-        total = 0
+    def clear_graph(self) -> int:
+        """Delete all nodes and relationships, returning deleted node count."""
         with self.driver.session(database=self.database) as session:
-            for start in range(0, len(df), batch_size):
-                rows = _to_graph_rows(df.iloc[start : start + batch_size])
+            count_result = session.run("MATCH (n) RETURN count(n) AS count")
+            count_row = count_result.single()
+            deleted_count = int(count_row["count"]) if count_row else 0
+            session.run(CLEAR_GRAPH_QUERY)
+            return deleted_count
+
+    def load_personas(self, df: Any, batch_size: int = 1000) -> int:
+        total = 0
+        from tqdm import tqdm
+        
+        # Polars DataFrame인지 확인하고 행 수 가져오기
+        try:
+            import polars as pl
+            is_polars = isinstance(df, pl.DataFrame)
+            total_rows = df.height if is_polars else len(df)
+        except ImportError:
+            is_polars = False
+            total_rows = len(df)
+
+        progress_bar = tqdm(total=total_rows, desc="Loading Personas to Neo4j", unit="persona")
+        with self.driver.session(database=self.database) as session:
+            for start in range(0, total_rows, batch_size):
+                # Polars 슬라이싱 및 dict 변환 최적화
+                if is_polars:
+                    batch_df = df.slice(start, batch_size)
+                    rows = _to_graph_rows_pl(batch_df)
+                else:
+                    batch_df = df.iloc[start : start + batch_size]
+                    rows = _to_graph_rows(batch_df)
+                
                 session.run(CREATE_PERSON_GRAPH_QUERY, rows=rows)
-                total += len(rows)
+                batch_len = len(rows)
+                total += batch_len
+                progress_bar.update(batch_len)
+        progress_bar.close()
         return total
 
     def count_nodes_by_label(self) -> list[dict[str, Any]]:
         with self.driver.session(database=self.database) as session:
             result = session.run(COUNT_GRAPH_QUERY)
             return [dict(record) for record in result]
+
+
+def _to_graph_rows_pl(df: Any) -> list[dict[str, Any]]:
+    # Polars DataFrame을 dict 리스트로 바로 변환
+    return [_to_graph_row(row) for row in df.to_dicts()]
 
 
 def _to_graph_rows(df: pd.DataFrame) -> list[dict[str, Any]]:

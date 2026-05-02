@@ -39,7 +39,8 @@ class Settings(BaseSettings):
     
     EMBEDDING_MODEL_NAME: str = "nlpai-lab/KURE-v1"
     EMBEDDING_DEVICE: str = "cuda"
-    EMBEDDING_BATCH_SIZE: int = 64
+    # Dynamically calculated based on available VRAM (min 128) if None
+    EMBEDDING_BATCH_SIZE: int | None = None
     EMBEDDING_DIMENSION: int = 1024
 
     API_HOST: str = "0.0.0.0"

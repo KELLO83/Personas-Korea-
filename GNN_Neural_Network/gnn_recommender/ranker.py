@@ -6,10 +6,11 @@ import random
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Callable, cast
 
 import lightgbm as lgb
 import numpy as np
+import torch
 from tqdm import tqdm
 
 from .data import PersonContext
@@ -89,26 +90,117 @@ class RankerRow:
 class RankerDataset:
     rows: list[RankerRow]
     feature_columns: list[str] = field(default_factory=lambda: list(RANKER_FEATURE_COLUMNS))
-    
-    def to_numpy(self) -> tuple[np.ndarray, np.ndarray]:
+
+    def _ordered_rows(self) -> list[RankerRow]:
+        return sorted(self.rows, key=lambda row: row.person_id)
+
+    @staticmethod
+    def _group_sizes_by_person(rows: list[RankerRow]) -> list[int]:
+        if not rows:
+            return []
+
+        groups: list[int] = []
+        current_person = rows[0].person_id
+        count = 0
+        for row in rows:
+            if row.person_id != current_person:
+                groups.append(count)
+                current_person = row.person_id
+                count = 1
+            else:
+                count += 1
+        groups.append(count)
+        return groups
+
+    def to_numpy(self, rows: list[RankerRow] | None = None) -> tuple[np.ndarray, np.ndarray]:
         """Returns (X, y) numpy arrays for LightGBM."""
-        if not self.rows:
+        source_rows = self.rows if rows is None else rows
+        if not source_rows:
             return np.empty((0, len(self.feature_columns)), dtype=np.float32), np.empty((0,), dtype=np.float32)
-        X = np.array([[row.features.get(col, 0.0) for col in self.feature_columns] for row in self.rows], dtype=np.float32)
-        y = np.array([row.label for row in self.rows], dtype=np.float32)
+        X = np.array(
+            [[row.features.get(col, 0.0) for col in self.feature_columns] for row in source_rows],
+            dtype=np.float32,
+        )
+        y = np.array([row.label for row in source_rows], dtype=np.float32)
         return X, y
 
-    def to_lgb_dataset(self, reference: lgb.Dataset | None = None) -> lgb.Dataset:
-        X, y = self.to_numpy()
+    def to_lgb_dataset(
+        self,
+        reference: lgb.Dataset | None = None,
+        *,
+        group_by_person: bool = False,
+    ) -> lgb.Dataset:
+        rows = self._ordered_rows() if group_by_person else self.rows
+        X, y = self.to_numpy(rows=rows)
         categorical_features = get_ranker_categorical_features(self.feature_columns)
         cat_indices = [self.feature_columns.index(c) for c in categorical_features if c in self.feature_columns]
+        group = self._group_sizes_by_person(rows) if group_by_person else None
         return lgb.Dataset(
             X, label=y,
             feature_name=self.feature_columns,
+            group=group,
             categorical_feature=cat_indices if cat_indices else "auto",
             reference=reference,
             free_raw_data=False,
         )
+
+    def person_group_sizes(self) -> list[int]:
+        return self._group_sizes_by_person(self._ordered_rows())
+
+
+class LambdaRankLoss:
+    """Minimal LambdaRank surrogate objective helper for pairwise ranking experiments."""
+
+    def __init__(self, sigma: float = 1.0) -> None:
+        self.sigma = float(max(sigma, 1e-6))
+
+    def __call__(
+        self,
+        scores: np.ndarray | torch.Tensor,
+        labels: np.ndarray | torch.Tensor,
+        group_sizes: list[int],
+    ) -> torch.Tensor:
+        score_tensor = torch.as_tensor(scores, dtype=torch.float32).flatten()
+        label_tensor = torch.as_tensor(labels, dtype=torch.float32).flatten()
+        total_loss = torch.tensor(0.0, dtype=torch.float32)
+
+        if score_tensor.numel() == 0 or len(group_sizes) == 0:
+            return total_loss
+
+        start = 0
+        for size in group_sizes:
+            if size <= 0:
+                continue
+            end = start + size
+            batch_scores = score_tensor[start:end]
+            batch_labels = label_tensor[start:end]
+            if batch_scores.numel() < 2:
+                start = end
+                continue
+
+            score_diff = batch_scores[:, None] - batch_scores[None, :]
+            label_diff = batch_labels[:, None] - batch_labels[None, :]
+            pair_mask = label_diff != 0
+            if not bool(pair_mask.any()):
+                start = end
+                continue
+
+            pair_sign = torch.sign(label_diff)
+            pair_loss = torch.log1p(torch.exp(-self.sigma * pair_sign * score_diff))
+            total_loss = total_loss + pair_loss[pair_mask].mean()
+            start = end
+
+        return total_loss
+
+
+def create_lambda_rank_dataset(
+    dataset: RankerDataset,
+) -> tuple[np.ndarray, np.ndarray, list[int]]:
+    """Return LightGBM LambdaRank-compatible arrays and group sizes."""
+    ordered_rows = dataset._ordered_rows()
+    X, y = dataset.to_numpy(rows=ordered_rows)
+    group_sizes = dataset._group_sizes_by_person(ordered_rows)
+    return X, y, group_sizes
 
 
 def sample_negatives(
@@ -175,6 +267,7 @@ def build_ranker_dataset(
     seed: int = 42,
     include_source_features: bool = False,
     include_text_embedding_feature: bool = False,
+    text_similarity_fn: Callable[[int, HobbyCandidate], float] | None = None,
 ) -> RankerDataset:
     rng = random.Random(seed)
 
@@ -229,7 +322,21 @@ def build_ranker_dataset(
 
         def _build_row(hid: int, label: int) -> RankerRow:
             candidate = _make_candidate(hid)
-            features = build_rerank_features(person_context, candidate, hobby_profile, known_hobby_names, reranker_config)
+            text_embedding_similarity = 0.0
+            if include_text_embedding_feature and text_similarity_fn is not None:
+                try:
+                    text_embedding_similarity = float(text_similarity_fn(person_id, candidate))
+                except Exception:
+                    text_embedding_similarity = 0.0
+
+            features = build_rerank_features(
+                person_context,
+                candidate,
+                hobby_profile,
+                known_hobby_names,
+                reranker_config,
+                text_embedding_similarity=text_embedding_similarity,
+            )
             features.pop("similar_person_score", None)
             features.pop("persona_text_fit", None)
             return RankerRow(person_id=person_id, hobby_id=hid, label=label, features=features)
@@ -274,23 +381,40 @@ class LightGBMRanker:
         callbacks = [
             lgb.early_stopping(stopping_rounds=early_stopping_rounds, verbose=False),
         ]
-        
-        self.model = lgb.train(
-            params=self.params,
-            train_set=train_dataset,
-            num_boost_round=num_boost_round,
-            valid_sets=[train_dataset, val_dataset],
-            valid_names=["train", "val"],
-            callbacks=callbacks,
-        )
+        evals_result: dict[str, Any] = {}
+
+        train_kwargs: dict[str, Any] = {
+            "params": self.params,
+            "train_set": train_dataset,
+            "num_boost_round": num_boost_round,
+            "valid_sets": [train_dataset, val_dataset],
+            "valid_names": ["train", "val"],
+            "callbacks": callbacks,
+        }
+
+        try:
+            train_kwargs["evals_result"] = evals_result
+            self.model = lgb.train(**train_kwargs)
+        except TypeError:
+            # Older LightGBM versions used in this environment may not support evals_result kwarg.
+            train_kwargs.pop("evals_result", None)
+            self.model = lgb.train(**train_kwargs)
         
         self.best_iteration = self.model.best_iteration
-        self.best_score = self.model.best_score["val"]["auc"]
+        val_metrics = self.model.best_score.get("val", {}) if isinstance(self.model.best_score, dict) else {}
+        if isinstance(val_metrics, dict) and val_metrics:
+            best_metric_key = next(iter(val_metrics.keys()))
+            self.best_score = float(val_metrics[best_metric_key])
+        else:
+            self.best_score = 0.0
+            best_metric_key = self.params.get("metric", "auc")
         
         return {
             "params": self.params,
             "best_iteration": self.best_iteration,
             "best_score": self.best_score,
+            "best_metric": best_metric_key,
+            "train_metrics": evals_result,
             "feature_importance": self.feature_importance(),
         }
 
@@ -440,15 +564,27 @@ def load_or_build_candidate_pool(
                 else:
                     print(f"Candidate pool cache format invalid, rebuilding: {cache_path}")
 
-    pools = {}
+    pools: dict[int, list[HobbyCandidate]] = {}
     for person_id in tqdm(person_ids, desc=f"candidate pools ({label})", disable=disable_progress):
         known = train_known.get(person_id, set())
         pop = normalize_candidate_scores(
-            popularity_candidate_provider(train_edges, person_id, known, candidate_k, popularity_counts=popularity_counts),
+            popularity_candidate_provider(
+                train_edges,
+                person_id,
+                known,
+                candidate_k,
+                popularity_counts=popularity_counts,
+            ),
             normalization_method,
         )
         cooc = normalize_candidate_scores(
-            cooccurrence_candidate_provider(train_edges, person_id, known, candidate_k, cooccurrence_counts=cooccurrence_counts),
+            cooccurrence_candidate_provider(
+                train_edges,
+                person_id,
+                known,
+                candidate_k,
+                cooccurrence_counts=cooccurrence_counts,
+            ),
             normalization_method,
         )
         merged = merge_candidates_by_hobby({"popularity": pop, "cooccurrence": cooc}, candidate_k)

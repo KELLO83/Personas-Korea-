@@ -165,7 +165,8 @@ Evaluate the promoted LightGBM ranking path with:
    - Source one-hot ablation: completed and rejected. `include_source_features=true` lowered validation Recall/NDCG and coverage, so the default remains `include_source_features=false`.
    - Phase 2.5 default decision closure: completed. This config is the fixed baseline for KURE dense embedding MMR and leakage-safe text embedding experiments.
 
-3. **MMR diversity reordering** — **NO-GO**. Category one-hot embedding produces binary cosine similarity (0 or 1), making MMR a no-op within same-category items. All lambda values (0.1–0.9) produce identical results to the baseline. MMR remains available as `--use-mmr` flag (default: false), but effective diversity requires KURE dense embeddings (planned for Phase 5).
+3. **MMR diversity reordering** — **NO-GO**. Category one-hot embedding produces binary cosine similarity (0 or 1), making MMR a no-op within same-category items. All lambda values (0.1–0.9) produced effectively identical results to the baseline. MMR remains available as `--use-mmr` flag (default: false).
+4. **Phase 5-A KURE dense embedding MMR** — **NO-GO**. Lambda `0.5`, `0.7`, `0.8`, `0.9` 모두 validation 게이트에서 recall/ndcg accuracy 기준 미달해 모두 `blocked`. test는 winner 부재로 생략, 기본은 `MMR=false` 유지.
 
 **Current default pipeline:**
 
@@ -177,9 +178,9 @@ MMR     = off (optional flag only)
 
 **Next priorities:**
 
-1. KURE dense embedding cache → MMR re-evaluation with meaningful similarity
+1. Phase 5-A 정리: KURE dense embedding MMR 재평가는 `phase5_kure_mmr_summary.md`로 마무리되어 `NO-GO`; 기본 경로는 유지.
 2. Leakage-safe text embedding feature ablation after audit passes
-3. Use the closed Phase 2.5 default (`num_leaves=31`, `neg_ratio=4`, `hard_ratio=0.8`, `include_source_features=false`, `MMR=false`) as the fixed comparison baseline
+3. Maintain fixed comparison baseline from closed Phase 2.5 (`num_leaves=31`, `neg_ratio=4`, `hard_ratio=0.8`, `include_source_features=false`, `MMR=false`)
 
 ## Evaluate Stage 1 ablation (including item-item providers)
 
@@ -196,6 +197,7 @@ Key experiment outputs are persisted under `GNN_Neural_Network/artifacts/` rathe
 - `metrics.json`: LightGCN training history and best checkpoint metrics
 - `stage1_ablation_validation.json`, `stage1_ablation_test.json`: provider-only and provider-combination comparisons
 - `rerank_metrics.json`: selected Stage 1 baseline vs Stage 2 metrics and promotion decision
+- `artifacts/experiments/phase5_kure_mmr_summary.md`: Phase 5-A KURE dense embedding MMR validation sweep summary and NO-GO ruling
 - `recommendation_quality_audit.json`: coverage, entropy, popularity-bias, and segment audit
 - `sample_recommendations_review.json`: qualitative sample review payload
 - `experiment_decisions.json`: explicit accepted/rejected component decisions

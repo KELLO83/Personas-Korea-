@@ -185,6 +185,20 @@ EMBEDDING_DEVICE=cuda
 .\.venv\Scripts\python.exe -m uvicorn src.api.main:app --host 0.0.0.0 --port 8000
 ```
 
+### 3.5 Neo4j 그래프 재적재 (10/20/30대 1만명 이내)
+
+`scripts/build_graph.py`를 다음처럼 실행해 기존 그래프를 지우고, 연령대 기반으로 샘플링해 새로 적재할 수 있습니다.
+
+```powershell
+.\.venv\Scripts\python.exe scripts\build_graph.py \
+  --reset \
+  --age-groups 10,20,30 \
+  --target-persons 10000 \
+  --age-sample-seed 42
+```
+
+파이프라인이 큰 경우에는 `--sample-size`로 사전 축소한 뒤 연령대 샘플링을 적용할 수 있고, `--target-persons`를 생략하면 제한 없이 연령대만 필터링됩니다.
+
 ### 4. 화면 실행
 
 ### Next.js React 화면

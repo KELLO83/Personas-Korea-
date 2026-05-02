@@ -204,6 +204,92 @@ def mmr_rerank_with_hobbies(
     return mmr_rerank(hobby_ids, relevance_scores, embeddings, lambda_param, top_k)
 
 
+def dpp_rerank(
+    hobby_ids: list[int],
+    relevance_scores: np.ndarray,
+    embeddings: np.ndarray,
+    theta: float = 0.5,
+    top_k: int = 10,
+) -> list[int]:
+    """Greedy Determinantal Point Process (DPP) reranking.
+
+    Uses a low-cost greedy solver with a relevance-diversity kernel. Higher `theta`
+    biases toward embedding diversity, lower `theta` biases toward relevance score.
+    """
+    if not hobby_ids:
+        return []
+
+    k = min(max(int(top_k), 0), len(hobby_ids))
+    if k <= 0:
+        return []
+
+    scores = np.asarray(relevance_scores, dtype=np.float32).reshape(-1)
+    if scores.shape[0] != len(hobby_ids):
+        scores = np.repeat(0.0, len(hobby_ids))
+
+    if embeddings.shape[0] != len(hobby_ids):
+        return hobby_ids[:k]
+
+    scores = scores.astype(np.float64)
+    if scores.size == 0:
+        return hobby_ids[:k]
+
+    max_score = float(scores.max())
+    min_score = float(scores.min())
+    if max_score == min_score:
+        score_norm = np.ones_like(scores)
+    else:
+        score_norm = (scores - min_score) / (max_score - min_score)
+
+    sim = embeddings @ embeddings.T
+    sim = np.nan_to_num(sim, nan=0.0)
+    sim = np.clip(sim, -1.0, 1.0)
+
+    alpha = float(np.clip(theta, 0.0, 1.0))
+    similarity_term = (sim + 1.0) / 2.0
+    relevance_term = np.outer(score_norm, score_norm)
+    kernel = alpha * similarity_term + (1.0 - alpha) * relevance_term
+    kernel = np.asarray(kernel, dtype=np.float64)
+
+    if kernel.ndim != 2 or kernel.shape[0] != kernel.shape[1]:
+        return hobby_ids[:k]
+
+    jitter = 1e-6
+    kernel = kernel + np.eye(kernel.shape[0], dtype=np.float64) * jitter
+
+    selected: list[int] = []
+    remaining = set(range(len(hobby_ids)))
+
+    def _logdet(indices: list[int]) -> float:
+        if not indices:
+            return 0.0
+        sub = kernel[np.ix_(indices, indices)]
+        sign, logdet = np.linalg.slogdet(sub)
+        if sign <= 0:
+            return -1.0e9
+        return float(logdet)
+
+    while len(selected) < k and remaining:
+        best_idx = -1
+        best_value = float("-inf")
+        for i in list(remaining):
+            value = _logdet(selected + [i])
+            if value > best_value:
+                best_value = value
+                best_idx = i
+
+        if best_idx < 0:
+            break
+
+        selected.append(best_idx)
+        remaining.remove(best_idx)
+
+    if len(selected) == 0:
+        return hobby_ids[:k]
+
+    return [hobby_ids[i] for i in selected]
+
+
 def _get_category(hobby_name: str, hobby_taxonomy: dict[str, object] | None) -> str | None:
     """Extract category from hobby taxonomy for a given hobby name."""
     if hobby_taxonomy is None:

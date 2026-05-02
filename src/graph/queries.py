@@ -59,3 +59,9 @@ MATCH (n)
 RETURN labels(n)[0] AS label, count(n) AS count
 ORDER BY label
 """
+
+
+CLEAR_GRAPH_QUERY = """
+MATCH (n)
+DETACH DELETE n
+"""
