@@ -98,6 +98,18 @@ When root `TASKS.md` references root tasks that depend on GNN results (for examp
 .\.venv\Scripts\python.exe GNN_Neural_Network\scripts\source_onehot_ablation.py
 ```
 
+## Windows Terminal/PowerShell Encoding Patch
+
+When running Python scripts via PowerShell/Windows Terminal, Korean text may appear garbled due to encoding mismatch (CP949 vs UTF-8). To prevent this, run the following commands before executing Python scripts:
+
+```powershell
+chcp 65001
+$env:PYTHONIOENCODING = "utf-8"
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+```
+
+Alternatively, use **Windows Terminal** (recommended) which has UTF-8 support enabled by default.
+
 ## Infrastructure
 
 - **Neo4j**: Docker container `neo4j-personas` (neo4j:5), bolt on 7687, HTTP on 7474
