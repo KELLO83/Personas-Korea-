@@ -1,0 +1,11 @@
+{
+  "experiment_id": "phase5_b2_feature_balance_feature_fraction_0.7",
+  "status": "trained",
+  "data_split": "validation_internal_ranker_split",
+  "input_config_summary": {
+    "config_path": "GNN_Neural_Network\\configs\\lightgcn_hobby.yaml",
+    "candidate_pool_size": 50,
+    "score_normalization": "rank_percentile"
+  },
+  "runtime_seconds": 14.546285600001283
+}

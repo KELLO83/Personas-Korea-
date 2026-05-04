@@ -1,0 +1,329 @@
+{
+  "split": "test",
+  "experiment_id": "",
+  "status": "test_evaluated",
+  "runtime_seconds": 114.33215089999976,
+  "model_path": "GNN_Neural_Network\\artifacts\\experiments\\phase2_5_num_leaves_31\\ranker_model.txt",
+  "feature_policy": {
+    "feature_columns": [
+      "lightgcn_score",
+      "cooccurrence_score",
+      "segment_popularity_score",
+      "known_hobby_compatibility",
+      "age_group_fit",
+      "occupation_fit",
+      "region_fit",
+      "popularity_prior",
+      "mismatch_penalty",
+      "popularity_penalty",
+      "novelty_bonus",
+      "category_diversity_reward",
+      "is_cold_start"
+    ],
+    "include_source_features": false,
+    "include_text_embedding_feature": false
+  },
+  "input_config_summary": {
+    "config_path": "GNN_Neural_Network\\configs\\lightgcn_hobby.yaml",
+    "candidate_pool_size": 50,
+    "score_normalization": "rank_percentile"
+  },
+  "candidate_pool_policy": {
+    "providers": [
+      "popularity",
+      "cooccurrence"
+    ],
+    "candidate_k": 50,
+    "normalization_method": "rank_percentile",
+    "cache_key": "pool_test_popularity-cooccurrence_k50_rank_percentile_e75d0f466eb40_hf536cdf1_pc4b1e288",
+    "cache_path": "GNN_Neural_Network\\artifacts\\experiments\\phase2_5_num_leaves_31\\cache\\pool_test_popularity-cooccurrence_k50_rank_percentile_e75d0f466eb40_hf536cdf1_pc4b1e288.json"
+  },
+  "feature_cache_policy": {
+    "cache_key": "550d33f5a0031157",
+    "cache_path": "GNN_Neural_Network\\artifacts\\experiments\\phase2_5_num_leaves_31\\cache\\cache\\features_550d33f5a0031157.npz",
+    "metadata_path": "GNN_Neural_Network\\artifacts\\experiments\\phase2_5_num_leaves_31\\cache\\cache\\features_550d33f5a0031157.json",
+    "cache_hit": true
+  },
+  "v2_fallback_count": 0,
+  "stage1_baseline": {
+    "providers": [
+      "popularity",
+      "cooccurrence"
+    ],
+    "metrics": {
+      "recall@5": 0.5316532872675541,
+      "ndcg@5": 0.3864200529949487,
+      "hit_rate@5": 0.5316532872675541,
+      "catalog_coverage@5": 0.05555555555555555,
+      "novelty@5": 3.8093543647281867,
+      "intra_list_diversity@5": 1.0,
+      "recall@10": 0.6908850726552179,
+      "ndcg@10": 0.43755581145851097,
+      "hit_rate@10": 0.6908850726552179,
+      "catalog_coverage@10": 0.12777777777777777,
+      "novelty@10": 4.483649175345177,
+      "intra_list_diversity@10": 0.9959850512030479,
+      "recall@20": 0.8709480743826847,
+      "ndcg@20": 0.48325239725773284,
+      "hit_rate@20": 0.8709480743826847,
+      "catalog_coverage@20": 0.19444444444444445,
+      "novelty@20": 5.156193104156455,
+      "intra_list_diversity@20": 0.972454660683857,
+      "per_segment": {
+        "age_group": {
+          "20대": {
+            "recall": 0.8604651162790697,
+            "count": 1376
+          },
+          "30대": {
+            "recall": 0.8615084525357607,
+            "count": 1538
+          },
+          "60대": {
+            "recall": 0.8869115958668198,
+            "count": 1742
+          },
+          "50대": {
+            "recall": 0.8814352574102964,
+            "count": 1923
+          },
+          "40대": {
+            "recall": 0.8430899215449608,
+            "count": 1657
+          },
+          "90대": {
+            "recall": 0.9024390243902439,
+            "count": 82
+          },
+          "70대": {
+            "recall": 0.8782518210197711,
+            "count": 961
+          },
+          "80대": {
+            "recall": 0.8995726495726496,
+            "count": 468
+          },
+          "10대": {
+            "recall": 0.9148936170212766,
+            "count": 94
+          }
+        },
+        "sex": {
+          "남자": {
+            "recall": 0.8599093531108364,
+            "count": 4854
+          },
+          "여자": {
+            "recall": 0.8816924002406257,
+            "count": 4987
+          }
+        },
+        "recall_gap": {
+          "age_group": 0.07180369547631582,
+          "sex": 0.02178304712978929
+        }
+      }
+    }
+  },
+  "v2_lightgbm_ranker": {
+    "metrics": {
+      "recall@5": 0.5444568641398232,
+      "ndcg@5": 0.39444582705219544,
+      "hit_rate@5": 0.5444568641398232,
+      "catalog_coverage@5": 0.12222222222222222,
+      "novelty@5": 3.929037899172333,
+      "intra_list_diversity@5": 0.9963621583172374,
+      "oracle_recall@5": 0.977136469870948,
+      "recall@10": 0.7096839752057718,
+      "ndcg@10": 0.447712669317698,
+      "hit_rate@10": 0.7096839752057718,
+      "catalog_coverage@10": 0.15555555555555556,
+      "novelty@10": 4.584286633989583,
+      "intra_list_diversity@10": 0.9881583849880493,
+      "oracle_recall@10": 0.977136469870948,
+      "recall@20": 0.8837516512549538,
+      "ndcg@20": 0.49198826525299916,
+      "hit_rate@20": 0.8837516512549538,
+      "catalog_coverage@20": 0.25555555555555554,
+      "novelty@20": 5.252552430232972,
+      "intra_list_diversity@20": 0.9769139849930604,
+      "oracle_recall@20": 0.977136469870948,
+      "per_segment": {
+        "age_group": {
+          "20대": {
+            "recall": 0.8902616279069767,
+            "count": 1376
+          },
+          "30대": {
+            "recall": 0.8732119635890767,
+            "count": 1538
+          },
+          "60대": {
+            "recall": 0.9058553386911596,
+            "count": 1742
+          },
+          "50대": {
+            "recall": 0.8824752990119604,
+            "count": 1923
+          },
+          "40대": {
+            "recall": 0.8491249245624622,
+            "count": 1657
+          },
+          "90대": {
+            "recall": 0.926829268292683,
+            "count": 82
+          },
+          "70대": {
+            "recall": 0.8917793964620188,
+            "count": 961
+          },
+          "80대": {
+            "recall": 0.9166666666666666,
+            "count": 468
+          },
+          "10대": {
+            "recall": 0.9042553191489362,
+            "count": 94
+          }
+        },
+        "sex": {
+          "남자": {
+            "recall": 0.8739184177997528,
+            "count": 4854
+          },
+          "여자": {
+            "recall": 0.8933226388610387,
+            "count": 4987
+          }
+        },
+        "recall_gap": {
+          "age_group": 0.07770434373022073,
+          "sex": 0.01940422106128592
+        }
+      }
+    },
+    "delta_vs_v1_reranker": {
+      "recall@10": 0.00538563154150995,
+      "ndcg@10": 0.007383713476782794,
+      "hit_rate@10": 0.00538563154150995
+    },
+    "delta_vs_stage1": {
+      "recall@10": 0.01879890255055383,
+      "ndcg@10": 0.010156857859187018,
+      "hit_rate@10": 0.01879890255055383
+    },
+    "use_mmr": false,
+    "mmr_lambda": null
+  },
+  "candidate_recall": {
+    "recall@50": 0.977136469870948,
+    "ndcg@50": 0.5048740954881246,
+    "hit_rate@50": 0.977136469870948,
+    "catalog_coverage@50": 0.6166666666666667,
+    "novelty@50": 7.083921642538247,
+    "intra_list_diversity@50": 0.8590912239298544
+  },
+  "metrics_summary": {
+    "stage1_recall@10": 0.6908850726552179,
+    "v2_recall@10": 0.7096839752057718,
+    "stage1_ndcg@10": 0.43755581145851097,
+    "v2_ndcg@10": 0.447712669317698,
+    "delta_vs_stage1_recall@10": 0.01879890255055383,
+    "delta_vs_stage1_ndcg@10": 0.010156857859187018,
+    "v2_fallback_count": 0,
+    "candidate_recall@50": 0.977136469870948
+  },
+  "promotion_decision": {
+    "status": "promoted",
+    "gates": {
+      "recall@10": {
+        "threshold": -0.002,
+        "actual": 0.00538563154150995,
+        "pass": true
+      },
+      "ndcg@10": {
+        "threshold": 0.005,
+        "actual": 0.007383713476782794,
+        "pass": true
+      }
+    },
+    "reason": "v2 passes both gates on test (recall@10 delta=+0.005386 >= -0.002, ndcg@10 delta=+0.007384 >= 0.005)"
+  },
+  "v1_deterministic_reranker": {
+    "metrics": {
+      "recall@5": 0.5376486129458389,
+      "ndcg@5": 0.3868009075321806,
+      "hit_rate@5": 0.5376486129458389,
+      "catalog_coverage@5": 0.42777777777777776,
+      "novelty@5": 4.078992582451549,
+      "intra_list_diversity@5": 0.9980591403312636,
+      "recall@10": 0.7042983436642618,
+      "ndcg@10": 0.4403289558409152,
+      "hit_rate@10": 0.7042983436642618,
+      "catalog_coverage@10": 0.5166666666666667,
+      "novelty@10": 4.732133210283262,
+      "intra_list_diversity@10": 0.9898926260881978,
+      "recall@20": 0.8766385529925821,
+      "ndcg@20": 0.48412608052492084,
+      "hit_rate@20": 0.8766385529925821,
+      "catalog_coverage@20": 0.5666666666666667,
+      "novelty@20": 5.478408706344554,
+      "intra_list_diversity@20": 0.9718257130480424,
+      "per_segment": {
+        "age_group": {
+          "20대": {
+            "recall": 0.8873546511627907,
+            "count": 1376
+          },
+          "30대": {
+            "recall": 0.8732119635890767,
+            "count": 1538
+          },
+          "60대": {
+            "recall": 0.8938002296211252,
+            "count": 1742
+          },
+          "50대": {
+            "recall": 0.8835153406136246,
+            "count": 1923
+          },
+          "40대": {
+            "recall": 0.8394689197344599,
+            "count": 1657
+          },
+          "90대": {
+            "recall": 0.926829268292683,
+            "count": 82
+          },
+          "70대": {
+            "recall": 0.8740894901144641,
+            "count": 961
+          },
+          "80대": {
+            "recall": 0.8931623931623932,
+            "count": 468
+          },
+          "10대": {
+            "recall": 0.8723404255319149,
+            "count": 94
+          }
+        },
+        "sex": {
+          "남자": {
+            "recall": 0.8658838071693449,
+            "count": 4854
+          },
+          "여자": {
+            "recall": 0.8871064768397834,
+            "count": 4987
+          }
+        },
+        "recall_gap": {
+          "age_group": 0.08736034855822306,
+          "sex": 0.02122266967043851
+        }
+      }
+    }
+  }
+}

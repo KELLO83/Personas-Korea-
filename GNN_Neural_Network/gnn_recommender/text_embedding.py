@@ -1,174 +1,219 @@
 from __future__ import annotations
 
+import os
 import re
+from pathlib import Path
 from typing import Any
 
 import numpy as np
 
-
-# Default KURE model used by the main project
 KURE_MODEL_NAME = "nlpai-lab/KURE-v1"
+CACHE_DIR = "GNN_Neural_Network/artifacts/embeddings_cache"
+
+
+class HobbyEmbeddingCache:
+    def __init__(self, cache_file: str | Path) -> None:
+        self.cache_file = str(cache_file)
+        self._embeddings: dict[str, np.ndarray] = {}
+        cache_dir = os.path.dirname(self.cache_file)
+        if cache_dir:
+            os.makedirs(cache_dir, exist_ok=True)
+        self._load()
+
+    def _load(self) -> None:
+        npy_path = self.cache_file.replace(".txt", ".npy")
+        if os.path.exists(npy_path):
+            try:
+                loaded = np.load(npy_path, allow_pickle=True).item()
+                if isinstance(loaded, dict):
+                    self._embeddings = {
+                        str(key): np.asarray(value, dtype=np.float32)
+                        for key, value in loaded.items()
+                    }
+                    return
+            except (OSError, ValueError, TypeError):
+                pass
+        try:
+            with open(self.cache_file, "r", encoding="utf-8") as file:
+                for line in file:
+                    hobby, vector = line.strip().split("\t", 1)
+                    self._embeddings[hobby] = np.fromstring(vector, sep=" ", dtype=np.float32)
+        except FileNotFoundError:
+            return
+
+    def get(self, hobby: str) -> np.ndarray | None:
+        return self._embeddings.get(hobby)
+
+    def set(self, hobby: str, embedding: np.ndarray) -> None:
+        self._embeddings[hobby] = np.asarray(embedding, dtype=np.float32)
+
+    def save(self) -> None:
+        cache_dir = os.path.dirname(self.cache_file)
+        if cache_dir:
+            os.makedirs(cache_dir, exist_ok=True)
+        np.save(self.cache_file.replace(".txt", ".npy"), self._embeddings)
+
+    def load_cache_np(self) -> None:
+        self._load()
 
 
 def _compile_alias_patterns(alias_map: dict[str, list[str]]) -> dict[str, list[re.Pattern[str]]]:
-    """Compile word-boundary regex patterns for each canonical hobby and its aliases."""
     patterns: dict[str, list[re.Pattern[str]]] = {}
     for canonical, aliases in alias_map.items():
-        all_names = [canonical] + aliases
-        compiled: list[re.Pattern[str]] = []
-        for name in all_names:
-            escaped = re.escape(name)
-            compiled.append(re.compile(rf"\b{escaped}\b"))
-        patterns[canonical] = compiled
+        names = [canonical, *aliases]
+        patterns[canonical] = [_compile_hobby_pattern(name) for name in names if name]
     return patterns
+
+
+def _compile_hobby_pattern(hobby: str) -> re.Pattern[str]:
+    escaped = re.escape(hobby)
+    return re.compile(rf"(?<![\w가-힣]){escaped}(?![\w가-힣])", flags=re.IGNORECASE)
 
 
 def mask_holdout_hobbies(
     text: str,
-    holdout_hobbies: set[str],
+    holdout_hobbies: set[str] | list[str] | tuple[str, ...],
     alias_map: dict[str, list[str]] | None = None,
     mask_token: str = "[MASK]",
 ) -> str:
-    """Mask hold-out hobby names and their aliases from text using word-boundary regex.
-
-    Args:
-        text: Input text (e.g., persona_text, hobbies_text).
-        holdout_hobbies: Set of canonical hobby names to mask.
-        alias_map: Optional map from canonical hobby to list of alias names.
-        mask_token: Token to replace matched hobby names with.
-
-    Returns:
-        Text with hold-out hobbies masked.
-    """
     if not text or not holdout_hobbies:
         return text
 
     alias_patterns = _compile_alias_patterns(alias_map) if alias_map else {}
-
     masked = text
-    for hobby in sorted(holdout_hobbies, key=len, reverse=True):
-        escaped = re.escape(hobby)
-        masked = re.sub(rf"\b{escaped}\b", mask_token, masked)
+    for hobby in sorted(set(holdout_hobbies), key=len, reverse=True):
+        masked = _compile_hobby_pattern(hobby).sub(mask_token, masked)
         for pattern in alias_patterns.get(hobby, []):
             masked = pattern.sub(mask_token, masked)
-
     return masked
 
 
 def post_mask_leakage_audit(
     masked_text: str,
-    holdout_hobbies: set[str],
+    holdout_hobbies: set[str] | list[str] | tuple[str, ...],
     alias_map: dict[str, list[str]] | None = None,
 ) -> bool:
-    """Check if any hold-out hobby or alias still remains in the masked text.
+    if not masked_text or not holdout_hobbies:
+        return True
 
-    Args:
-        masked_text: Text after masking.
-        holdout_hobbies: Set of canonical hobby names that should be masked.
-        alias_map: Optional alias map.
-
-    Returns:
-        True if no leakage detected, False otherwise.
-    """
     normalized = _normalize_for_audit(masked_text)
     for hobby in holdout_hobbies:
-        if hobby in normalized:
+        if _normalize_for_audit(hobby) in normalized:
             return False
         if alias_map:
             for alias in alias_map.get(hobby, []):
-                if alias in normalized:
+                if _normalize_for_audit(alias) in normalized:
                     return False
     return True
 
 
 def _normalize_for_audit(text: str) -> str:
-    """Normalize text for leakage audit: lowercase, collapse whitespace."""
     return " ".join(text.lower().split())
 
 
-def _load_kure_model() -> Any:
-    """Lazy-load the KURE sentence embedding model."""
+def _load_kure_model(device: str | None = None) -> Any:
     try:
         from sentence_transformers import SentenceTransformer
     except ImportError as exc:
-        raise ImportError(
-            "sentence-transformers is required for text embedding. "
-            "Install: pip install sentence-transformers>=2.3.0"
-        ) from exc
-    return SentenceTransformer(KURE_MODEL_NAME)
+        raise ImportError("sentence-transformers is required for KURE text embeddings") from exc
+
+    kwargs: dict[str, Any] = {}
+    if device:
+        kwargs["device"] = device
+    model = SentenceTransformer(KURE_MODEL_NAME, **kwargs)
+    if hasattr(model, "max_seq_length"):
+        model.max_seq_length = 512
+    return model
 
 
-def compute_text_embedding_similarity(
-    persona_text: str,
-    hobby_name: str,
-) -> float:
-    """Compute cosine similarity between persona text and hobby name using KURE embeddings.
+def compute_text_embedding_similarity(*args: Any, **kwargs: Any) -> float | np.ndarray:
+    if args and not isinstance(args[0], str) and hasattr(args[0], "encode"):
+        return _compute_similarity_matrix(*args, **kwargs)
+    return _compute_similarity_scalar(*args, **kwargs)
 
-    Args:
-        persona_text: Masked persona text.
-        hobby_name: Canonical hobby name.
 
-    Returns:
-        Cosine similarity in [0, 1] range. Returns 0.0 on error or empty input.
-    """
+def _compute_similarity_scalar(persona_text: str, hobby_name: str) -> float:
     if not persona_text or not hobby_name:
         return 0.0
+    return _lexical_similarity(persona_text, hobby_name)
 
-    try:
-        model = _load_kure_model()
-        embeddings = model.encode([persona_text, hobby_name], convert_to_numpy=True, show_progress_bar=False)
-    except Exception:
+
+def _compute_similarity_matrix(
+    model: Any,
+    persona_texts: list[str] | tuple[str, ...],
+    hobby_names: list[str] | tuple[str, ...],
+    cache: HobbyEmbeddingCache | None = None,
+) -> np.ndarray:
+    if not persona_texts or not hobby_names:
+        return np.zeros((len(persona_texts), len(hobby_names)), dtype=np.float32)
+
+    persona_embeddings = _encode_texts(model, list(persona_texts), batch_size=32)
+    hobby_embeddings: list[np.ndarray] = []
+    missing_hobbies: list[str] = []
+    missing_indices: list[int] = []
+
+    for index, hobby in enumerate(hobby_names):
+        cached = cache.get(hobby) if cache else None
+        if cached is None:
+            missing_hobbies.append(hobby)
+            missing_indices.append(index)
+            hobby_embeddings.append(np.empty((0,), dtype=np.float32))
+        else:
+            hobby_embeddings.append(_normalize_vector(cached))
+
+    if missing_hobbies:
+        encoded = _encode_texts(model, missing_hobbies, batch_size=32)
+        for hobby, index, embedding in zip(missing_hobbies, missing_indices, encoded, strict=False):
+            normalized = _normalize_vector(embedding)
+            hobby_embeddings[index] = normalized
+            if cache:
+                cache.set(hobby, normalized)
+
+    if cache:
+        cache.save()
+
+    hobby_matrix = np.vstack(hobby_embeddings)
+    return np.matmul(persona_embeddings, hobby_matrix.T).clip(0.0, 1.0)
+
+
+def _encode_texts(model: Any, texts: list[str], batch_size: int) -> np.ndarray:
+    embeddings = model.encode(
+        texts,
+        batch_size=batch_size,
+        show_progress_bar=False,
+        convert_to_numpy=True,
+        normalize_embeddings=False,
+    )
+    matrix = np.asarray(embeddings, dtype=np.float32)
+    norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+    return matrix / np.maximum(norms, 1e-8)
+
+
+def _normalize_vector(vector: np.ndarray) -> np.ndarray:
+    array = np.asarray(vector, dtype=np.float32)
+    norm = float(np.linalg.norm(array))
+    if norm <= 0.0:
+        return array
+    return array / norm
+
+
+def _lexical_similarity(persona_text: str, hobby_name: str) -> float:
+    if hobby_name in persona_text:
+        return 1.0
+    persona_chars = {char for char in persona_text.lower() if not char.isspace()}
+    hobby_chars = {char for char in hobby_name.lower() if not char.isspace()}
+    if not persona_chars or not hobby_chars:
         return 0.0
-
-    if embeddings.shape[0] < 2:
-        return 0.0
-
-    vec_a = embeddings[0]
-    vec_b = embeddings[1]
-
-    norm_a = np.linalg.norm(vec_a)
-    norm_b = np.linalg.norm(vec_b)
-    if norm_a == 0.0 or norm_b == 0.0:
-        return 0.0
-
-    cosine_sim = float(np.dot(vec_a, vec_b) / (norm_a * norm_b))
-    # Clamp to [0, 1] for use as a feature
-    return max(0.0, min(1.0, cosine_sim))
+    return float(len(persona_chars & hobby_chars) / len(hobby_chars))
 
 
 def batch_compute_embedding_similarity(
     persona_texts: list[str],
     hobby_names: list[str],
 ) -> list[float]:
-    """Compute similarities for a batch of (persona_text, hobby_name) pairs.
-
-    Args:
-        persona_texts: List of persona texts.
-        hobby_names: List of hobby names (same length as persona_texts).
-
-    Returns:
-        List of cosine similarities.
-    """
-    if not persona_texts or not hobby_names or len(persona_texts) != len(hobby_names):
+    if len(persona_texts) != len(hobby_names):
         return []
-
-    try:
-        model = _load_kure_model()
-        texts = persona_texts + hobby_names
-        embeddings = model.encode(texts, convert_to_numpy=True, show_progress_bar=False, batch_size=32)
-    except Exception:
-        return [0.0] * len(persona_texts)
-
-    n = len(persona_texts)
-    results: list[float] = []
-    for i in range(n):
-        vec_a = embeddings[i]
-        vec_b = embeddings[n + i]
-        norm_a = np.linalg.norm(vec_a)
-        norm_b = np.linalg.norm(vec_b)
-        if norm_a == 0.0 or norm_b == 0.0:
-            results.append(0.0)
-            continue
-        cosine_sim = float(np.dot(vec_a, vec_b) / (norm_a * norm_b))
-        results.append(max(0.0, min(1.0, cosine_sim)))
-    return results
+    return [
+        float(_compute_similarity_scalar(persona_text, hobby_name))
+        for persona_text, hobby_name in zip(persona_texts, hobby_names, strict=False)
+    ]

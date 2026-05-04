@@ -1,0 +1,549 @@
+{
+  "split": "test",
+  "experiment_id": "phase5_kure_mmr_lambda_0.9",
+  "phase5_mode": true,
+  "status": "test_evaluated",
+  "runtime_seconds": 251.00465939999776,
+  "model_path": "GNN_Neural_Network\\artifacts\\experiments\\phase2_5_num_leaves_31\\ranker_model.txt",
+  "feature_policy": {
+    "feature_columns": [
+      "lightgcn_score",
+      "cooccurrence_score",
+      "segment_popularity_score",
+      "known_hobby_compatibility",
+      "age_group_fit",
+      "occupation_fit",
+      "region_fit",
+      "popularity_prior",
+      "mismatch_penalty",
+      "popularity_penalty",
+      "novelty_bonus",
+      "category_diversity_reward",
+      "is_cold_start"
+    ],
+    "include_source_features": false,
+    "include_text_embedding_feature": false
+  },
+  "input_config_summary": {
+    "config_path": "GNN_Neural_Network\\configs\\lightgcn_hobby.yaml",
+    "candidate_pool_size": 50,
+    "score_normalization": "rank_percentile"
+  },
+  "candidate_pool_policy": {
+    "providers": [
+      "popularity",
+      "cooccurrence"
+    ],
+    "candidate_k": 50,
+    "normalization_method": "rank_percentile",
+    "cache_key": "pool_test_popularity-cooccurrence_k50_rank_percentile_e75d0f466eb40_hf536cdf1_pc4b1e288",
+    "cache_path": "GNN_Neural_Network\\artifacts\\experiments\\phase5_kure_mmr_lambda_0.9\\cache\\cache\\pool_test_popularity-cooccurrence_k50_rank_percentile_e75d0f466eb40_hf536cdf1_pc4b1e288.json"
+  },
+  "feature_cache_policy": {
+    "cache_key": "550d33f5a0031157",
+    "cache_path": "GNN_Neural_Network\\artifacts\\experiments\\phase5_kure_mmr_lambda_0.9\\cache\\cache\\features_550d33f5a0031157.npz",
+    "metadata_path": "GNN_Neural_Network\\artifacts\\experiments\\phase5_kure_mmr_lambda_0.9\\cache\\cache\\features_550d33f5a0031157.json",
+    "cache_hit": false
+  },
+  "v2_fallback_count": 0,
+  "stage1_baseline": {
+    "providers": [
+      "popularity",
+      "cooccurrence"
+    ],
+    "metrics": {
+      "recall@5": 0.5316532872675541,
+      "ndcg@5": 0.3864200529949487,
+      "hit_rate@5": 0.5316532872675541,
+      "catalog_coverage@5": 0.05555555555555555,
+      "novelty@5": 3.8093543647281867,
+      "intra_list_diversity@5": 1.0,
+      "recall@10": 0.6908850726552179,
+      "ndcg@10": 0.43755581145851097,
+      "hit_rate@10": 0.6908850726552179,
+      "catalog_coverage@10": 0.12777777777777777,
+      "novelty@10": 4.483649175345177,
+      "intra_list_diversity@10": 0.9959850512030479,
+      "recall@20": 0.8709480743826847,
+      "ndcg@20": 0.48325239725773284,
+      "hit_rate@20": 0.8709480743826847,
+      "catalog_coverage@20": 0.19444444444444445,
+      "novelty@20": 5.156193104156455,
+      "intra_list_diversity@20": 0.972454660683857,
+      "per_segment": {
+        "age_group": {
+          "20대": {
+            "recall": 0.8604651162790697,
+            "count": 1376
+          },
+          "30대": {
+            "recall": 0.8615084525357607,
+            "count": 1538
+          },
+          "60대": {
+            "recall": 0.8869115958668198,
+            "count": 1742
+          },
+          "50대": {
+            "recall": 0.8814352574102964,
+            "count": 1923
+          },
+          "40대": {
+            "recall": 0.8430899215449608,
+            "count": 1657
+          },
+          "90대": {
+            "recall": 0.9024390243902439,
+            "count": 82
+          },
+          "70대": {
+            "recall": 0.8782518210197711,
+            "count": 961
+          },
+          "80대": {
+            "recall": 0.8995726495726496,
+            "count": 468
+          },
+          "10대": {
+            "recall": 0.9148936170212766,
+            "count": 94
+          }
+        },
+        "sex": {
+          "남자": {
+            "recall": 0.8599093531108364,
+            "count": 4854
+          },
+          "여자": {
+            "recall": 0.8816924002406257,
+            "count": 4987
+          }
+        },
+        "recall_gap": {
+          "age_group": 0.07180369547631582,
+          "sex": 0.02178304712978929
+        }
+      }
+    }
+  },
+  "v2_lightgbm_ranker": {
+    "metrics": {
+      "recall@5": 0.5447617112082106,
+      "ndcg@5": 0.3946027037670454,
+      "hit_rate@5": 0.5447617112082106,
+      "catalog_coverage@5": 0.11666666666666667,
+      "novelty@5": 3.9247573929917774,
+      "intra_list_diversity@5": 0.9972462148155621,
+      "oracle_recall@5": 0.977136469870948,
+      "recall@10": 0.7092775124479219,
+      "ndcg@10": 0.44762070952344407,
+      "hit_rate@10": 0.7092775124479219,
+      "catalog_coverage@10": 0.15555555555555556,
+      "novelty@10": 4.577921954029072,
+      "intra_list_diversity@10": 0.9892309950434801,
+      "oracle_recall@10": 0.977136469870948,
+      "recall@20": 0.885377502286353,
+      "ndcg@20": 0.4924072155718517,
+      "hit_rate@20": 0.885377502286353,
+      "catalog_coverage@20": 0.2722222222222222,
+      "novelty@20": 5.254652113063882,
+      "intra_list_diversity@20": 0.9763235443553405,
+      "oracle_recall@20": 0.977136469870948,
+      "per_segment": {
+        "age_group": {
+          "20대": {
+            "recall": 0.8917151162790697,
+            "count": 1376
+          },
+          "30대": {
+            "recall": 0.8738621586475943,
+            "count": 1538
+          },
+          "60대": {
+            "recall": 0.9052812858783008,
+            "count": 1742
+          },
+          "50대": {
+            "recall": 0.8861154446177847,
+            "count": 1923
+          },
+          "40대": {
+            "recall": 0.8503319251659626,
+            "count": 1657
+          },
+          "90대": {
+            "recall": 0.9390243902439024,
+            "count": 82
+          },
+          "70대": {
+            "recall": 0.8917793964620188,
+            "count": 961
+          },
+          "80대": {
+            "recall": 0.9230769230769231,
+            "count": 468
+          },
+          "10대": {
+            "recall": 0.9148936170212766,
+            "count": 94
+          }
+        },
+        "sex": {
+          "남자": {
+            "recall": 0.8772146683147919,
+            "count": 4854
+          },
+          "여자": {
+            "recall": 0.8933226388610387,
+            "count": 4987
+          }
+        },
+        "recall_gap": {
+          "age_group": 0.08869246507793982,
+          "sex": 0.016107970546246797
+        }
+      }
+    },
+    "delta_vs_v1_reranker": {
+      "recall@10": 0.004979168783660115,
+      "ndcg@10": 0.007291753682528879,
+      "hit_rate@10": 0.004979168783660115
+    },
+    "delta_vs_stage1": {
+      "recall@10": 0.018392439792703996,
+      "ndcg@10": 0.010064898064933103,
+      "hit_rate@10": 0.018392439792703996
+    },
+    "phase5_kure_mmr_gates": {
+      "mode": "phase5_kure_mmr",
+      "baseline_path": "GNN_Neural_Network\\artifacts\\experiments\\phase2_5_num_leaves_31\\test_metrics.json",
+      "delta_vs_closed_phase2_5": {
+        "recall@10": -0.00040646275784983477,
+        "ndcg@10": -9.19597942539152e-05,
+        "candidate_recall@50": 0.0,
+        "coverage@10": 0.0,
+        "novelty@10": -0.006364679960511488,
+        "intra_list_diversity@10": 0.0010726100554308005,
+        "v2_fallback_count": 0
+      },
+      "gates": {
+        "recall@10": {
+          "baseline": "closed_phase2_5",
+          "threshold": -0.002,
+          "actual": -0.00040646275784983477,
+          "delta": -0.00040646275784983477,
+          "pass": true
+        },
+        "ndcg@10": {
+          "baseline": "closed_phase2_5",
+          "threshold": -0.002,
+          "actual": -9.19597942539152e-05,
+          "delta": -9.19597942539152e-05,
+          "pass": true
+        },
+        "coverage@10": {
+          "baseline": "closed_phase2_5",
+          "actual": 0.0,
+          "threshold": 0.0,
+          "delta": 0.0,
+          "pass": false
+        },
+        "novelty@10": {
+          "baseline": "closed_phase2_5",
+          "actual": -0.006364679960511488,
+          "threshold": 0.0,
+          "delta": -0.006364679960511488,
+          "pass": false
+        },
+        "intra_list_diversity@10": {
+          "baseline": "closed_phase2_5",
+          "actual": 0.0010726100554308005,
+          "threshold": 0.0,
+          "delta": 0.0010726100554308005,
+          "pass": true
+        },
+        "candidate_recall@50": {
+          "baseline": "closed_phase2_5",
+          "tolerance": 1e-06,
+          "actual": 0.0,
+          "delta": 0.0,
+          "pass": true
+        },
+        "v2_fallback_count": {
+          "baseline": 0,
+          "actual": 0,
+          "delta": 0,
+          "pass": true
+        },
+        "kure_cache_reusable": {
+          "baseline": true,
+          "actual": true,
+          "pass": true
+        }
+      },
+      "decision": {
+        "status": "blocked",
+        "mode": "phase5_kure_mmr",
+        "baseline_split": "test",
+        "baseline_path": "GNN_Neural_Network\\artifacts\\experiments\\phase2_5_num_leaves_31\\test_metrics.json",
+        "criteria": {
+          "accuracy": {
+            "recall_delta": -0.00040646275784983477,
+            "ndcg_delta": -9.19597942539152e-05
+          },
+          "diversity": {
+            "improved_metrics": 1,
+            "improvement_score": 1.0,
+            "required_improvements": 2
+          },
+          "diversity_improvements_required": "at least 2 of coverage, novelty, intra_list_diversity",
+          "candidate_recall_tolerance": 1e-06,
+          "fallback_requirement": "zero",
+          "kure_cache_reusable": true
+        },
+        "gates": {
+          "recall@10": {
+            "baseline": "closed_phase2_5",
+            "threshold": -0.002,
+            "actual": -0.00040646275784983477,
+            "delta": -0.00040646275784983477,
+            "pass": true
+          },
+          "ndcg@10": {
+            "baseline": "closed_phase2_5",
+            "threshold": -0.002,
+            "actual": -9.19597942539152e-05,
+            "delta": -9.19597942539152e-05,
+            "pass": true
+          },
+          "coverage@10": {
+            "baseline": "closed_phase2_5",
+            "actual": 0.0,
+            "threshold": 0.0,
+            "delta": 0.0,
+            "pass": false
+          },
+          "novelty@10": {
+            "baseline": "closed_phase2_5",
+            "actual": -0.006364679960511488,
+            "threshold": 0.0,
+            "delta": -0.006364679960511488,
+            "pass": false
+          },
+          "intra_list_diversity@10": {
+            "baseline": "closed_phase2_5",
+            "actual": 0.0010726100554308005,
+            "threshold": 0.0,
+            "delta": 0.0010726100554308005,
+            "pass": true
+          },
+          "candidate_recall@50": {
+            "baseline": "closed_phase2_5",
+            "tolerance": 1e-06,
+            "actual": 0.0,
+            "delta": 0.0,
+            "pass": true
+          },
+          "v2_fallback_count": {
+            "baseline": 0,
+            "actual": 0,
+            "delta": 0,
+            "pass": true
+          },
+          "kure_cache_reusable": {
+            "baseline": true,
+            "actual": true,
+            "pass": true
+          }
+        },
+        "reason": "Phase 5 blocked; failed: coverage@10, novelty@10"
+      }
+    },
+    "use_mmr": true,
+    "mmr_lambda": 0.9,
+    "mmr_embedding_method": "kure",
+    "mmr_embedding_meta": {
+      "embedding_method": "kure",
+      "cache_enabled": true,
+      "cache_dir": "GNN_Neural_Network\\artifacts\\experiments\\phase5_kure_mmr_lambda_0.9\\cache\\hobby_embedding_cache",
+      "cache_key": "4d27cedeb490c631",
+      "model_name": "nlpai-lab/KURE-v1",
+      "batch_size": 32,
+      "embedding_dim": 1024,
+      "num_hobbies": 180,
+      "hobby_names_hash": "ac358dc8efba54a6"
+    },
+    "mmr_embedding_batch_size": 32
+  },
+  "candidate_recall": {
+    "recall@50": 0.977136469870948,
+    "ndcg@50": 0.5048740954881246,
+    "hit_rate@50": 0.977136469870948,
+    "catalog_coverage@50": 0.6166666666666667,
+    "novelty@50": 7.083921642538247,
+    "intra_list_diversity@50": 0.8590912239298544
+  },
+  "metrics_summary": {
+    "stage1_recall@10": 0.6908850726552179,
+    "v2_recall@10": 0.7092775124479219,
+    "stage1_ndcg@10": 0.43755581145851097,
+    "v2_ndcg@10": 0.44762070952344407,
+    "delta_vs_stage1_recall@10": 0.018392439792703996,
+    "delta_vs_stage1_ndcg@10": 0.010064898064933103,
+    "v2_fallback_count": 0,
+    "candidate_recall@50": 0.977136469870948
+  },
+  "promotion_decision": {
+    "status": "blocked",
+    "mode": "phase5_kure_mmr",
+    "baseline_split": "test",
+    "baseline_path": "GNN_Neural_Network\\artifacts\\experiments\\phase2_5_num_leaves_31\\test_metrics.json",
+    "criteria": {
+      "accuracy": {
+        "recall_delta": -0.00040646275784983477,
+        "ndcg_delta": -9.19597942539152e-05
+      },
+      "diversity": {
+        "improved_metrics": 1,
+        "improvement_score": 1.0,
+        "required_improvements": 2
+      },
+      "diversity_improvements_required": "at least 2 of coverage, novelty, intra_list_diversity",
+      "candidate_recall_tolerance": 1e-06,
+      "fallback_requirement": "zero",
+      "kure_cache_reusable": true
+    },
+    "gates": {
+      "recall@10": {
+        "baseline": "closed_phase2_5",
+        "threshold": -0.002,
+        "actual": -0.00040646275784983477,
+        "delta": -0.00040646275784983477,
+        "pass": true
+      },
+      "ndcg@10": {
+        "baseline": "closed_phase2_5",
+        "threshold": -0.002,
+        "actual": -9.19597942539152e-05,
+        "delta": -9.19597942539152e-05,
+        "pass": true
+      },
+      "coverage@10": {
+        "baseline": "closed_phase2_5",
+        "actual": 0.0,
+        "threshold": 0.0,
+        "delta": 0.0,
+        "pass": false
+      },
+      "novelty@10": {
+        "baseline": "closed_phase2_5",
+        "actual": -0.006364679960511488,
+        "threshold": 0.0,
+        "delta": -0.006364679960511488,
+        "pass": false
+      },
+      "intra_list_diversity@10": {
+        "baseline": "closed_phase2_5",
+        "actual": 0.0010726100554308005,
+        "threshold": 0.0,
+        "delta": 0.0010726100554308005,
+        "pass": true
+      },
+      "candidate_recall@50": {
+        "baseline": "closed_phase2_5",
+        "tolerance": 1e-06,
+        "actual": 0.0,
+        "delta": 0.0,
+        "pass": true
+      },
+      "v2_fallback_count": {
+        "baseline": 0,
+        "actual": 0,
+        "delta": 0,
+        "pass": true
+      },
+      "kure_cache_reusable": {
+        "baseline": true,
+        "actual": true,
+        "pass": true
+      }
+    },
+    "reason": "Phase 5 blocked; failed: coverage@10, novelty@10"
+  },
+  "v1_deterministic_reranker": {
+    "metrics": {
+      "recall@5": 0.5376486129458389,
+      "ndcg@5": 0.3868009075321806,
+      "hit_rate@5": 0.5376486129458389,
+      "catalog_coverage@5": 0.42777777777777776,
+      "novelty@5": 4.078992582451549,
+      "intra_list_diversity@5": 0.9980591403312636,
+      "recall@10": 0.7042983436642618,
+      "ndcg@10": 0.4403289558409152,
+      "hit_rate@10": 0.7042983436642618,
+      "catalog_coverage@10": 0.5166666666666667,
+      "novelty@10": 4.732133210283262,
+      "intra_list_diversity@10": 0.9898926260881978,
+      "recall@20": 0.8766385529925821,
+      "ndcg@20": 0.48412608052492084,
+      "hit_rate@20": 0.8766385529925821,
+      "catalog_coverage@20": 0.5666666666666667,
+      "novelty@20": 5.478408706344554,
+      "intra_list_diversity@20": 0.9718257130480424,
+      "per_segment": {
+        "age_group": {
+          "20대": {
+            "recall": 0.8873546511627907,
+            "count": 1376
+          },
+          "30대": {
+            "recall": 0.8732119635890767,
+            "count": 1538
+          },
+          "60대": {
+            "recall": 0.8938002296211252,
+            "count": 1742
+          },
+          "50대": {
+            "recall": 0.8835153406136246,
+            "count": 1923
+          },
+          "40대": {
+            "recall": 0.8394689197344599,
+            "count": 1657
+          },
+          "90대": {
+            "recall": 0.926829268292683,
+            "count": 82
+          },
+          "70대": {
+            "recall": 0.8740894901144641,
+            "count": 961
+          },
+          "80대": {
+            "recall": 0.8931623931623932,
+            "count": 468
+          },
+          "10대": {
+            "recall": 0.8723404255319149,
+            "count": 94
+          }
+        },
+        "sex": {
+          "남자": {
+            "recall": 0.8658838071693449,
+            "count": 4854
+          },
+          "여자": {
+            "recall": 0.8871064768397834,
+            "count": 4987
+          }
+        },
+        "recall_gap": {
+          "age_group": 0.08736034855822306,
+          "sex": 0.02122266967043851
+        }
+      }
+    }
+  }
+}

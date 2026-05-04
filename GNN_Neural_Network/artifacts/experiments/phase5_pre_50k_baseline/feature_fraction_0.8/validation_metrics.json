@@ -1,0 +1,13 @@
+{
+    "validation_auc": 0.9995964487489911,
+    "recall_at_10": 0.0,
+    "coverage_at_10": 1.0,
+    "phase": "2.5_baseline",
+    "num_leaves": 31,
+    "feature_fraction": 0.8,
+    "lambda_l1": 0.15,
+    "neg_ratio": 4,
+    "hard_ratio": 0.8,
+    "dataset": "50K_person_hobby_edges",
+    "best_iteration": 1
+}

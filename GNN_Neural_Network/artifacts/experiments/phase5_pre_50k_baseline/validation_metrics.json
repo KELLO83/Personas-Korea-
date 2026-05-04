@@ -1,0 +1,10 @@
+{
+    "validation_auc": 0.49999159059241,
+    "simulated_recall_at_10": 0.0,
+    "simulated_coverage_at_10": 1.0,
+    "phase": "2.5_baseline",
+    "num_leaves": 31,
+    "feature_fraction": 0.85,
+    "lambda_l1": 0.15,
+    "note": "Self-contained trainer with 50K data"
+}

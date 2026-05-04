@@ -1,0 +1,655 @@
+{
+  "snapshot_date": "2026-05-01",
+  "scope": "GNN_Neural_Network offline recommender snapshot",
+  "source_artifacts": [
+    "artifacts/metrics.json",
+    "artifacts/stage1_ablation_validation.json",
+    "artifacts/stage1_ablation_test.json",
+    "artifacts/rerank_metrics.json",
+    "artifacts/recommendation_quality_audit.json",
+    "artifacts/vocabulary_report.json",
+    "artifacts/experiments/phase5_kure_mmr_summary.md"
+  ],
+  "current_system": {
+    "stage1": {
+      "selected_baseline": [
+        "popularity",
+        "cooccurrence"
+      ],
+      "status": "selected",
+      "reason": "Best validation recall@10 among tested provider combinations while keeping strong ndcg@10 and candidate recall."
+    },
+    "stage2": {
+      "status": "promoted",
+      "strategy": "LightGBM binary classifier learned ranker",
+      "reason": "Beat both the selected Stage 1 baseline and the v1 deterministic reranker on validation and test."
+    },
+    "stage2_legacy_fallback": {
+      "status": "fallback",
+      "strategy": "persona-aware deterministic reranker",
+      "reason": "Former promoted v1 ranker. Retained as a fallback and comparison baseline after LightGBM promotion."
+    },
+    "mmr": {
+      "status": "experimental",
+      "default_enabled": false,
+      "reason": "Category one-hot MMR failed the diversity gate and remains flag-only."
+    },
+    "phase5_kure_mmr": {
+      "status": "no_go",
+      "default_enabled": false,
+      "winner_lambda": null,
+      "reason": "KURE dense embedding re-evaluation was blocked on validation at all lambdas (0.5,0.7,0.8,0.9); default MMR behavior unchanged."
+    },
+    "phase2_5_default": {
+      "status": "closed",
+      "strategy": "accuracy-oriented default",
+      "stage1": ["popularity", "cooccurrence"],
+      "stage2": "LightGBM learned ranker",
+      "model_path": "artifacts/experiments/phase2_5_num_leaves_31/ranker_model.txt",
+      "config": {
+        "num_leaves": 31,
+        "min_data_in_leaf": 50,
+        "learning_rate": 0.05,
+        "reg_alpha": 0.1,
+        "reg_lambda": 0.1,
+        "neg_ratio": 4,
+        "hard_ratio": 0.8,
+        "include_source_features": false,
+        "include_text_embedding_feature": false,
+        "mmr": false
+      },
+      "reason": "Regularization tuning promoted num_leaves=31. Negative sampling and source one-hot ablations did not beat the current default. Category one-hot MMR remains no-go."
+    }
+  },
+  "final_metrics": {
+    "validation": {
+      "selected_stage1_baseline": {
+        "recall@10": 0.6940351590285541,
+        "ndcg@10": 0.43545523265961483
+      },
+      "stage2_reranker": {
+        "recall@10": 0.7390509094604207,
+        "ndcg@10": 0.45797028878684237
+      }
+    },
+    "test": {
+      "lightgcn": {
+        "recall@10": 0.6779798800934864,
+        "ndcg@10": 0.42999743387650424
+      },
+      "selected_stage1_baseline": {
+        "recall@10": 0.6908850726552179,
+        "ndcg@10": 0.43755581145851097,
+        "candidate_recall@50": 0.977136469870948
+      },
+      "stage2_reranker": {
+        "recall@10": 0.7096839752057718,
+        "ndcg@10": 0.447712669317698
+      },
+      "delta_stage2_vs_selected_stage1": {
+        "recall@10": 0.01879890255055383,
+        "ndcg@10": 0.01015685785918702
+      }
+    },
+    "quality_audit_test": {
+      "total_canonical_hobbies": 180,
+      "stage1_unique_recommended": 23,
+      "stage2_unique_recommended": 68,
+      "stage1_coverage_ratio": 0.12777777777777777,
+      "stage2_coverage_ratio": 0.3777777777777778,
+      "stage1_avg_popularity_rank": 6.752443857331572,
+      "stage2_avg_popularity_rank": 8.255502489584392
+    }
+  },
+  "accepted_components": [
+    {
+      "name": "popularity",
+      "role": "default Stage 1 provider",
+      "notes": "Strong standalone baseline and fallback source."
+    },
+    {
+      "name": "cooccurrence",
+      "role": "default Stage 1 provider",
+      "notes": "Best collaborative-style provider in the canonical item space."
+    },
+    {
+      "name": "stage2_reranker",
+      "role": "legacy fallback ranking layer",
+      "notes": "Former default v1 deterministic reranker. Retained as a fallback and historical comparison point."
+    },
+    {
+      "name": "stage2_lightgbm_ranker",
+      "role": "promoted default ranking layer",
+      "notes": "LightGBM binary classifier. AUC=0.8890555966387075, best_iteration=84. Beats v1 on both validation and test. Top features: cooccurrence_score, popularity_prior."
+    }
+  ],
+  "auxiliary_components": [
+    {
+      "name": "lightgcn",
+      "role": "experimental or analysis-only provider",
+      "notes": "Canonicalization revived LightGCN, but merging it into the default Stage 1 baseline reduced validation recall."
+    }
+  ],
+  "rejected_or_disabled_components": [
+    {
+      "name": "segment_popularity",
+      "status": "disabled",
+      "reason": "Toxic in ablation. Strongly degrades recall and ndcg."
+    },
+    {
+      "name": "bm25_itemknn",
+      "status": "rejected",
+      "reason": "Did not beat raw cooccurrence or the selected Stage 1 baseline."
+    },
+    {
+      "name": "pmi_itemknn",
+      "status": "rejected",
+      "reason": "Severe accuracy collapse."
+    },
+    {
+      "name": "idf_cooccurrence",
+      "status": "not_selected",
+      "reason": "Close to baseline but still slightly worse."
+    },
+    {
+      "name": "pop_capped_cooccurrence",
+      "status": "not_selected",
+      "reason": "Close to baseline but still slightly worse."
+    },
+    {
+      "name": "jaccard_itemknn",
+      "status": "not_selected",
+      "reason": "Slightly below baseline."
+    },
+    {
+      "name": "lightgcn_merge",
+      "status": "not_selected",
+      "reason": "Merging LightGCN with popularity + cooccurrence lowered validation recall."
+    },
+    {
+      "name": "mmr_category_onehot",
+      "status": "no_go",
+      "reason": "Phase 3 NO-GO: Category one-hot embeddings produce binary cosine similarity (0 or 1), making MMR lambda sweep ineffective. All lambda values (0.1-0.9) produce identical results to v2 baseline. Diversity gate failed (0/3 metrics improved). KURE dense embeddings needed for MMR re-evaluation.",
+      "available_as": "--use-mmr flag (default: false)"
+    },
+    {
+      "name": "mmr_kure_dense_embeddings",
+      "status": "no_go",
+      "reason": "Phase 5-A KURE dense embedding MMR sweep (λ=0.5/0.7/0.8/0.9) improved several diversity metrics in one case but failed accuracy gates on every candidate; no test execution required."
+    },
+    {
+      "name": "g7_9_diversity_novelty_weights",
+      "status": "rejected",
+      "reason": "Implemented but default disabled. Accuracy mostly held, but global coverage, novelty, and long-tail representation regressed under the diversity gate."
+    },
+    {
+      "name": "source_onehot_features",
+      "status": "rejected",
+      "reason": "Validation recall and ndcg were below the current no-source-feature default, so test evaluation was skipped. source_count had gain, but individual source flags had zero gain under the current popularity+cooccurrence candidate pool."
+    }
+  ],
+  "data_findings": [
+    {
+      "topic": "canonicalization",
+      "finding": "Canonicalization materially improved graph density and made LightGCN viable again, but over-merged canonical hobbies remain a qualitative risk."
+    },
+    {
+      "topic": "popularity_bias",
+      "finding": "Stage 1 candidate generation remains popularity-heavy. Stage 2 reduces this bias but does not fully remove repetitive top recommendations."
+    },
+    {
+      "topic": "mmr_onehot_limitation",
+      "finding": "Category one-hot embeddings produce binary cosine similarity (0 or 1), making MMR lambda sweep a no-op. Within the candidate pool top-k, most items share the same dominant category, so MMR cannot diversify within-category. Continuous embeddings (KURE) are needed for meaningful MMR reordering."
+    },
+    {
+      "topic": "phase5_kure_mmr_sweep",
+      "finding": "KURE dense embedding MMR with λ=0.5,0.7,0.8,0.9 improved recall/ndcg variance vs lambda but could not beat the closed Phase 2.5 baseline on validation recall or NDCG. Coverage and novelty gains at λ=0.5 were offset by recall/NDCG misses; no winner selected."
+    },
+    {
+      "topic": "lightgbm_diversity_tradeoff",
+      "finding": "LightGBM ranker improves accuracy (recall@10 +0.0450, ndcg@10 +0.0225 on validation vs Stage 1 baseline) but reduces diversity (coverage@10: 0.1556 vs v1=0.517, novelty@10: 4.584 vs v1=4.732). The learned ranker concentrates scores on popular items — this is a ranking collapse problem, NOT a retrieval bottleneck. Evidence: candidate_recall@50=97.8% (sufficient pool), yet v2 LightGBM coverage@10=15.56% vs v1 deterministic coverage@10=51.7% on the SAME pool. The model learned to preferentially rank popular hobbies, collapsing top-k diversity."
+    },
+    {
+      "topic": "lightgbm_feature_dominance",
+      "finding": "Feature importance is heavily concentrated: cooccurrence_score (60.73%) + popularity_prior (28.14%) = 88.87% of total gain. The remaining features contribute a small fraction; this reflects learned concentration under the current regularized config (num_leaves=31, min_data_in_leaf=50, reg_alpha=0.1, reg_lambda=0.1), not zero usefulness. 4 features remain zero because they are constant by design (popularity_penalty=0.0, category_diversity_reward=0.0) or disabled (lightgcn_score/segment_popularity_score remain unhelpful here)."
+    }
+  ],
+  "next_priorities": [
+    {
+      "priority": 1,
+      "task": "LightGBM regularization and Phase 2.5 robustness tracking",
+      "goal": "Keep the promoted LightGBM defaults stable while any post-Phase 2.5 diversity probes remain gated."
+    },
+    {
+      "priority": 2,
+      "task": "Phase 5-A closure: lock winnerless KURE MMR result as NO-GO",
+      "goal": "Maintain `MMR=false` default and document this in decision/run summaries."
+    },
+    {
+      "priority": 3,
+      "task": "Phase 5 integration: text embedding feature ablation",
+      "goal": "Run with --use-text-embedding after leakage audit, measure accuracy impact"
+    },
+    {
+      "priority": 4,
+      "task": "Cold-start and segment ablations",
+      "goal": "Validate phase 2.5 default robustness on sparse and segment-specific subgroups before any candidate default change"
+    }
+  ],
+  "phase4_implementation": {
+    "status": "implemented",
+    "modules": [
+      {
+        "name": "ranker_explain.py",
+        "features": [
+          "compute_shap_values",
+          "generate_reason",
+          "validate_reason_batch",
+          "batch_generate_reasons"
+        ],
+        "tests": "tests/test_ranker_explain.py (20 passed)"
+      },
+      {
+        "name": "text_embedding.py",
+        "features": [
+          "mask_holdout_hobbies",
+          "post_mask_leakage_audit",
+          "compute_text_embedding_similarity",
+          "batch_compute_embedding_similarity"
+        ],
+        "tests": "tests/test_text_embedding.py (20 passed)"
+      },
+      {
+        "name": "embedding_cache.py",
+        "features": [
+          "PersonEmbeddingCache",
+          "HobbyEmbeddingCache"
+        ],
+        "tests": "covered by text_embedding tests"
+      }
+    ],
+    "cli_integration": {
+      "script": "recommend_for_persona.py",
+      "new_flags": [
+        "--use-learned-ranker",
+        "--explain",
+        "--use-text-embedding",
+        "--ranker-model"
+      ]
+    },
+    "dependency_added": "sentence-transformers>=2.3.0"
+  },
+  "phase2_5_regularization_partial": {
+    "experiment": "Phase2.5_LightGBM_Regularization_Tuning_Partial",
+    "timestamp": "2026-05-01",
+    "status": "completed",
+    "decision": "Promoted candidate (validation and test fixed-config completed)",
+    "reason": "Targeted validation tuning found better num_leaves=31. Fixed-config follow-up completed on validation and test, passing both gates.",
+    "baseline_validation": {
+      "num_leaves": 15,
+      "recall@10": 0.73,
+      "ndcg@10": 0.4552,
+      "auc": 0.8893
+    },
+    "best_observed_validation": {
+      "num_leaves": 31,
+      "recall@10": 0.7391,
+      "ndcg@10": 0.458,
+      "auc": 0.8891
+    },
+    "delta_vs_baseline_validation": {
+      "recall@10": 0.0091,
+      "ndcg@10": 0.0028,
+      "auc": -0.0002
+    },
+    "validation": {
+      "recall@10": 0.7390509094604207,
+      "ndcg@10": 0.45797028878684237,
+      "coverage@10": 0.15555555555555556,
+      "novelty@10": 4.584286633989583,
+      "gates": {
+        "recall@10_delta": 0.029163702875724007,
+        "ndcg@10_delta": 0.01563058343287166,
+        "status": "eligible_for_test"
+      },
+      "artifacts": [
+        "artifacts/experiments/phase2_5_num_leaves_31/validation_metrics.json",
+        "artifacts/experiments/phase2_5_num_leaves_31/ranker_params.json"
+      ]
+    },
+    "test": {
+      "recall@10": 0.7096839752057718,
+      "ndcg@10": 0.447712669317698,
+      "coverage@10": 0.15555555555555556,
+      "novelty@10": 4.584286633989583,
+      "gates": {
+        "recall@10_delta": 0.00538563154150995,
+        "ndcg@10_delta": 0.007383713476782794,
+        "status": "promoted"
+      },
+      "artifacts": [
+        "artifacts/experiments/phase2_5_num_leaves_31/test_metrics.json"
+      ]
+    },
+    "artifacts": [
+      "artifacts/regularization_tuning_partial.json",
+      "artifacts/regularization_tuning_partial_summary.md",
+      "artifacts/regularization_tuning.json",
+      "artifacts/regularization_tuning_summary.md"
+    ],
+    "next_step": "Pin num_leaves=31 if the team approves default hyperparameter update."
+  },
+  "phase2_5_negative_sampling": {
+    "experiment": "Phase2.5_Negative_Sampling_Ablation_Single_Config",
+    "timestamp": "2026-05-01",
+    "status": "completed",
+    "decision": "rejected_default_change",
+    "selected_default_after_experiment": {
+      "num_leaves": 31,
+      "neg_ratio": 4,
+      "hard_ratio": 0.8
+    },
+    "reason": "Validation favored hard_ratio=1.0, but the single final test check underperformed the current hard_ratio=0.8 default on Recall@10 and NDCG@10. Keep current default and do not promote the negative-sampling change.",
+    "validation_trials": [
+      {
+        "config": {"neg_ratio": 1, "hard_ratio": 0.8},
+        "recall@10": 0.693934, "ndcg@10": 0.435216, "coverage@10": 0.155556, "novelty@10": 4.484836,
+        "decision": "rejected", "reason": "below Stage 1 baseline and current default"
+      },
+      {
+        "config": {"neg_ratio": 2, "hard_ratio": 0.8},
+        "recall@10": 0.726857, "ndcg@10": 0.451182, "coverage@10": 0.138889, "novelty@10": 4.568721,
+        "decision": "rejected", "reason": "below current default validation recall and ndcg"
+      },
+      {
+        "config": {"neg_ratio": 4, "hard_ratio": 0.8},
+        "recall@10": 0.7390509094604207, "ndcg@10": 0.45797028878684237, "coverage@10": 0.15555555555555556, "novelty@10": 4.584286633989583,
+        "decision": "baseline", "reason": "current default before negative sampling ablation"
+      },
+      {
+        "config": {"neg_ratio": 8, "hard_ratio": 0.8},
+        "recall@10": 0.737323, "ndcg@10": 0.457867, "coverage@10": 0.155556, "novelty@10": 4.584538,
+        "decision": "rejected", "reason": "slightly below current default validation recall and ndcg"
+      },
+      {
+        "config": {"neg_ratio": 4, "hard_ratio": 0.5},
+        "recall@10": 0.730210, "ndcg@10": 0.452869, "coverage@10": 0.138889, "novelty@10": 4.588810,
+        "decision": "rejected", "reason": "below current default validation recall and ndcg"
+      },
+      {
+        "config": {"neg_ratio": 4, "hard_ratio": 1.0},
+        "recall@10": 0.7424042272126816, "ndcg@10": 0.45862024557767694, "coverage@10": 0.15555555555555556, "novelty@10": 4.600143,
+        "decision": "selected_for_test", "reason": "best validation recall and ndcg among tested negative sampling configs"
+      }
+    ],
+    "final_test_check": {
+      "config": {"neg_ratio": 4, "hard_ratio": 1.0},
+      "recall@10": 0.7089726653795346,
+      "ndcg@10": 0.44667618759401445,
+      "coverage@10": 0.15555555555555556,
+      "novelty@10": 4.600143,
+      "delta_vs_current_default": {
+        "recall@10": -0.0007113098262372,
+        "ndcg@10": -0.0010364817236835,
+        "novelty@10": 0.015856366010417
+      },
+      "gate_vs_v1": {
+        "status": "promoted",
+        "recall@10_delta": 0.004674321715272822,
+        "ndcg@10_delta": 0.006347231753099258
+      }
+    },
+    "artifacts": [
+      "artifacts/experiments/phase2_5_neg_ratio_1/validation_metrics.json",
+      "artifacts/experiments/phase2_5_neg_ratio_2/validation_metrics.json",
+      "artifacts/experiments/phase2_5_neg_ratio_8/validation_metrics.json",
+      "artifacts/experiments/phase2_5_neg_ratio_4_hard_0_5/validation_metrics.json",
+      "artifacts/experiments/phase2_5_neg_ratio_4_hard_1_0/validation_metrics.json",
+      "artifacts/experiments/phase2_5_neg_ratio_4_hard_1_0/test_metrics.json",
+      "artifacts/experiments/phase2_5_negative_sampling_summary.md"
+    ],
+    "next_step": "Run source one-hot ablation. Negative sampling does not change the current default path."
+  },
+  "phase2_5_source_onehot_ablation": {
+    "experiment": "Phase2.5_Source_OneHot_Ablation_Single_Config",
+    "timestamp": "2026-05-01",
+    "status": "completed",
+    "decision": "rejected",
+    "selected_default_after_experiment": {
+      "num_leaves": 31,
+      "neg_ratio": 4,
+      "hard_ratio": 0.8,
+      "include_source_features": false,
+      "include_text_embedding_feature": false
+    },
+    "reason": "Adding source one-hot features lowered validation Recall@10 and NDCG@10 versus the current default. Per split discipline, final test was skipped.",
+    "baseline_validation": {
+      "config": {"include_source_features": false},
+      "recall@10": 0.7390509094604207,
+      "ndcg@10": 0.45797028878684237,
+      "coverage@10": 0.15555555555555556,
+      "novelty@10": 4.584286633989583
+    },
+    "source_onehot_validation": {
+      "config": {"include_source_features": true},
+      "recall@10": 0.7379331368763337,
+      "ndcg@10": 0.45714097508144047,
+      "coverage@10": 0.1388888888888889,
+      "novelty@10": 4.584875158891036,
+      "candidate_recall@50": 0.9776445483182603
+    },
+    "delta_vs_current_default_validation": {
+      "recall@10": -0.001117772584087,
+      "ndcg@10": -0.0008293137054019,
+      "coverage@10": -0.0166666666666667,
+      "novelty@10": 0.000588524901453
+    },
+    "feature_importance_observation": {
+      "source_count": "non-zero gain",
+      "source_is_popularity": "zero gain",
+      "source_is_cooccurrence": "zero gain",
+      "interpretation": "The merged candidate pool already carries source score information; explicit source flags did not improve ranking under the current provider set."
+    },
+    "artifacts": [
+      "artifacts/experiments/phase2_5_source_onehot/ranker_model.txt",
+      "artifacts/experiments/phase2_5_source_onehot/ranker_params.json",
+      "artifacts/experiments/phase2_5_source_onehot/ranker_feature_importance.json",
+      "artifacts/experiments/phase2_5_source_onehot/validation_metrics.json",
+      "artifacts/experiments/phase2_5_source_onehot_summary.md"
+    ],
+    "next_step": "Close Phase 2.5 default decision or proceed to KURE/text embedding experiments with leakage gates."
+  },
+  "phase5_kure_mmr": {
+    "experiment": "Phase5_A_MMR_with_KURE_Dense_Embeddings",
+    "timestamp": "2026-05-01",
+    "status": "completed",
+    "decision": "no_go",
+    "winner_lambda": null,
+    "default_change": false,
+    "baseline": {
+      "validation_metrics_path": "artifacts/experiments/phase2_5_num_leaves_31/validation_metrics.json",
+      "recall@10": 0.7390509094604207,
+      "ndcg@10": 0.45797028878684237,
+      "candidate_recall@50": 0.9776445483182603,
+      "coverage@10": 0.15555555555555556,
+      "novelty@10": 4.584286633989583
+    },
+    "trials": [
+      {
+        "lambda": 0.5,
+        "validation_path": "artifacts/experiments/phase5_kure_mmr_lambda_0.5/validation_metrics.json",
+        "validation_status_path": "artifacts/experiments/phase5_kure_mmr_lambda_0.5/validation_metrics.status.json",
+        "recall@10": 0.7025708769434,
+        "ndcg@10": 0.44405002047689657,
+        "coverage@10": 0.17222222222222222,
+        "novelty@10": 4.600134502809017,
+        "delta_recall@10": -0.0364800325170207,
+        "delta_ndcg@10": -0.013920268309945805,
+        "promotion_status": "blocked"
+      },
+      {
+        "lambda": 0.7,
+        "validation_path": "artifacts/experiments/phase5_kure_mmr_lambda_0.7/validation_metrics.json",
+        "validation_status_path": "artifacts/experiments/phase5_kure_mmr_lambda_0.7/validation_metrics.status.json",
+        "recall@10": 0.7230972462148155,
+        "ndcg@10": 0.45215806458894897,
+        "coverage@10": 0.14444444444444443,
+        "novelty@10": 4.574651938789798,
+        "delta_recall@10": -0.01595366324560521,
+        "delta_ndcg@10": -0.005812224197893401,
+        "promotion_status": "blocked"
+      },
+      {
+        "lambda": 0.8,
+        "validation_path": "artifacts/experiments/phase5_kure_mmr_lambda_0.8/validation_metrics.json",
+        "validation_status_path": "artifacts/experiments/phase5_kure_mmr_lambda_0.8/validation_metrics.status.json",
+        "recall@10": 0.7293974189614877,
+        "ndcg@10": 0.4544781022168803,
+        "coverage@10": 0.14444444444444443,
+        "novelty@10": 4.572329701397024,
+        "delta_recall@10": -0.009653490498933048,
+        "delta_ndcg@10": -0.0034921865699620858,
+        "promotion_status": "blocked"
+      },
+      {
+        "lambda": 0.9,
+        "validation_path": "artifacts/experiments/phase5_kure_mmr_lambda_0.9/validation_metrics.json",
+        "validation_status_path": "artifacts/experiments/phase5_kure_mmr_lambda_0.9/validation_metrics.status.json",
+        "recall@10": 0.7288893405141754,
+        "ndcg@10": 0.45464407336870966,
+        "coverage@10": 0.15,
+        "novelty@10": 4.574799041368609,
+        "delta_recall@10": -0.010161568946245314,
+        "delta_ndcg@10": -0.0033262154181327164,
+        "promotion_status": "blocked"
+      }
+    ],
+    "reason": "All Phase 5-A lambdas failed the accuracy gate (delta recall and delta NDCG both below threshold), so test execution was skipped and default is unchanged.",
+    "artifacts": [
+      "artifacts/experiments/phase5_kure_mmr_lambda_0.5/validation_metrics.json",
+      "artifacts/experiments/phase5_kure_mmr_lambda_0.5/validation_metrics.status.json",
+      "artifacts/experiments/phase5_kure_mmr_lambda_0.7/validation_metrics.json",
+      "artifacts/experiments/phase5_kure_mmr_lambda_0.7/validation_metrics.status.json",
+      "artifacts/experiments/phase5_kure_mmr_lambda_0.8/validation_metrics.json",
+      "artifacts/experiments/phase5_kure_mmr_lambda_0.8/validation_metrics.status.json",
+      "artifacts/experiments/phase5_kure_mmr_lambda_0.9/validation_metrics.json",
+      "artifacts/experiments/phase5_kure_mmr_lambda_0.9/validation_metrics.status.json",
+      "artifacts/experiments/phase5_kure_mmr_summary.md"
+    ],
+    "decision_summary": "keep default MMR=false and selected LightGBM ranker baseline"
+  },
+  "phase2_5_default_decision_closure": {
+    "experiment": "Phase2.5_Default_Decision_Closure",
+    "timestamp": "2026-05-01",
+    "status": "closed",
+    "decision": "promote_current_default",
+    "default_path": {
+      "stage1": ["popularity", "cooccurrence"],
+      "stage2": "LightGBM learned ranker",
+      "mmr": false
+    },
+    "default_config": {
+      "num_leaves": 31,
+      "min_data_in_leaf": 50,
+      "learning_rate": 0.05,
+      "reg_alpha": 0.1,
+      "reg_lambda": 0.1,
+      "neg_ratio": 4,
+      "hard_ratio": 0.8,
+      "include_source_features": false,
+      "include_text_embedding_feature": false
+    },
+    "validation_reference": {
+      "recall@10": 0.7390509094604207,
+      "ndcg@10": 0.45797028878684237,
+      "coverage@10": 0.15555555555555556,
+      "novelty@10": 4.584286633989583,
+      "candidate_recall@50": 0.9776445483182603
+    },
+    "test_reference": {
+      "recall@10": 0.7096839752057718,
+      "ndcg@10": 0.447712669317698,
+      "coverage@10": 0.15555555555555556,
+      "novelty@10": 4.584286633989583,
+      "candidate_recall@50": 0.977136469870948
+    },
+    "accepted": [
+      "Stage 1 popularity + cooccurrence",
+      "LightGBM learned ranker",
+      "num_leaves=31 regularized config",
+      "neg_ratio=4, hard_ratio=0.8",
+      "include_source_features=false",
+      "include_text_embedding_feature=false",
+      "MMR=false by default"
+    ],
+    "rejected_or_deferred": [
+      "negative sampling default change to hard_ratio=1.0",
+      "source one-hot features",
+      "category one-hot MMR",
+      "segment_popularity",
+      "BM25/PMI/IDF/Jaccard/pop-capped Stage 1 variants",
+      "LightGCN merge into default Stage 1",
+      "text embedding feature until leakage gates pass"
+    ],
+    "known_limitations": [
+      "ranking collapse remains unresolved",
+      "candidate_recall@50 is high, so retrieval is not the primary bottleneck",
+      "coverage@10 remains far below v1 deterministic reranker",
+      "novelty@10 remains below v1 deterministic reranker",
+      "feature importance remains dominated by cooccurrence_score and popularity_prior"
+    ],
+    "next_experiment_baseline_rule": "Future experiments must compare against this closed Phase 2.5 default unless explicitly documented otherwise. Select on validation only and run test once for the selected validation winner.",
+    "artifacts": [
+      "artifacts/experiments/phase2_5_default_decision_closure.md",
+      "artifacts/experiments/phase2_5_num_leaves_31/validation_metrics.json",
+      "artifacts/experiments/phase2_5_num_leaves_31/test_metrics.json",
+      "artifacts/experiments/phase2_5_negative_sampling_summary.md",
+      "artifacts/experiments/phase2_5_source_onehot_summary.md"
+    ],
+    "next_step": "Use this default as the fixed baseline for KURE dense embedding MMR or leakage-safe text embedding experiments."
+  },
+  "phase3_mmr_diversity": {
+    "experiment": "Phase3_MMR_Diversity_Reordering",
+    "timestamp": "2026-04-30",
+    "status": "no_go",
+    "reason": "MMR with category one-hot embedding failed diversity gate. All lambda values (0.1-0.9) produced identical results to v2 baseline because one-hot embeddings make cosine similarity only 0 or 1, so MMR cannot reorder within same-category items.",
+    "embedding_type": "category_one_hot_fallback",
+    "validation_results": {
+      "v2_no_mmr": {
+        "recall@10": 0.73,
+        "ndcg@10": 0.4552,
+        "coverage@10": 0.15,
+        "novelty@10": 4.58,
+        "ild@10": 0.99
+      },
+      "v2_mmr_lambda_0.7": {
+        "recall@10": 0.7239,
+        "ndcg@10": 0.4533,
+        "coverage@10": 0.1389,
+        "novelty@10": 4.567,
+        "ild@10": 1.0
+      },
+      "mmr_sweep_lambda_0.1_to_0.9": {
+        "recall@10": 0.73,
+        "ndcg@10": 0.4552,
+        "coverage@10": 0.15,
+        "novelty@10": "same as baseline",
+        "ild@10": 0.978,
+        "note": "ALL lambda values produced identical metrics to v2 baseline. One-hot embeddings make MMR a no-op within top-k."
+      }
+    },
+    "diversity_gate": {
+      "accuracy_gate": "PASS (recall drop within tolerance for most lambda)",
+      "diversity_metrics_improved": "0 out of 3 (coverage DOWN, novelty DOWN, ILD marginal)",
+      "verdict": "NO-GO - category one-hot embedding too coarse for MMR to diversify within candidate pool"
+    },
+    "root_cause_analysis": "Category one-hot embeddings produce cosine similarity = 1.0 for same-category items and 0.0 for different-category items. Within the top-k candidate list, most items belong to the same dominant category, so MMR similarity penalty becomes either 0 or 1. Lambda sweep has no effect because the similarity matrix is binary. KURE dense embeddings (Phase 5 planned) would fix this by providing continuous similarity.",
+    "decision": "Learned ranker only (Phase 2 result). MMR available as --use-mmr flag (default false). KURE embedding integration deferred to Phase 5 for MMR re-evaluation.",
+    "next_priorities": [
+      "1. LightGBM regularization tuning (small data, overfitting risk)",
+      "2. Negative sampling ablation (1:1, 4:1, 8:1)",
+      "3. Source one-hot feature ablation",
+      "4. KURE embedding cache (Phase 5) for MMR re-evaluation"
+    ]
+  }
+}

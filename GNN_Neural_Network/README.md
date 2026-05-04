@@ -13,6 +13,9 @@ Offline LightGCN hobby/leisure recommendation PoC for `Nemotron-Personas-Korea`.
   - `CHECKLIST_GNN_Reranker_v2.md`
 - Dataset and schema description is contextual reference:
   - `DATASET_EXPLAIN.md`
+- Experiment navigation and script ownership:
+  - `EXPERIMENTS.md`
+  - `scripts/README.md`
 - Conflict rule: if a conflict appears, prioritize requirements/gates above and then align this README.
 
 ## Scope

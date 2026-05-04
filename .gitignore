@@ -46,9 +46,20 @@ secrets.json
 # Data / Databases
 data/
 GNN_Neural_Network/data/
-GNN_Neural_Network/artifacts/
+GNN_Neural_Network/artifacts/*
+!GNN_Neural_Network/artifacts/experiment_decisions.json
+!GNN_Neural_Network/artifacts/experiment_run_summary.md
+!GNN_Neural_Network/artifacts/experiments/
+!GNN_Neural_Network/artifacts/experiments/**
+GNN_Neural_Network/artifacts/experiments/**/cache/
+GNN_Neural_Network/artifacts/experiments/**/hobby_embedding_cache/
+GNN_Neural_Network/artifacts/experiments/**/*.npy
+GNN_Neural_Network/artifacts/experiments/**/*.npz
+GNN_Neural_Network/artifacts/experiments/**/__pycache__/
+!GNN_Neural_Network/artifacts/experiments/**/*.csv
 *.parquet
 *.csv
+!GNN_Neural_Network/artifacts/experiments/**/*.csv
 *.jsonl
 *.sqlite3
 *.db

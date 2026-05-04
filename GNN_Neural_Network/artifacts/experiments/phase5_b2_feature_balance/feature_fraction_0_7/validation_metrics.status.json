@@ -1,0 +1,21 @@
+{
+  "experiment_id": "phase5_b2_feature_balance_feature_fraction_0_7",
+  "split": "validation",
+  "status": "candidates_done",
+  "event_timestamp": "2026-05-01T16:16:11Z",
+  "command_signature": "evaluate_ranker.py --config GNN_Neural_Network/configs/lightgcn_hobby.yaml --split validation --model-path GNN_Neural_Network/artifacts/experiments/phase5_b2_feature_balance/feature_fraction_0_7/ranker_model.txt --output GNN_Neural_Network/artifacts/experiments/phase5_b2_feature_balance/feature_fraction_0_7/validation_metrics.json --experiment-id phase5_b2_feature_balance_feature_fraction_0_7",
+  "log_policy": {
+    "progress_mode": "off",
+    "progress_mininterval": 5.0,
+    "progress_maxinterval": 30.0,
+    "progress_miniters": 200,
+    "tqdm_enabled": false
+  },
+  "artifact_path": "GNN_Neural_Network\\artifacts\\experiments\\phase5_b2_feature_balance\\feature_fraction_0_7\\validation_metrics.status.json",
+  "summary": {
+    "phase": "candidates_done",
+    "split": "validation",
+    "candidate_pool_person_count": 9841,
+    "candidate_ranked_person_count": 9841
+  }
+}

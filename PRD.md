@@ -207,6 +207,9 @@ class CentralityBatchJob:
    - API 응답 시간 < 500ms (템플릿 기반 reasoning)
    - 추천 정확도: 유사 페르소나의 70%+가 해당 속성 보유
 - **대체 접근**: 오프라인 GNN 기반 취미 추천이 `GNN_Neural_Network/PRD.md`에서 PoC 진행 중. Phase 2.5 튜닝 완료 후 F11 Cypher 기반 추천과 GNN 기반 추천의 A/B 테스트 예정.
+- **최신 검증**: Phase 2.5 설정을 바탕으로 한 50K 데이터 재학습 완료 (AUC 0.9996, feature_fraction 0.85 vs 0.8 비교 검증 완료) - `artifacts/experiments/phase5_pre_50k_baseline/`
+- **Taxonomy Over-merge 분석**: 희귀 취미의 카테고리 집중도 확인 (스포츠/레저 73.1% 편중) - `artifacts/experiments/phase5_taxonomy_overmerge/`
+- **Leakage 검증**: 텍스트 임베딩 누수 가능성 최소화 확인 (WARNING 상태, 추가 조치 필요) - `artifacts/experiments/phase5_text_embedding_leakage/`
 
 ### 4.2 아키텍처 결정 (ADR-002 반영)
 ⚠️ **추천 사유(Reasoning)는 LLM 동기 호출 금지 → 템플릿 기반**

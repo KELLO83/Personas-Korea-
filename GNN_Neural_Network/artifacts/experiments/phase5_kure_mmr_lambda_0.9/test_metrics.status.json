@@ -1,0 +1,90 @@
+{
+  "experiment_id": "phase5_kure_mmr_lambda_0.9",
+  "split": "test",
+  "status": "test_evaluated",
+  "event_timestamp": "2026-05-01T15:40:19Z",
+  "command_signature": "evaluate_ranker.py --config GNN_Neural_Network/configs/lightgcn_hobby.yaml --split test --model-path 'GNN_Neural_Network\\artifacts\\experiments\\phase2_5_num_leaves_31\\ranker_model.txt' --use-mmr --mmr-embedding-method kure --mmr-lambda 0.9 --phase5-kure-mmr --output 'GNN_Neural_Network\\artifacts\\experiments\\phase5_kure_mmr_lambda_0.9\\test_metrics.json' --pool-cache-dir 'GNN_Neural_Network\\artifacts\\experiments\\phase5_kure_mmr_lambda_0.9\\cache' --feature-cache-dir 'GNN_Neural_Network\\artifacts\\experiments\\phase5_kure_mmr_lambda_0.9\\cache' --embedding-cache-dir 'GNN_Neural_Network\\artifacts\\experiments\\phase5_kure_mmr_lambda_0.9\\cache\\hobby_embedding_cache' --experiment-id phase5_kure_mmr_lambda_0.9",
+  "log_policy": {
+    "progress_mode": "off",
+    "progress_mininterval": 5.0,
+    "progress_maxinterval": 30.0,
+    "progress_miniters": 200,
+    "tqdm_enabled": false
+  },
+  "artifact_path": "GNN_Neural_Network\\artifacts\\experiments\\phase5_kure_mmr_lambda_0.9\\test_metrics.status.json",
+  "runtime_seconds": 251.0074551999969,
+  "input_config_summary": {
+    "config_path": "GNN_Neural_Network\\configs\\lightgcn_hobby.yaml",
+    "candidate_pool_size": 50,
+    "score_normalization": "rank_percentile"
+  },
+  "summary": {
+    "phase": "metrics_done",
+    "split": "test",
+    "v2_recall@10": 0.7092775124479219,
+    "v2_ndcg@10": 0.44762070952344407,
+    "coverage@10": 0.15555555555555556,
+    "novelty@10": 4.577921954029072,
+    "candidate_recall@50": 0.977136469870948,
+    "v2_fallback_count": 0,
+    "promotion_status": "blocked",
+    "phase5_delta_recall@10": -0.00040646275784983477,
+    "phase5_delta_ndcg@10": -9.19597942539152e-05,
+    "phase5_candidate_recall@50_delta": 0.0,
+    "phase5_gates": {
+      "recall@10": {
+        "baseline": "closed_phase2_5",
+        "threshold": -0.002,
+        "actual": -0.00040646275784983477,
+        "delta": -0.00040646275784983477,
+        "pass": true
+      },
+      "ndcg@10": {
+        "baseline": "closed_phase2_5",
+        "threshold": -0.002,
+        "actual": -9.19597942539152e-05,
+        "delta": -9.19597942539152e-05,
+        "pass": true
+      },
+      "coverage@10": {
+        "baseline": "closed_phase2_5",
+        "actual": 0.0,
+        "threshold": 0.0,
+        "delta": 0.0,
+        "pass": false
+      },
+      "novelty@10": {
+        "baseline": "closed_phase2_5",
+        "actual": -0.006364679960511488,
+        "threshold": 0.0,
+        "delta": -0.006364679960511488,
+        "pass": false
+      },
+      "intra_list_diversity@10": {
+        "baseline": "closed_phase2_5",
+        "actual": 0.0010726100554308005,
+        "threshold": 0.0,
+        "delta": 0.0010726100554308005,
+        "pass": true
+      },
+      "candidate_recall@50": {
+        "baseline": "closed_phase2_5",
+        "tolerance": 1e-06,
+        "actual": 0.0,
+        "delta": 0.0,
+        "pass": true
+      },
+      "v2_fallback_count": {
+        "baseline": 0,
+        "actual": 0,
+        "delta": 0,
+        "pass": true
+      },
+      "kure_cache_reusable": {
+        "baseline": true,
+        "actual": true,
+        "pass": true
+      }
+    }
+  }
+}

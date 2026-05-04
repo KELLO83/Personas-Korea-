@@ -444,13 +444,12 @@
 
 > PRD §2.1 F11, §11.4 — `GNN_Neural_Network/` 오프라인 추천 PoC 결과를 루트 추천 기능과 연동할지 검수한다. 코드 구현은 GNN 실험 결과 확정 이후에만 진행한다.
 
-- [ ] Phase 2.5 실험 결과 확인
-  - [x] LightGBM regularization tuning 결과 확인
+- [x] Phase 2.5 실험 결과 확인 (50K 데이터 재학습 포함, AUC=0.9996, feature_balance_probe 완료)\n  - [x] LightGBM regularization tuning 결과 확인
   - [x] negative sampling ablation 결과 확인
   - [x] source one-hot ablation 결과 확인
   - [x] ranking collapse 완화 여부 확인 (coverage/novelty/recall 동시 검토)
   - [x] Phase 2.5 default decision closure 기록
-  - [ ] PRD §2.5 로그 거버넌스 규칙 준수 상태 확인
+  - [x] PRD §2.5 로그 거버넌스 규칙 준수 상태 확인 (새로운 실험 결과 반영)
     - [x] 출력 채널 분리(`stdout` 요약, `stderr` 경고/에러)
     - [x] 반복 로그 기본 비활성/요약 중심 정책 적용
     - [x] `log_policy`가 상태 artifact에 남는지 확인

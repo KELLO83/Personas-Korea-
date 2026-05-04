@@ -1,0 +1,31 @@
+{
+  "experiment_id": "phase2_5_neg_ratio_4_hard_1_0",
+  "split": "test",
+  "status": "test_evaluated",
+  "event_timestamp": "2026-05-01T12:37:21Z",
+  "command_signature": "evaluate_ranker.py --split test --progress-mode off --config 'GNN_Neural_Network\\configs\\lightgcn_hobby.yaml' --model-path 'GNN_Neural_Network\\artifacts\\experiments\\phase2_5_neg_ratio_4_hard_1_0\\ranker_model.txt' --output 'GNN_Neural_Network\\artifacts\\experiments\\phase2_5_neg_ratio_4_hard_1_0\\test_metrics.json' --pool-cache-dir 'GNN_Neural_Network\\artifacts\\experiments\\phase2_5_num_leaves_31' --feature-cache-dir 'GNN_Neural_Network\\artifacts\\experiments\\phase2_5_num_leaves_31\\cache' --experiment-id phase2_5_neg_ratio_4_hard_1_0",
+  "log_policy": {
+    "progress_mode": "off",
+    "progress_mininterval": 5.0,
+    "progress_maxinterval": 30.0,
+    "progress_miniters": 200,
+    "tqdm_enabled": false
+  },
+  "artifact_path": "GNN_Neural_Network\\artifacts\\experiments\\phase2_5_neg_ratio_4_hard_1_0\\test_metrics.status.json",
+  "runtime_seconds": 110.4036980000019,
+  "input_config_summary": {
+    "config_path": "GNN_Neural_Network\\configs\\lightgcn_hobby.yaml",
+    "candidate_pool_size": 50,
+    "score_normalization": "rank_percentile"
+  },
+  "summary": {
+    "phase": "metrics_done",
+    "split": "test",
+    "v2_recall@10": 0.7089726653795346,
+    "v2_ndcg@10": 0.44667618759401445,
+    "coverage@10": 0.15555555555555556,
+    "novelty@10": 4.60014339588992,
+    "candidate_recall@50": 0.977136469870948,
+    "v2_fallback_count": 0
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "experiment_id": "phase5_b3_dpp_candidate_k50",
+  "split": "validation",
+  "status": "validation_evaluated",
+  "event_timestamp": "2026-05-01T15:54:07Z",
+  "command_signature": "evaluate_ranker.py --config GNN_Neural_Network/configs/lightgcn_hobby.yaml --split validation --model-path GNN_Neural_Network/artifacts/experiments/phase2_5_num_leaves_31/ranker_model.txt --use-dpp --dpp-theta 0.5 --output GNN_Neural_Network/artifacts/experiments/phase5_b3_diversity_rerank/dpp_candidate_k50/validation_metrics.json --experiment-id phase5_b3_dpp_candidate_k50",
+  "log_policy": {
+    "progress_mode": "off",
+    "progress_mininterval": 5.0,
+    "progress_maxinterval": 30.0,
+    "progress_miniters": 200,
+    "tqdm_enabled": false
+  },
+  "artifact_path": "GNN_Neural_Network\\artifacts\\experiments\\phase5_b3_diversity_rerank\\dpp_candidate_k50\\validation_metrics.status.json",
+  "runtime_seconds": 279.798726099998,
+  "input_config_summary": {
+    "config_path": "GNN_Neural_Network\\configs\\lightgcn_hobby.yaml",
+    "candidate_pool_size": 50,
+    "score_normalization": "rank_percentile"
+  },
+  "summary": {
+    "phase": "metrics_done",
+    "split": "validation",
+    "v2_recall@10": 0.5181384005690478,
+    "v2_ndcg@10": 0.34821912617832784,
+    "coverage@10": 0.18333333333333332,
+    "novelty@10": 6.267843233955525,
+    "candidate_recall@50": 0.9776445483182603,
+    "v2_fallback_count": 0,
+    "promotion_status": "blocked"
+  }
+}

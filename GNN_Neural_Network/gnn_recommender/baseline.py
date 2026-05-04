@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+import sys
+from pathlib import Path
 from collections import Counter
 
-from .data import PersonContext
-from .metrics import summarize_ranking_metrics
-from .recommend import Candidate
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from GNN_Neural_Network.gnn_recommender.data import PersonContext
+from GNN_Neural_Network.gnn_recommender.metrics import summarize_ranking_metrics
+from GNN_Neural_Network.gnn_recommender.recommend import Candidate
 
 
 def build_popularity_counts(train_edges: list[tuple[int, int]]) -> Counter[int]:

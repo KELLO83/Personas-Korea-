@@ -15,6 +15,7 @@ class DataConfig:
     hobby_taxonomy_review_path: Path | None = None
     min_item_degree: int = 3
     rare_item_policy: str = "drop"
+    fallback_order: list[str] = field(default_factory=lambda: ["canonical_hobby", "subcategory", "category"])
 
 
 @dataclass(frozen=True)
@@ -97,13 +98,14 @@ def load_config(path: Path) -> LightGCNConfig:
         raw = yaml.safe_load(file) or {}
     if not isinstance(raw, dict):
         raise ValueError("Config root must be a mapping")
+    base_dir = path.parent
     return LightGCNConfig(
-        data=DataConfig(**_normalize_data(_section(raw, "data"), path.parent)),
+        data=DataConfig(**_normalize_data(_section(raw, "data"), base_dir)),
         split=SplitConfig(**_section(raw, "split")),
         train=TrainConfig(**_section(raw, "train")),
         eval=EvalConfig(**_normalize_eval(_section(raw, "eval"))),
         rerank=RerankConfig(**_section(raw, "rerank")),
-        paths=PathConfig(**_normalize_paths(_section(raw, "paths"))),
+        paths=PathConfig(**_normalize_paths(_section(raw, "paths"), base_dir)),
     )
 
 
@@ -132,5 +134,9 @@ def _normalize_data(raw: dict[str, Any], base_dir: Path) -> dict[str, Any]:
     return normalized
 
 
-def _normalize_paths(raw: dict[str, Any]) -> dict[str, Any]:
-    return {key: Path(value) for key, value in raw.items()}
+def _normalize_paths(raw: dict[str, Any], base_dir: Path) -> dict[str, Any]:
+    normalized = {}
+    for key, value in raw.items():
+        path = Path(value)
+        normalized[key] = path if path.is_absolute() else (base_dir / path).resolve()
+    return normalized

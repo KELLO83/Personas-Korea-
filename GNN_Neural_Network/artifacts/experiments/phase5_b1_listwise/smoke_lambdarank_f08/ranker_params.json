@@ -1,0 +1,85 @@
+{
+  "best_iteration": 1,
+  "best_score": 0.8878279727337338,
+  "best_metric": "ndcg@10",
+  "params": {
+    "objective": "lambdarank",
+    "metric": "ndcg",
+    "num_leaves": 15,
+    "min_data_in_leaf": 50,
+    "learning_rate": 0.05,
+    "reg_alpha": 0.1,
+    "reg_lambda": 0.1,
+    "verbose": -1,
+    "seed": 42,
+    "num_threads": -1,
+    "ndcg_eval_at": [
+      10
+    ],
+    "feature_fraction": 0.8
+  },
+  "neg_ratio": 4,
+  "hard_ratio": 0.8,
+  "ranker_val_ratio": 0.2,
+  "seed": 42,
+  "ranker_train_persons": 7872,
+  "ranker_val_persons": 1969,
+  "train_rows": 39360,
+  "val_rows": 9845,
+  "feature_columns": [
+    "lightgcn_score",
+    "cooccurrence_score",
+    "segment_popularity_score",
+    "known_hobby_compatibility",
+    "age_group_fit",
+    "occupation_fit",
+    "region_fit",
+    "popularity_prior",
+    "mismatch_penalty",
+    "popularity_penalty",
+    "novelty_bonus",
+    "category_diversity_reward",
+    "is_cold_start"
+  ],
+  "include_source_features": false,
+  "experiment_id": "phase5_b1_listwise_smoke_f08",
+  "status": "trained",
+  "runtime_seconds": 13.74843029999829,
+  "data_split": "validation_internal_ranker_split",
+  "input_config_summary": {
+    "config_path": "GNN_Neural_Network\\configs\\lightgcn_hobby.yaml",
+    "candidate_pool_size": 50,
+    "score_normalization": "rank_percentile"
+  },
+  "model_path": "GNN_Neural_Network\\artifacts\\experiments\\phase5_b1_listwise\\smoke_lambdarank_f08\\ranker_model.txt",
+  "lightgbm_params": {
+    "objective": "lambdarank",
+    "metric": "ndcg",
+    "num_leaves": 15,
+    "min_data_in_leaf": 50,
+    "learning_rate": 0.05,
+    "reg_alpha": 0.1,
+    "reg_lambda": 0.1,
+    "verbose": -1,
+    "seed": 42,
+    "num_threads": -1,
+    "ndcg_eval_at": [
+      10
+    ],
+    "feature_fraction": 0.8
+  },
+  "feature_policy": {
+    "include_source_features": false,
+    "include_text_embedding_feature": false
+  },
+  "candidate_pool_policy": {
+    "providers": [
+      "popularity",
+      "cooccurrence"
+    ],
+    "candidate_k": 50,
+    "normalization_method": "rank_percentile",
+    "cache_key": "pool_validation_internal_ranker_split_popularity-cooccurrence_k50_rank_percentile_e75d0f466eb40_hf536cdf1_pc4b1e288",
+    "cache_path": "GNN_Neural_Network\\artifacts\\cache\\pool_validation_internal_ranker_split_popularity-cooccurrence_k50_rank_percentile_e75d0f466eb40_hf536cdf1_pc4b1e288.json"
+  }
+}

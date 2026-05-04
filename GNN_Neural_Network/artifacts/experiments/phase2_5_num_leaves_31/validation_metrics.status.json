@@ -1,0 +1,31 @@
+{
+  "experiment_id": "",
+  "split": "validation",
+  "status": "validation_evaluated",
+  "event_timestamp": "2026-05-01T11:31:45Z",
+  "command_signature": "evaluate_ranker.py --split validation --progress-mode off --config 'GNN_Neural_Network\\configs\\lightgcn_hobby.yaml' --model-path 'GNN_Neural_Network\\artifacts\\experiments\\phase2_5_num_leaves_31\\ranker_model.txt' --output 'GNN_Neural_Network\\artifacts\\experiments\\phase2_5_num_leaves_31\\validation_metrics.json' --pool-cache-dir 'GNN_Neural_Network\\artifacts\\experiments\\phase2_5_num_leaves_31' --feature-cache-dir 'GNN_Neural_Network\\artifacts\\experiments\\phase2_5_num_leaves_31\\cache'",
+  "log_policy": {
+    "progress_mode": "off",
+    "progress_mininterval": 5.0,
+    "progress_maxinterval": 30.0,
+    "progress_miniters": 200,
+    "tqdm_enabled": false
+  },
+  "artifact_path": "GNN_Neural_Network\\artifacts\\experiments\\phase2_5_num_leaves_31\\validation_metrics.status.json",
+  "runtime_seconds": 115.08724400000028,
+  "input_config_summary": {
+    "config_path": "GNN_Neural_Network\\configs\\lightgcn_hobby.yaml",
+    "candidate_pool_size": 50,
+    "score_normalization": "rank_percentile"
+  },
+  "summary": {
+    "phase": "metrics_done",
+    "split": "validation",
+    "v2_recall@10": 0.7390509094604207,
+    "v2_ndcg@10": 0.45797028878684237,
+    "coverage@10": 0.15555555555555556,
+    "novelty@10": 4.584286633989583,
+    "candidate_recall@50": 0.9776445483182603,
+    "v2_fallback_count": 0
+  }
+}

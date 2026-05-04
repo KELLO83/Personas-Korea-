@@ -15,7 +15,7 @@ from src.config import settings  # noqa: E402
 
 
 EXPORT_QUERY = """
-MATCH (p:Person)-[:ENJOYS_HOBBY]->(h:Hobby)
+MATCH (p:Person)-[:LIKES]->(h)
 WHERE p.uuid IS NOT NULL AND h.name IS NOT NULL
 RETURN DISTINCT p.uuid AS person_uuid, h.name AS hobby_name
 ORDER BY person_uuid, hobby_name
@@ -104,26 +104,30 @@ def main() -> None:
     driver = GraphDatabase.driver(settings.NEO4J_URI, auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD))
     try:
         with driver.session(database=settings.NEO4J_DATABASE) as session:
-            result = session.run(Query(query), limit=args.limit)
+            # Edge 데이터 내보내기 (쿼리 객체 대신 직접 쿼리 문자열과 파라미터 사용)
+            edge_result = session.run(query, limit=args.limit)
+            edge_records = list(edge_result)
             with args.output.open("w", encoding="utf-8", newline="") as file:
                 writer = csv.DictWriter(file, fieldnames=["person_uuid", "hobby_name"])
                 writer.writeheader()
-                count = 0
-                for record in result:
+                for record in edge_records:
                     writer.writerow({"person_uuid": record["person_uuid"], "hobby_name": record["hobby_name"]})
-                    count += 1
+            edge_count = len(edge_records)
+
             context_count = 0
             if not args.skip_context:
-                context_result = session.run(Query(context_query), limit=args.limit)
+                # Context 데이터 내보내기
+                context_result = session.run(context_query, limit=args.limit)
+                context_records = list(context_result)
                 with args.context_output.open("w", encoding="utf-8", newline="") as file:
                     writer = csv.DictWriter(file, fieldnames=CONTEXT_FIELDS)
                     writer.writeheader()
-                    for record in context_result:
+                    for record in context_records:
                         writer.writerow({field: record[field] if record[field] is not None else "" for field in CONTEXT_FIELDS})
-                        context_count += 1
+                context_count = len(context_records)
     finally:
         driver.close()
-    print(f"Exported {count:,} Person-Hobby edges to {args.output}")
+    print(f"Exported {edge_count:,} Person-Hobby edges to {args.output}")
     if not args.skip_context:
         print(f"Exported {context_count:,} person context rows to {args.context_output}")
 

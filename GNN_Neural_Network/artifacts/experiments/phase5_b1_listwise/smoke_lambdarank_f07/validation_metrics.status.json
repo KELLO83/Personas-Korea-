@@ -1,0 +1,32 @@
+{
+  "experiment_id": "phase5_b1_listwise_smoke_f07",
+  "split": "validation",
+  "status": "validation_evaluated",
+  "event_timestamp": "2026-05-01T16:13:50Z",
+  "command_signature": "evaluate_ranker.py --config GNN_Neural_Network/configs/lightgcn_hobby.yaml --split validation --model-path GNN_Neural_Network/artifacts/experiments/phase5_b1_listwise/smoke_lambdarank_f07/ranker_model.txt --output GNN_Neural_Network/artifacts/experiments/phase5_b1_listwise/smoke_lambdarank_f07/validation_metrics.json --experiment-id phase5_b1_listwise_smoke_f07",
+  "log_policy": {
+    "progress_mode": "off",
+    "progress_mininterval": 5.0,
+    "progress_maxinterval": 30.0,
+    "progress_miniters": 200,
+    "tqdm_enabled": false
+  },
+  "artifact_path": "GNN_Neural_Network\\artifacts\\experiments\\phase5_b1_listwise\\smoke_lambdarank_f07\\validation_metrics.status.json",
+  "runtime_seconds": 216.11325800000122,
+  "input_config_summary": {
+    "config_path": "GNN_Neural_Network\\configs\\lightgcn_hobby.yaml",
+    "candidate_pool_size": 50,
+    "score_normalization": "rank_percentile"
+  },
+  "summary": {
+    "phase": "metrics_done",
+    "split": "validation",
+    "v2_recall@10": 0.7083629712427599,
+    "v2_ndcg@10": 0.4425917051146602,
+    "coverage@10": 0.18888888888888888,
+    "novelty@10": 4.62714381382465,
+    "candidate_recall@50": 0.9776445483182603,
+    "v2_fallback_count": 0,
+    "promotion_status": "blocked"
+  }
+}

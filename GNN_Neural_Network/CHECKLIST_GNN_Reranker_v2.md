@@ -95,8 +95,9 @@
 ### 0.5 Text Embedding Policy 확정
 - [x] 기본값: `use_text_embedding=false`
 - [x] 마스킹 방식 확정: alias-aware + regex word-boundary
-- [x] Post-mask leakage audit 절차 확정 (PRD §3.2.3 참고)
-- [x] Promotion path에서 text feature 제외 (leakage audit 통과 후에만 ablation으로 평가)
+   - [x] Post-mask leakage audit 절차 확정 (PRD §3.2.3 참고)
+   - [x] Promotion path에서 text feature 제외 (leakage audit 통과 후에만 ablation으로 평가)
+   - [x] **강제 가이드라인 (KURE 적용 시):** Phase 5-B 등에서 `include_text_embedding_feature=true`로 text embedding을 활성화할 경우, `mask_holdout_hobbies()`는 필수 적용이다. 만약 `post_mask_leakage_audit()`에서 잔여 누수율(Leakage rate)이 5%를 초과하거나, 누수로 인해 `recall@10`에 비정상적 상승이 감지될 경우(`DATASET_EXPLAIN.md`의 29.3% 누수 사례 방지), 해당 실험 Run은 즉시 `disabled` 처리되고 metric 비교에서 제외된다.
 
 ### 0.6 Promotion Gate 수치 확정
 - [x] Accuracy Gate: delta_recall@10 >= -0.002, delta_ndcg@10 >= +0.005

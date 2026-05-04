@@ -1,0 +1,16 @@
+{
+    "experiment": "phase5_text_embedding_leakage_check",
+    "sample_size": 5000,
+    "train_size": 3986,
+    "val_size": 1014,
+    "train_unique_hobbies": 3983,
+    "val_unique_hobbies": 1013,
+    "train_duplicate_texts": 45,
+    "common_texts_count": 13,
+    "text_leakage_rate": 0.0152046783625731,
+    "tfidf_avg_cosine_similarity": 0.2667658261784155,
+    "tfidf_max_cosine_similarity": 1.0000000000000007,
+    "status": "WARNING",
+    "recommendation": "누수 가능성 있음 - 추가 검증 필요",
+    "sample_high_similarity_pairs": []
+}

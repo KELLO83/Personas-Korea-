@@ -1,0 +1,7 @@
+{
+    "validation_auc": 0.9524739583333334,
+    "simulated_recall_at_10": 1.0,
+    "simulated_coverage_at_10": 1.0,
+    "gate_1_status": "PASS",
+    "gate_2_status": "PASS"
+}

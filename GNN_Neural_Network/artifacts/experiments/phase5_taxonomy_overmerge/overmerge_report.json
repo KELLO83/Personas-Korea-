@@ -1,0 +1,25 @@
+{
+    "experiment": "phase5_taxonomy_overmerge",
+    "total_hobbies": 49558,
+    "total_categories": 6,
+    "avg_user_top_category_ratio": 0.7509865788052823,
+    "rare_hobby_threshold": 1,
+    "rare_hobby_count": 49262,
+    "rare_category_distribution": {
+        "기타/다양": 36001,
+        "음식/요리": 2766,
+        "게임/IT": 2919,
+        "음악/예술": 2985,
+        "독서/학습": 3170,
+        "스포츠/레저": 1421
+    },
+    "overmerge_warning_categories": [
+        "기타/다양"
+    ],
+    "user_overmerge_scores": {
+        "mean": 0.750986578805309,
+        "std": 0.23402581129705452,
+        "min": 0.25,
+        "max": 1.0
+    }
+}

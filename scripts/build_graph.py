@@ -4,6 +4,8 @@ import polars as pl
 from typing import Optional
 import torch
 import os
+import subprocess
+import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 from src.data.loader import load_dataset
@@ -110,6 +112,89 @@ def _load_to_neo4j(df: pl.DataFrame, reset: bool, batch_size: int) -> None:
         loader.close()
 
 
+import re
+
+def _batch_create_hobby_relationships(loader, reset: bool, batch_size: int = 5000) -> None:
+    """
+    Python에서 hobbies_text를 파싱하여 Cypher UNWIND 배치 쿼리로 관계 생성
+    - APoC 미설치 환경 대응 (Python side 분리)
+    - 대량의 관계 생성을 단일 트랜잭션으로 최적화
+    """
+    # Step 1: reset=True인 경우 기존 데이터 초기화
+    if reset:
+        logger.info("🗑️  기존 취미(Hobby) 노드와 LIKES 관계를 초기화합니다...")
+        with loader.driver.session(database=loader.database) as session:
+            session.run("MATCH ()-[r:LIKES]->() DELETE r")
+            session.run("MATCH (h:Hobby) DETACH DELETE h")
+        logger.info("기존 취미 데이터 초기화 완료")
+
+    # Step 2: 대상 Person 데이터 추출 (기존 관계 무관하게 모두 재생성)
+    extract_query = """
+    MATCH (p:Person)
+    WHERE p.hobbies_and_interests IS NOT NULL AND trim(p.hobbies_and_interests) <> ""
+    RETURN p.uuid AS uuid, p.hobbies_and_interests AS hobbies
+    """
+    
+    total_processed = 0
+    with loader.driver.session(database=loader.database) as session:
+        result = session.run(extract_query)
+        
+        batch_rows = []
+        for record in result:
+            uuid = record["uuid"]
+            hobbies_text = record["hobbies"]
+            
+            # Python 정규식으로 다중 구분자([;,.]) 처리 및 토큰화
+            # ex) "독서, 게임; 배드민턴. 낚시" -> ['독서', '게임', '배드민턴', '낚시']
+            hobbies = [
+                h.strip() 
+                for h in re.split(r'[;,.,]\s*', hobbies_text) 
+                if h.strip() and len(h.strip()) > 1
+            ]
+            
+            for hobby_name in hobbies:
+                batch_rows.append({"uuid": uuid, "hobby_name": hobby_name})
+            
+            # 배치 사이즈 도달 시 UNWIND 쿼리 실행
+            if len(batch_rows) >= batch_size:
+                _execute_hobby_batch(session, batch_rows)
+                total_processed += len(batch_rows)
+                batch_rows = []
+        
+        # 남은 데이터 처리
+        if batch_rows:
+            _execute_hobby_batch(session, batch_rows)
+            total_processed += len(batch_rows)
+    
+    logger.info(f"✅ 총 {total_processed}개의 Person-Hobby 관계 생성 완료")
+
+def _execute_hobby_batch(session, batch_rows):
+    """UNWIND을 사용한 배치 관계 생성 쿼리 실행"""
+    batch_query = """
+    UNWIND $batch AS row
+    MATCH (p:Person {uuid: row.uuid})
+    MERGE (h:Hobby {name: row.hobby_name})
+    MERGE (p)-[:LIKES]->(h)
+    """
+    session.run(batch_query, batch=batch_rows)
+
+def _create_hobby_relationships(reset: bool) -> None:
+    """[유지보수용] Person-Hobby 관계 생성 메인 진입점 (배치 로직 호출)"""
+    from src.graph.loader import GraphLoader
+    loader = GraphLoader()
+    try:
+        _batch_create_hobby_relationships(loader, reset=reset, batch_size=5000)
+    finally:
+        loader.close()
+
+
+def _export_gnn_person_hobby_edges() -> None:
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    script_path = os.path.join(project_root, "GNN_Neural_Network", "scripts", "export_person_hobby_edges.py")
+    logger.info("GNN Person-Hobby edge/context CSV export를 시작합니다...")
+    subprocess.run([sys.executable, script_path], check=True, cwd=project_root)
+
+
 def _preprocess_single_chunk(chunk_df: pl.DataFrame, fast_mode: bool) -> pl.DataFrame:
     """
     멀티 프로세싱을 위해 데이터 청크를 pickle화하여 전달하기 편하도록 래핑된 함수.
@@ -128,7 +213,7 @@ def main() -> None:
         total_gpu_mem = torch.cuda.get_device_properties(0).total_memory / 1e9
         logger.info(f"[GPU] 사용 가능한 VRAM: {total_gpu_mem:.1f} GB")
         # VRAM이 적을 경우 워커 수 강제 제한
-        if total_gpu_mem < 12 and args.workers > 2:
+        if total_gpu_mem < 4 and args.workers > 2:
             logger.warning(f"[GPU] VRAM 부족으로 병렬 워커 수를 2로 제한합니다.")
             args.workers = 2
 
@@ -187,8 +272,11 @@ def main() -> None:
 
     # 6. 멀티 프로세싱으로 전처리 및 임베딩 생성 병렬 실행
     #    참고: 각 프로세스는 KURE 모델을 독립적으로 로드하므로 메모리가 꽤 소모됩니다.
+    from functools import partial
+    preprocess_func = partial(_preprocess_single_chunk, fast_mode=False)
+    
     processed_chunks = execute_parallel(
-        func=lambda chunk: _preprocess_single_chunk(chunk, fast_mode=False),
+        func=preprocess_func,
         data_chunks=chunks,
         max_workers=args.workers,
         description="Embedding 생성 및 전처리 (병렬)"
@@ -200,6 +288,12 @@ def main() -> None:
 
     # 8. Neo4j 최종 적재
     _load_to_neo4j(df=final_df, reset=args.reset, batch_size=args.batch_size)
+    
+    # 9. Person-Hobby 관계(Edge) 생성 (그래프 구조 복구)
+    _create_hobby_relationships(reset=args.reset)
+
+    # 10. GNN 학습용 Person-Hobby edge/context CSV export
+    _export_gnn_person_hobby_edges()
 
 
 if __name__ == "__main__":

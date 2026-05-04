@@ -1,0 +1,11 @@
+{
+  "experiment_id": "phase2_5_num_leaves_31",
+  "status": "trained",
+  "data_split": "validation_internal_ranker_split",
+  "input_config_summary": {
+    "config_path": "GNN_Neural_Network\\configs\\lightgcn_hobby.yaml",
+    "candidate_pool_size": 50,
+    "score_normalization": "rank_percentile"
+  },
+  "runtime_seconds": 46.89178450000145
+}
