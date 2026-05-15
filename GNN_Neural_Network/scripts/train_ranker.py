@@ -109,6 +109,12 @@ def parse_args() -> argparse.Namespace:
         default=0,
         help="CPU threads for LightGBM training. Use 0 for max(1, os.cpu_count() - 2).",
     )
+    parser.add_argument(
+        "--progress-mode",
+        choices=["auto", "on", "off"],
+        default="on",
+        help="Progress output mode for long train steps. Default on so batch progress remains visible.",
+    )
     return parser.parse_args()
 
 
@@ -117,6 +123,7 @@ def main() -> None:
     _configure_third_party_logging()
     args = parse_args()
     start_time = time.perf_counter()
+    show_progress = args.progress_mode == "on" or (args.progress_mode == "auto" and sys.stderr.isatty())
     logical_cpus = os.cpu_count() or 1
     default_cpu_threads = max(1, logical_cpus - 2)
     requested_cpu_threads = int(args.cpu_thread_count)
@@ -296,6 +303,7 @@ def main() -> None:
     stage1_kure_metadata: dict[str, object] = {"enabled": False}
     if args.stage1_kure_semantic_provider:
         stage1_provider_names = ("popularity", "cooccurrence", "kure_semantic")
+        print("[progress] Preparing leakage-safe KURE Stage1 persona text...", flush=True)
         if not person_masked_text:
             hobby_aliases = {}
             if config.paths.hobby_aliases.exists():
@@ -329,6 +337,7 @@ def main() -> None:
                 batch_size=effective_text_batch_size,
                 device=kure_device,
             )
+        print("[progress] Encoding KURE embeddings and scoring Stage1 semantic candidates...", flush=True)
         stage1_kure_semantic_scores, stage1_kure_metadata = build_kure_semantic_candidate_scores(
             person_masked_text,
             person_embedding_cache,
@@ -337,7 +346,7 @@ def main() -> None:
             train_known,
             candidate_k,
             score_batch_size=args.stage1_kure_score_batch_size,
-            show_progress_bar=True,
+            show_progress_bar=show_progress,
             progress_desc="KURE Stage1 semantic scoring (train)",
         )
         stage1_provider_cache_fingerprint = str(stage1_kure_metadata.get("fingerprint", ""))
@@ -381,6 +390,7 @@ def main() -> None:
         normalization_method=normalization_method,
         cache_dir=pool_cache_dir,
         label=data_split,
+        disable_progress=not show_progress,
         stage1_providers=stage1_provider_names,
         semantic_scores_by_person=stage1_kure_semantic_scores,
         provider_cache_fingerprint=stage1_provider_cache_fingerprint,
@@ -393,7 +403,7 @@ def main() -> None:
             hobby_embedding_cache=hobby_embedding_cache,
             id_to_hobby=id_to_hobby,
             candidate_pools=pools,
-            show_progress_bar=True,
+            show_progress_bar=show_progress,
         )
 
     candidate_pool_policy = _candidate_pool_policy(
@@ -427,7 +437,7 @@ def main() -> None:
     if args.reg_lambda is not None:
         params["reg_lambda"] = args.reg_lambda
 
-    print(f"Building ranker train dataset (neg_ratio={args.neg_ratio}, hard_ratio={args.hard_ratio})...")
+    print(f"[progress] Building ranker train dataset (neg_ratio={args.neg_ratio}, hard_ratio={args.hard_ratio})...", flush=True)
     train_ds = build_ranker_dataset(
         ranker_train_edges, pools, all_hobby_ids, train_known,
         id_to_hobby, contexts, id_to_person, hobby_profile, reranker_config,
@@ -439,7 +449,7 @@ def main() -> None:
     train_pos = sum(1 for r in train_ds.rows if r.label == 1)
     print(f"  rows={len(train_ds.rows)} pos={train_pos} neg={len(train_ds.rows) - train_pos}")
 
-    print("Building ranker val dataset...")
+    print("[progress] Building ranker val dataset...", flush=True)
     val_ds = build_ranker_dataset(
         ranker_val_edges, pools, all_hobby_ids, train_known,
         id_to_hobby, contexts, id_to_person, hobby_profile, reranker_config,
@@ -460,7 +470,7 @@ def main() -> None:
     train_lgb = train_ds.to_lgb_dataset(group_by_person=use_listwise)
     val_lgb = val_ds.to_lgb_dataset(reference=train_lgb, group_by_person=use_listwise)
 
-    print(f"Training LightGBM with params: {params}")
+    print(f"[progress] Training LightGBM with params: {params}", flush=True)
     ranker = LightGBMRanker(params=params)
     metadata = ranker.fit(
         train_lgb, val_lgb,

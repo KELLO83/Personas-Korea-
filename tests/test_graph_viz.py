@@ -294,5 +294,15 @@ def test_subgraph_depth2_query_caps_each_expansion_entity() -> None:
     assert "WITH DISTINCT other, type(r2) AS rel2_type" in SUBGRAPH_DEPTH2_QUERY
     assert "LIMIT $max_per_entity" in SUBGRAPH_DEPTH2_QUERY
     assert "LIMIT $max_secondary" in SUBGRAPH_DEPTH2_QUERY
-    assert "WHEN 'Hobby' IN labels(entity) THEN 0" in SUBGRAPH_DEPTH2_QUERY
-    assert "WHEN 'District' IN labels(entity) THEN 2" in SUBGRAPH_DEPTH2_QUERY
+
+
+def test_subgraph_depth2_query_expands_non_district_profile_traits_first() -> None:
+    assert "OR entity:Occupation" in SUBGRAPH_DEPTH2_QUERY
+    assert "OR entity:EducationLevel" in SUBGRAPH_DEPTH2_QUERY
+    assert "OR entity:MaritalStatus" in SUBGRAPH_DEPTH2_QUERY
+    assert "OR entity:HousingType" in SUBGRAPH_DEPTH2_QUERY
+    assert "WHEN entity:Hobby THEN 0" in SUBGRAPH_DEPTH2_QUERY
+    assert "WHEN entity:Skill THEN 1" in SUBGRAPH_DEPTH2_QUERY
+    assert "WHEN entity:Occupation THEN 2" in SUBGRAPH_DEPTH2_QUERY
+    assert "WHEN entity:District THEN 9" in SUBGRAPH_DEPTH2_QUERY
+    assert "ORDER BY entity_priority, entity_sort, other_uuid" in SUBGRAPH_DEPTH2_QUERY

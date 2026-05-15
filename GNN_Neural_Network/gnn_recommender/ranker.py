@@ -563,7 +563,15 @@ def build_kure_semantic_candidate_scores(
     scores_by_person: dict[int, dict[int, float]] = {}
     iterator = range(0, len(person_ids), batch_size)
     if show_progress_bar:
-        iterator = tqdm(iterator, desc=progress_desc, unit="batch", dynamic_ncols=False, leave=False)
+        iterator = tqdm(
+            iterator,
+            desc=progress_desc,
+            unit="batch",
+            dynamic_ncols=False,
+            leave=True,
+            mininterval=1.0,
+            maxinterval=10.0,
+        )
 
     for start in iterator:
         batch_person_ids = person_ids[start:start + batch_size]

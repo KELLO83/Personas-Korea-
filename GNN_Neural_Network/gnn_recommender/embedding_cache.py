@@ -4,6 +4,7 @@ import hashlib
 import time
 import json
 from pathlib import Path
+import sys
 from typing import Any, Iterator
 
 import numpy as np
@@ -140,7 +141,10 @@ class PersonEmbeddingCache:
                 desc=progress_desc,
                 unit="batch",
                 dynamic_ncols=False,
-                leave=False,
+                leave=True,
+                mininterval=1.0,
+                maxinterval=10.0,
+                file=sys.stderr,
                 disable=not show_progress_bar,
             )
             for chunk in iterator:
@@ -292,7 +296,10 @@ class HobbyEmbeddingCache:
                 desc=progress_desc,
                 unit="batch",
                 dynamic_ncols=False,
-                leave=False,
+                leave=True,
+                mininterval=1.0,
+                maxinterval=10.0,
+                file=sys.stderr,
                 disable=not show_progress_bar,
             )
             for chunk in iterator:

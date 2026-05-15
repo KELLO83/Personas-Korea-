@@ -16,7 +16,6 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, cast
 
 import numpy as np
-import torch
 from tqdm import tqdm
 
 LOGGER = logging.getLogger(__name__)
@@ -107,6 +106,12 @@ FEATURE_CACHE_VERSION = 2
 _feature_worker_hobby_profile: dict[str, object] | None = None
 _feature_worker_reranker_config: Any = None
 _feature_worker_model_feature_columns: list[str] = []
+
+
+def _torch_module() -> Any:
+    import torch
+
+    return torch
 
 
 def _init_feature_worker(
@@ -254,8 +259,9 @@ def _apply_cpu_resource_plan(plan: Mapping[str, object]) -> None:
     os.environ["OMP_NUM_THREADS"] = str(cpu_threads)
     os.environ["MKL_NUM_THREADS"] = str(cpu_threads)
     try:
-        torch.set_num_threads(cpu_threads)
-        torch.set_num_interop_threads(max(1, min(4, cpu_threads)))
+        torch_module = _torch_module()
+        torch_module.set_num_threads(cpu_threads)
+        torch_module.set_num_interop_threads(max(1, min(4, cpu_threads)))
     except RuntimeError:
         pass
 
@@ -401,7 +407,8 @@ def main() -> None:
         stage1_embedding_plan = _resolve_embedding_resource_plan(args)
         stage1_embedding_batch_size = int(stage1_embedding_plan["effective_batch_size"])
         stage1_text_cache_dir = args.embedding_cache_dir or (config.paths.artifact_dir / "text_embedding_cache")
-        stage1_text_device = "cuda" if torch.cuda.is_available() else "cpu"
+        stage1_torch = _torch_module()
+        stage1_text_device = "cuda" if stage1_torch.cuda.is_available() else "cpu"
         stage1_person_embedding_cache = PersonEmbeddingCache(
             stage1_text_cache_dir,
             batch_size=stage1_embedding_batch_size,
@@ -461,7 +468,7 @@ def main() -> None:
                 mmr_cache_dir,
                 model_name=KURE_MODEL_NAME,
                 batch_size=args.embedding_batch_size,
-                device="cuda" if torch.cuda.is_available() else "cpu",
+                device="cuda" if _torch_module().cuda.is_available() else "cpu",
             )
             hobby_emb, mmr_embedding_meta = hobby_cache.load_or_build_matrix(all_hobby_names)
             mmr_embedding_meta = {
@@ -622,7 +629,8 @@ def main() -> None:
         LOGGER.info("Preparing KURE leakage-safe text context: persons=%s", len(truth_person_ids))
         hobby_aliases = _build_hobby_alias_map(config.paths.hobby_aliases, set(id_to_hobby.values())) if config.paths.hobby_aliases.exists() else {}
         text_cache_dir = args.embedding_cache_dir or (config.paths.artifact_dir / "text_embedding_cache")
-        text_device = "cuda" if torch.cuda.is_available() else "cpu"
+        text_torch = _torch_module()
+        text_device = "cuda" if text_torch.cuda.is_available() else "cpu"
         LOGGER.info(
             "KURE model source prepared: model=%s device=%s embedding_cache_dir=%s huggingface_cache=%s",
             KURE_MODEL_NAME,
@@ -1540,7 +1548,8 @@ def _feature_policy(feature_columns: list[str]) -> dict[str, bool]:
 
 def _resolve_embedding_resource_plan(args: argparse.Namespace) -> dict[str, object]:
     requested = int(args.embedding_batch_size)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    torch_module = _torch_module()
+    device = "cuda" if torch_module.cuda.is_available() else "cpu"
     total_mb, used_mb, free_mb = _query_gpu_memory_mb()
     if requested > 0:
         estimated_mb = _estimate_embedding_vram_mb(requested)
@@ -2392,14 +2401,12 @@ def _load_hobby_taxonomy(configured_path: Path, artifact_dir: Path) -> dict[str,
             value = load_json(path)
             if isinstance(value, dict):
                 return value
-    return None
-
-
 def _safe_torch_load(path: Path) -> dict[str, Any]:
+    torch_module = _torch_module()
     try:
-        value = torch.load(path, map_location="cpu", weights_only=True)
+        value = torch_module.load(path, map_location="cpu", weights_only=True)
     except TypeError:
-        value = torch.load(path, map_location="cpu")
+        value = torch_module.load(path, map_location="cpu")
     if not isinstance(value, dict):
         raise ValueError(f"Checkpoint {path} must contain a dictionary")
     return value

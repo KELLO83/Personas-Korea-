@@ -10,31 +10,50 @@ RETURN p, r, n, type(r) AS rel_type, labels(n) AS node_labels,
 
 SUBGRAPH_DEPTH2_QUERY = """
 MATCH (p:Person {uuid: $uuid})-[r1]-(entity)
-WHERE (entity:Hobby OR entity:Skill OR entity:District)
+WHERE entity:Hobby
+   OR entity:Skill
+   OR entity:Occupation
+   OR entity:EducationLevel
+   OR entity:Field
+   OR entity:MaritalStatus
+   OR entity:FamilyType
+   OR entity:HousingType
+   OR entity:MilitaryStatus
+   OR entity:District
 WITH DISTINCT p, entity
 CALL {
     WITH p, entity
     MATCH (entity)-[r2]-(other:Person)
     WHERE other.uuid <> p.uuid
-    WITH DISTINCT other, type(r2) AS rel2_type
-    ORDER BY coalesce(other.display_name, other.uuid)
+    WITH DISTINCT other, type(r2) AS rel2_type, coalesce(other.display_name, other.uuid) AS other_sort
+    ORDER BY other_sort
     LIMIT $max_per_entity
     RETURN collect({other: other, rel2_type: rel2_type}) AS capped_people
 }
 UNWIND capped_people AS capped_person
-WITH entity, capped_person.other AS other, capped_person.rel2_type AS rel2_type
-RETURN DISTINCT entity, other, rel2_type,
+WITH entity,
+     capped_person.other AS other,
+     capped_person.rel2_type AS rel2_type,
+     CASE
+       WHEN entity:Hobby THEN 0
+       WHEN entity:Skill THEN 1
+       WHEN entity:Occupation THEN 2
+       WHEN entity:EducationLevel THEN 3
+       WHEN entity:Field THEN 4
+       WHEN entity:MaritalStatus THEN 5
+       WHEN entity:FamilyType THEN 6
+       WHEN entity:HousingType THEN 7
+       WHEN entity:MilitaryStatus THEN 8
+       WHEN entity:District THEN 9
+       ELSE 10
+     END AS entity_priority,
+     coalesce(entity.name, entity.key) AS entity_sort
+WITH DISTINCT entity, other, rel2_type, entity_priority, entity_sort
+RETURN entity, other, rel2_type,
        labels(entity) AS entity_labels, entity.name AS entity_name, entity.key AS entity_key,
        other.uuid AS other_uuid, other.display_name AS other_display_name,
        other.age AS other_age, other.sex AS other_sex
-ORDER BY CASE
-           WHEN 'Hobby' IN labels(entity) THEN 0
-           WHEN 'Skill' IN labels(entity) THEN 1
-           WHEN 'District' IN labels(entity) THEN 2
-           ELSE 3
-         END,
-         coalesce(entity.name, entity.key),
-         other.uuid
+ORDER BY entity_priority, entity_sort, other_uuid
 LIMIT $max_secondary
 """
 
