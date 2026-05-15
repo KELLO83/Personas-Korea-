@@ -1,0 +1,14 @@
+{
+  "experiment_id": "phase5_c_text_embedding_kure_text_feature_001",
+  "split": "validation",
+  "status": "skipped_disabled",
+  "reason": "Training was disabled before model fit because post-mask leakage audit failed above threshold.",
+  "threshold": 0.05,
+  "failure_rate": 0.9898431214802896,
+  "passed_person_count": 202,
+  "failed_person_count": 19686,
+  "text_embedding_audit_path": "GNN_Neural_Network/artifacts/experiments/phase5_c_text_embedding/kure_text_feature_001/text_leakage_audit.json",
+  "ranker_status_path": "GNN_Neural_Network/artifacts/experiments/phase5_c_text_embedding/kure_text_feature_001/ranker_train.status.json",
+  "default_change": false,
+  "test_run": false
+}

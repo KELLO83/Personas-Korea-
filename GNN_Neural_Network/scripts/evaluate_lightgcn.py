@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 from collections import defaultdict
 import sys
 from pathlib import Path
@@ -28,6 +29,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Evaluate a trained LightGCN checkpoint. Training is not triggered here.")
     parser.add_argument("--config", type=Path, default=Path("GNN_Neural_Network/configs/lightgcn_hobby.yaml"))
     parser.add_argument("--split", choices=["validation", "test"], default="test")
+    parser.add_argument("--output", type=Path, default=None)
     return parser.parse_args()
 
 
@@ -66,6 +68,23 @@ def main() -> None:
         known_by_person=train_known,
         top_k_values=config.eval.top_k,
     )
+    if args.output is not None:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(
+            json.dumps(
+                {
+                    "split": args.split,
+                    "lightgcn": metrics,
+                    "baselines": baseline_metrics,
+                    "num_eval_persons": len(truth),
+                    "num_train_edges": len(train_edges),
+                    "num_target_edges": len(target_edges),
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
     for key, value in sorted(metrics.items()):
         print(f"lightgcn_{key}: {value:.6f}")
     for baseline_name, values in sorted(baseline_metrics.items()):

@@ -23,6 +23,13 @@ class TestMaskHoldoutHobbies:
         assert "산책로" in result
         assert "[MASK]" in result
 
+    def test_default_act_mask_handles_korean_particle(self):
+        text = "저는 산책을 자주 하고 산책로도 좋아합니다."
+        result = mask_holdout_hobbies(text, {"산책"})
+        assert "산책을" not in result
+        assert "[ACT]을" in result
+        assert "산책로" in result
+
     def test_alias_map_masks_aliases(self):
         text = "저는 걷기, 산책, 등산을 좋아합니다."
         alias_map = {"산책": ["걷기"]}
@@ -54,6 +61,14 @@ class TestPostMaskLeakageAudit:
         masked = "저는 걷기를 좋아합니다."
         alias_map = {"산책": ["걷기"]}
         assert post_mask_leakage_audit(masked, {"산책"}, alias_map=alias_map) is False
+
+    def test_location_suffix_is_not_leakage(self):
+        masked = "공원 산책로를 천천히 걷습니다."
+        assert post_mask_leakage_audit(masked, {"산책"}) is True
+
+    def test_instrumental_particle_is_leakage(self):
+        masked = "주말에는 게임으로 스트레스를 풉니다."
+        assert post_mask_leakage_audit(masked, {"게임"}) is False
 
     def test_empty_holdout_passes(self):
         assert post_mask_leakage_audit("아무 텍스트", set()) is True

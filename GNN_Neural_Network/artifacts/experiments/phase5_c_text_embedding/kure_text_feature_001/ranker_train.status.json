@@ -1,0 +1,19 @@
+{
+  "experiment_id": "phase5_c_text_embedding_kure_text_feature_001",
+  "status": "disabled",
+  "data_split": "validation_internal_ranker_split",
+  "input_config_summary": {
+    "config_path": "GNN_Neural_Network\\configs\\lightgcn_hobby.yaml",
+    "candidate_pool_size": 50,
+    "score_normalization": "rank_percentile"
+  },
+  "summary": {
+    "reason": "post-mask leakage audit failed above threshold",
+    "threshold": 0.05,
+    "failure_rate": 0.9898431214802896,
+    "text_embedding_audit_path": "GNN_Neural_Network\\artifacts\\experiments\\phase5_c_text_embedding\\kure_text_feature_001\\text_leakage_audit.json",
+    "passed_person_count": 202,
+    "failed_person_count": 19686
+  },
+  "runtime_seconds": 1.7583394999965094
+}

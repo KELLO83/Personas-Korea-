@@ -1,5 +1,187 @@
 # GNN 취미/여가 추천 시스템 PRD
 
+## Current Execution Baseline Update (2026-05-05)
+
+This section is the current source of truth for running experiments against the local `GNN_Neural_Network/data` files. It overrides older wording that assumes the local edge CSV already contains stable canonical hobby items.
+
+### Local 50K Data Reality
+
+Current local files:
+
+```text
+GNN_Neural_Network/data/person_hobby_edges.csv
+GNN_Neural_Network/data/person_context.csv
+```
+
+Observed shape from the local files:
+
+| Item | Value | Implication |
+| --- | ---: | --- |
+| edge rows | 50,000 | current experiment slice, not full 1M raw dataset |
+| context rows | 50,000 | persona/context text is available for all local rows |
+| persons with hobby edges | 17,907 | graph is sparse per user |
+| unique raw hobby strings | 49,558 | almost every hobby edge is a unique natural-language phrase |
+| average hobbies per person | 2.79 | weak collaborative signal |
+| median hobbies per person | 3 | weak collaborative signal |
+
+`person_hobby_edges.csv` currently contains raw hobby phrases, not stable canonical item IDs. Raw hobby strings must not be used directly as LightGCN/GNN item IDs for promotion experiments. Doing so creates an almost-singleton item graph and makes collaborative filtering unreliable.
+
+Required item pipeline before any promotion-grade experiment:
+
+```text
+raw_hobby_phrase
+  -> normalize / alias / canonicalize
+  -> fallback_item or category backoff for rare items
+  -> stable item vocabulary
+  -> train/validation/test split
+  -> Stage 1 / Stage 2 evaluation
+```
+
+### Model Role Decision
+
+Given the current data shape, GNN/LightGCN is not the primary default recommender. It is an auxiliary candidate provider and analysis baseline.
+
+Current default remains:
+
+```text
+Stage 1 = popularity + cooccurrence
+Stage 2 = LightGBM learned ranker
+MMR     = false
+```
+
+Rationale:
+
+- The Person-Hobby graph is sparse and raw hobby phrases are extremely long-tail.
+- Stage 1 `popularity + cooccurrence` has beaten available graph/item-item provider variants in the current artifacts.
+- Stage 2 LightGBM is the promoted accuracy-oriented default.
+- The unresolved issue is ranking collapse, not candidate retrieval failure. CandidateRecall@50 is about 0.977.
+
+### KURE-v1 Experiment Boundary
+
+Use the spelling `KURE-v1` for the model (`nlpai-lab/KURE-v1`). Older notes that say `KRUE` are historical aliases and must be treated as KURE-v1, not as a separate model family.
+
+Two KURE-related experiment families must stay separate:
+
+| Experiment family | Status | Default impact |
+| --- | --- | --- |
+| KURE dense MMR reranking | completed, NO-GO | `MMR=false` remains default |
+| KURE text embedding feature ablation | completed/rejected after full-context rerun; may remain as Stage2-only signal analysis | `include_text_embedding_feature=false` remains default |
+| KURE semantic Stage1 candidate provider | newly approved gated opt-in experiment | no default impact unless it beats the closed Phase 2.5 gates |
+
+The initial KURE text feature run set `include_text_embedding_feature=true`, but the post-mask leakage audit failed above the 5% threshold and the run was excluded before LightGBM fitting:
+
+```text
+run_id: kure_text_feature_001
+failure_rate: 0.989843
+passed_person_count: 202
+failed_person_count: 19686
+decision: disabled_by_leakage_gate
+```
+
+The rerun corrected the audit design: missing persona context is now a coverage miss, not a leakage failure, and audit uses the same Korean boundary matcher as masking. The corrected audit passed for covered contexts, but mapped context coverage was too low:
+
+```text
+run_id: kure_text_feature_002_context_coverage_gate
+passed_person_count: 211
+failed_person_count: 0
+missing_context_person_count: 19677
+validation_delta_recall@10_vs_stage1: +0.000704
+decision: not_promoted_low_coverage
+
+run_id: kure_text_feature_003_full_ranker_fallback
+train_rows: 16035
+validation_delta_recall@10_vs_stage1: -0.001106
+validation_delta_ndcg@10_vs_stage1: +0.000197
+decision: rejected_recall_regression
+```
+
+The next KURE work is not another MMR sweep and not another blind KURE rerank. The next KURE work is repairing or regenerating split-aligned `person_context.csv` coverage for the current person mapping, then re-running leakage-safe text embedding feature injection into the LightGBM ranker.
+
+### Mandatory Blockers Before KURE Text Feature Ablation
+
+Do not run promotion-grade KURE text embedding feature experiments until these blockers are closed:
+
+1. **50K canonical/fallback baseline closure**
+   - Rebuild or verify the stable item vocabulary from raw hobby phrases.
+   - Confirm `rare_item_policy=keep_with_fallback` does not reduce `candidate_recall@50` by more than `0.01`.
+   - Re-run the closed Phase 2.5 config on the local 50K slice and record validation metrics.
+
+2. **Phase 5-B2 feature-balance closure**
+   - Complete the `feature_fraction=0.7` validation artifact, not just `candidates_done` status.
+   - Run the planned `feature_fraction=0.8` probe only if it is still needed under the same baseline.
+   - Compare against the closed Phase 2.5 baseline and record a decision.
+
+3. **Taxonomy over-merge risk closure**
+   - Record whether over-merged canonical/category mappings contribute to top-k ranking collapse.
+   - Keep this as a data-quality decision even if no model default changes.
+
+4. **Cold-start baseline metrics**
+   - Define cold-start as `known_hobbies <= 1`.
+   - Record cold-start Recall@10, NDCG@10, Coverage@10, Novelty@10, and ILD@10 for the closed Phase 2.5 default.
+   - Use this as the comparison baseline for KURE text feature experiments.
+
+### KURE Text Feature Gate
+
+The KURE text embedding feature may run only as an ablation/diversity probe until it passes all relevant gates.
+
+Hard requirements:
+
+- `mask_holdout_hobbies()` must be applied before encoding persona text.
+- `post_mask_leakage_audit()` must be persisted in artifacts.
+- A run with failed leakage audit must be marked `disabled` and excluded from metric comparison.
+- Missing persona context must be recorded as coverage miss and must not count as leakage failure.
+- Training and evaluation must use the same feature construction path.
+- `feature_policy.include_text_embedding_feature=true` must be recorded in train/eval artifacts.
+- `include_text_embedding_feature=true` cannot be promoted while context coverage is too low to affect the validation population robustly.
+
+Promotion requirements:
+
+- Default promotion accuracy gate: `delta_recall@10 >= -0.002`, `delta_ndcg@10 >= -0.002` vs closed Phase 2.5 baseline.
+- Diversity probe gate: `delta_recall@10 >= -0.010`, `delta_ndcg@10 >= -0.010` plus documented diversity gains.
+- At least two diversity KPIs should improve by the documented thresholds before any promotion discussion.
+- Test split is winner-only after validation selection.
+
+### KURE Semantic Stage1 Candidate Provider Gate
+
+This is a separate experiment from Stage2 text embedding features. It tests whether adding a KURE-v1 semantic retrieval source to Stage 1 improves the candidate pool before the same LightGBM Stage 2 ranker.
+
+Allowed provider path:
+
+```text
+Stage 1 = popularity + cooccurrence + kure_semantic
+Stage 2 = LightGBM learned ranker
+MMR     = false
+```
+
+Hard requirements:
+
+- It must be explicit opt-in only (`allow_stage1_kure_provider=true` plus a CLI flag); the default remains `popularity + cooccurrence`.
+- Persona text must use the same leakage-safe holdout masking/audit rules before Stage1 semantic scoring.
+- Candidate-pool cache keys must include provider names and KURE model/revision/cache fingerprint metadata.
+- KURE embedding/scoring must use CUDA when available, CPU fallback otherwise, visible progress output, and CPU worker defaults of `max(1, os.cpu_count() - 2)` for evaluation.
+- Stage2 training/evaluation must still use the closed LightGBM default unless the experiment explicitly trains a separate opt-in model artifact.
+
+Decision gate:
+
+- Validation-first; run test only for a validation-selected winner.
+- Compare against the closed Phase 2.5 default, not only against Stage1.
+- Default promotion requires `delta_recall@10 >= -0.002`, `delta_ndcg@10 >= -0.002`, `v2_fallback_count=0`, and no candidate-recall regression beyond tolerance.
+- If it improves Stage1 but remains below the closed Phase 2.5 default, record it as rejected/experimental and keep the default unchanged.
+
+### Text Embedding Backbone Follow-Up Candidates
+
+KURE-v1 remains the current reference backbone for leakage-safe text embedding feature experiments. Two additional
+backbones may be evaluated only as Phase 5-C follow-up ablations under the same masking, leakage-audit, cache,
+validation-first, and winner-only-test rules:
+
+| Candidate | Role | Rationale | Promotion impact |
+| --- | --- | --- | --- |
+| `dragonkue/snowflake-arctic-embed-l-v2.0-ko` | accuracy-ceiling probe | Korean retrieval benchmarks suggest it can exceed KURE-v1 quality, but it is not expected to be materially lighter | no default change unless it beats the closed baseline gates |
+| `dragonkue/multilingual-e5-small-ko-v2` | lightweight probe | 118M parameter / 384-dim class model; useful if validation quality is close enough while reducing VRAM, cache, and runtime cost | may become a lightweight candidate only after validation gate and cold-start review |
+
+These runs must not reuse incompatible KURE feature caches. Cache metadata and feature-cache keys must include the
+embedding model name or revision so KURE-v1, Snowflake-ko, and E5-small-ko vectors cannot mix.
+
 ## 문서 계층 및 우선순위
 
 - 단일 진실원천은 `PRD.md`와 `TASKS.md`입니다.
@@ -23,57 +205,37 @@
   - `intra_list_diversity@10`: baseline 대비 절대 `+0.02` 이상
   - 최소 2개 지표가 위 기준을 동시에 만족해야 개선 인정
 
-### Phase 5-B. Text-Embedding 기반 Diversity 및 Coverage 개선 (KURE-v1)
-- **문제 정의:** 현재 `feature policy`에서 `include_text_embedding_feature=false`로 운영 중이나, `LightGBM` 기반 `Stage 2` 모델은 `popularity + cooccurrence` score에 편중되어 `Ranking Collapse`(Coverage@10 저하) 현상이 발생하고 있다.
-- **실험 목적:** `KURE-v1` 모델을 활용하여 `masking`된 `Persona Text`와 `Hobby` 명 사이의 의미론적 유사도(Cosine Similarity)를 계산하고, 이를 `Stage 2` 재정렬기의 새로운 Feature(`persona_hobby_semantic_sim`)로 도입하여 Coverage@10 및 Novelty를 향상시킬 수 있는지 검증한다.
-- **실행 방식:** 
-  1. `GNN_Neural_Network/gnn_recommender/text_embedding.py`의 `_load_kure_model()` 및 `compute_text_embedding_similarity()`를 활용한다.
-  2. 대상 텍스트는 누수 방지를 위해 `mask_holdout_hobbies()`가 적용된 Text만 사용한다. (Raw persona text 사용 금지)
-  3. Stage 2(LightGBM) 학습 시 기존 정형 Feature 외에 `text_embedding_similarity`를 추가하여 학습/추론한다.
-- **성공 기준 (Gate):**
-  - 기준선(Baseline) 대비 `Recall@10` 감소 폭이 `-0.005(0.5%)` 이내를 유지하면서, `Coverage@10` 또는 `Novelty@10`이 최소 `+0.03(3%)` 이상 개선될 경우 성공 (diversity_probe 승격 고려).
-  - 만약 `delta_recall@10 < -0.010`이 발생하면, 해당 실험은 실패로 간주하고 기존 운영 모델로 Roll-back 한다.
+### Phase 5-B/C. Text Embedding Status And Follow-Up Boundary
+
+Phase 5-B/C text-embedding work is **not** an active default-promotion path. The completed KURE-v1 text feature ablation is recorded as `rejected_needs_followup`, and the default remains `include_text_embedding_feature=false`.
+
+Completed result:
+
+- `kure_text_feature_001`: disabled by leakage gate before LightGBM fitting.
+- `kure_text_feature_002_context_coverage_gate`: corrected audit passed for covered contexts, but context coverage was too low for robust validation impact.
+- `kure_text_feature_003_full_ranker_fallback`: rejected because validation Recall@10 regressed and stayed below the closed Phase 2.5 default.
+- No winner was selected for test; no default path changed.
+
+Follow-up may resume only after the blockers in `Mandatory Blockers Before KURE Text Feature Ablation` are closed. Follow-up work must be implementation/governance first: context coverage repair, cold-start metric reporting, model/revision-safe cache keys, and artifact metadata. Do not treat KURE text features as a live promotion candidate without new validation artifacts.
 
 ## 6. 현재 승인 기준 (프로젝트 내부 SOTA 경로) 및 Feature Policy
 
 - 현재 승인된 운영/실험 기본 경로:
   - Stage 1: `popularity + cooccurrence`
   - Stage 2: `LightGBM learned ranker`
+  - MMR: `false` flag-only
   - 모델/파라미터: `num_leaves=31`, `min_data_in_leaf=50`, `learning_rate=0.05`, `reg_alpha=0.1`, `reg_lambda=0.1`
   - 샘플링: `neg_ratio=4`, `hard_ratio=0.8`
 
-### Feature Policy (수정됨)
-- `include_source_features` (기본값 `false`): Stage 1의 raw provider별 점수(`popularity`, `co-occurrence` 등)를 LightGBM Feature로 직접 사용할지 여부. 보조 KPI 개선 시 유효하나, 기본값은 정형/역학 Feature 집중을 위해 `false`를 권장한다.
- - `include_text_embedding_feature` (기본값 `false`, **Phase 5-B 탐색 시 `true`**): 
-  - 기본값 `false`: 누수 방지 및 정형 데이터 안정성을 위해 텍스트/임베딩 Feature를 배제한다.
-  - `Phase 2.5` 또는 `Phase 5-B` Diversity Probe 실험 시에만 **`true`로 설정**하여 KURE 임베딩 유사도 Feature를 활성화한다. 이 경우 `mask_holdout_hobbies()` 적용 및 **도메인별 구조화 규칙**이 필수 조건이다.
-   - **[KURE 입력 스펙]**: Persona 텍스트는 `[PROF]`, `[SPORT]`, `[ART]`, `[TRAVEL]`, `[FOOD]`, `[FAM]`, `[CULT]` 등의 도메인 태그로 분리/결합하여 KURE 모델에 입력한다. 태그 순서는 논리적 흐름에 맞게 배치한다.
-   - **[Model Config]**: KRUE(KURE-v1) 모델 로드는 `transformers` 기반 `sentence-transformers` 호출을 권장한다. 입력 최대 토큰 길이는 512로 제한하며, CUDA(GPU)가 사용 불가능할 경우 CPU로 자동 Fallback 처리해야 한다. 배치 사이즈(configurable)는 시스템 메모리 상태에 맞게 동적으로 제어한다.
-   - **[Leakage-safe 규칙]**: 마스킹된 취미 단어는 문맥 유지를 위해 `[ACT]` 플레이스홀더로 대체하며, 이는 '특정 취미가 아닌 라이프스타일 맥락 자체'를 KURE가 임베딩하도록 유도한다. (예: "등산을 한다" -> "[ACT]를 한다")
-   - **[성공 기준 (Gate) - Soft 추가]**:
-     - **Hard Gate**: Baseline 대비 `Recall@10` 감소 폭 `-0.005(0.5%)` 이내 & `Coverage@10` 또는 `Novelty@10`이 최소 `+0.03(3%)` 이상 개선 (diversity_probe 승격 고려).
-     - **Soft Gate (Relative Trade-off)**: Hard Gate의 `Coverage@10`(+0.03) 달성이 어렵더라도, `Novelty@10`이 **상대적으로 +15% 이상** 개선되고 `Recall@10` 감소 폭이 `-0.002` 이내로 좁혀진다면, Ranking Collapse 완화 효과가 있다고 간주하여 `experimental` 상태로 후속 검토를 승인한다. (단, `delta_recall@10 < -0.010`이면 즉시 실패 처리)
- - `candidate_k=50` 풀 기반 재정렬/재랭킹 실험은 전체 후보 풀을 유지한 뒤 top-k를 선별한다.
- - **[Text Embedding Cache Key]**: Feature matrix cache key에는 KURE 임베딩 버전 간 충돌을 막기 위해 `kure_embedding_ver=<hash>`와 `masking_applied=<bool>` 값을 포함하여, 기존 캐시와 KURE 임베딩 캐시가 섞이지 않도록 분리한다.
-- 랭킹 collapse 완화 실험은 기본적으로 10K 오프라인 서브셋에서 validation을 먼저 수행하고, pass된 1개 winner만 full scope로 확장한다.
-- Leakage-safe `text_embedding_similarity` ablation은 ranking collapse 원인 확인을 위한 우선 탐색 실험으로 승격한다. 마스킹/audit 실패 시 해당 run은 metric 비교에서 제외한다.
-- Phase 5 이후 평가 artifact는 normal-case 전체 지표와 별도로 cold-start subset(`known_hobbies <= 1`) 지표를 보조 KPI로 기록한다.
-- 실행 산출물은 기존 경로를 유지한다.
-  - 기본 패턴: `GNN_Neural_Network/artifacts/experiments/<phase>/<run>/...`
-  - 필수 파일: `validation_metrics.json`, `validation_metrics.status.json`, winner-only `test_metrics.json`, `test_metrics.status.json`
-- `Phase 2.5` 이전 기준은 하위 섹션의 실행 정책을 따른다.
+### Feature Policy
 
-## 현재 승인 기준 (프로젝트 내부 SOTA 경로)
-
-- 여기서 `SOTA`는 논문적 최고 성능 모델이 아니라, 현재 문서 게이트를 통과한 **승격 baseline**을 의미합니다.
-- 현재 승인된 운영/실험 기본 경로:
-  - Stage 1: `popularity + cooccurrence`
-  - Stage 2: `LightGBM learned ranker`
-  - MMR: `false`(flag only)
-  - 모델/파라미터: `num_leaves=31`, `min_data_in_leaf=50`, `learning_rate=0.05`, `reg_alpha=0.1`, `reg_lambda=0.1`
-  - 샘플링: `neg_ratio=4`, `hard_ratio=0.8`
-  - feature policy: `include_source_features=false`, `include_text_embedding_feature=false`
-- 근거 경로: `phase2_5_num_leaves_31` 결과와 `artifacts/experiment_decisions.json`
+- `include_source_features=false`: current default. Source one-hot features were evaluated and rejected for the default path.
+- `include_text_embedding_feature=false`: current default. KURE-v1 text embedding was evaluated and rejected/needs-follow-up; it may be enabled only in explicitly gated ablation runs.
+- Text embedding ablations must use leakage-safe `[ACT]` masking, domain-tagged persona text, persisted `post_mask_leakage_audit()`, and identical train/eval feature construction.
+- Text/embedding cache keys must include the embedding model name or revision plus masking/feature policy metadata so KURE-v1, Snowflake-ko, and E5-small-ko vectors cannot mix.
+- `candidate_k=50` pool based reranking experiments must preserve the full candidate pool before selecting top-k.
+- Phase 5+ evaluation artifacts must report cold-start subset metrics (`known_hobbies <= 1`) separately from overall metrics.
+- Required artifact pattern remains `GNN_Neural_Network/artifacts/experiments/<phase>/<run>/...` with validation status for every trial and test artifacts only for a selected validation winner.
 
 ## 1. 목적
 
@@ -455,7 +617,7 @@ canonicalization은 Stage 1 ablation의 하위 작업이 아니라 **앞단 데�
 ### Acceptance Gate (희귀 취미 백오프 정책 검증)
 - **Drop 금지:** 학습 파이프라인에서 `dropped_hobbies`는 0이어야 하며, 희귀 취미는 `rare_item_policy=keep_with_fallback`에 의해 반드시 보존/백오프 되어야 함.
 - **성능 하락 허용치:** 백오프 정책 적용 시, `candidate_recall@50` 하락폭이 `-0.01` 이내로 유지되어야 함.
-- **다양성/개인화 확보:** `coverage@10` 또는 `novelty@10`이 기존 Drop 정책 대비 **반드시 개선**되어야 하며, 이는 후속 KRUE 임베딩 도입의 유효성을 보장하는 베이스라인이 됨.
+- **다양성/개인화 확보:** `coverage@10` 또는 `novelty@10`이 기존 Drop 정책 대비 **반드시 개선**되어야 하며, 이는 후속 KURE-v1 임베딩 도입의 유효성을 보장하는 베이스라인이 됨.
 - **Cold-start 보장:** `known_hobbies <= 1`인 sparse user에 대한 별도 평가 결과를 기록하여, 희귀 취미가 개인 맞춤형 추천으로 이어지는지 확인함.
 
 현재 상태:
@@ -465,6 +627,37 @@ canonicalization은 Stage 1 ablation의 하위 작업이 아니라 **앞단 데�
 - 증가폭: `+0.014` (`+0.02` 임계치 충족)
 - retained canonical hobby: `180`
 - 판정: 현재 값은 정량 기준에서 **통과**되나, `canonicalization_candidates` 재확인과 taxonomy review는 유지한다.
+
+### Canonical Item ID Promotion Gate
+
+raw hobby phrase를 장기 item ID로 유지하지 않는다. promotion-grade 실험에서 기본 item 단위는 `canonical_hobby`이며, raw phrase는 display example과 audit evidence로만 보존한다.
+
+canonical item ID 승격 조건:
+
+- `vocabulary_report.json`에 raw/canonical person, hobby, edge 수와 singleton ratio가 기록되어야 한다.
+- raw baseline 대비 `candidate_recall@50` 하락폭은 `-0.01` 이내여야 한다.
+- raw baseline 대비 Stage1 `recall@10` 및 `ndcg@10` 하락폭은 각각 `-0.005` 이내여야 한다.
+- `canonical singleton ratio` 증가는 raw 대비 `+0.02` 이내여야 한다.
+- `retained canonical hobby` 수는 기본적으로 `150 ~ 250` 범위를 우선한다. 범위를 벗어나면 taxonomy review reason을 남긴다.
+- over-merge 의심 cluster는 `approved`, `rejected`, `split_required` 중 하나로 판정해야 한다.
+- `generic token`만으로 묶인 cluster는 기본적으로 `rejected` 또는 `split_required`로 기록한다.
+
+승격 후 출력 계약:
+
+```json
+{
+  "hobby_id": 0,
+  "canonical_hobby": "산책",
+  "display_examples": ["석촌호수 산책", "한강공원 산책"],
+  "raw_hobby_evidence": [],
+  "taxonomy": {
+    "category": "",
+    "parent": ""
+  }
+}
+```
+
+canonical item ID 승격은 모델 성능 개선 실험이 아니라 데이터 품질 gate다. 이 gate가 닫히기 전의 Stage1/Stage2 결과는 promotion-grade default 근거로 사용하지 않는다.
 
 ### Stage 2 Persona-aware Reranker
 
@@ -669,6 +862,51 @@ cache artifact 계약:
 - feature cache metadata는 load 시 `split`, `feature_columns`, feature policy를 검증한다. 검증 실패 시 cache miss로 처리하고 feature matrix를 재생성한다.
 - status artifact는 timeout 또는 user abort 이후에도 마지막 완료 단계를 알 수 있도록 `started`, `trained`, `candidates_done`, `features_done`, `v2_rankings_done`, `validation_evaluated`, `test_evaluated` 중 하나를 저장한다.
 
+experiment decision artifact 계약:
+
+`GNN_Neural_Network/artifacts/experiment_decisions.json`는 사람이 나중에 default 변경 근거를 재검토할 수 있도록 아래 schema를 유지한다.
+
+```json
+{
+  "run_id": "stage2_kure_text_feature_001",
+  "experiment_family": "kure_text_embedding_feature",
+  "baseline_run_id": "phase2_5_default",
+  "status": "accepted|rejected|promoted|disabled|experimental|needs_followup",
+  "promotion_decision": "promoted|not_promoted|test_allowed|test_blocked",
+  "split": "validation",
+  "model_path": "",
+  "feature_policy": {},
+  "candidate_pool_policy": {},
+  "metrics": {
+    "recall@10": 0.0,
+    "ndcg@10": 0.0,
+    "coverage@10": 0.0,
+    "novelty@10": 0.0,
+    "intra_list_diversity@10": 0.0
+  },
+  "delta_vs_baseline": {
+    "recall@10": 0.0,
+    "ndcg@10": 0.0
+  },
+  "cold_start_metrics": {},
+  "gate_results": {
+    "accuracy_gate": "pass|fail|not_applicable",
+    "diversity_gate": "pass|fail|not_applicable",
+    "stability_gate": "pass|fail|not_applicable",
+    "leakage_gate": "pass|fail|not_applicable"
+  },
+  "rejection_reason": "",
+  "artifact_paths": []
+}
+```
+
+decision artifact 기록 규칙:
+
+- validation winner가 아니면 test 실행을 허용하지 않는다.
+- rejected/disabled 결과도 반드시 기록한다.
+- `rejection_reason`은 `recall_regression`, `ndcg_regression`, `leakage_risk`, `low_context_coverage`, `diversity_gate_fail`, `stability_gate_fail`, `timeout_or_aborted` 중 하나 이상을 사용한다.
+- default path 변경 시 `experiment_run_summary.md`도 같은 run_id로 갱신한다.
+
 Phase 2.5 실행 정책 완료 판정:
 
 - 위 artifact 계약 중 `experiment_id`, data split/evaluation split, model path, input config summary, feature policy, candidate pool policy/cache key, metrics, runtime seconds, status가 학습 및 평가 artifact에 모두 남아야 완료로 본다.
@@ -855,7 +1093,7 @@ Optimizer는 v1에서 `torch.optim.Adam`을 기본으로 한다. `AdamW`는 conf
 ### 데이터 누수 제거 검증 (Data Leakage Lockout)
 
 모든 실험(train/val/test split CSV 및 임베딩 캐시)은 **누수 제거(Lockout) 상태**여야 한다.
-KRUE-v1(KURE) 실험에 사용되는 `GNN_Neural_Network/data/` 내 CSV 파일들(`train.csv`, `validation.csv`, `test.csv`)의 `hobbies_and_interests_list` 컬럼은 다음 상태를 만족해야 한다.
+KURE-v1 실험에 사용되는 `GNN_Neural_Network/data/` 내 CSV 파일들(`train.csv`, `validation.csv`, `test.csv`)의 `hobbies_and_interests_list` 컬럼은 다음 상태를 만족해야 한다.
 - 타겟 holdout 취미 단어는 원문에서 직접 삭제되거나, 문맥 유지용 `[ACT]` 플레이스홀더로 대체되어야 한다.
 - 검증(Validation) 및 테스트(Test) 데이터에는 해당 인물이 이미 알고 있는(holdout된) 취미가 raw 혹은 텍스트 형태로 노출되지 않아야 한다.
 - `mask_holdout_hobbies()` 함수가 적용된 최종 상태의 데이터가 사용되어야 한다.
@@ -1133,6 +1371,60 @@ delta_vs_selected_baseline
 - `GNN_Neural_Network/artifacts/leakage_audit.json`
 - `GNN_Neural_Network/artifacts/fallback_usage.json`
 
+### Model Serving Contract
+
+offline winner가 root F11 추천 API 또는 별도 serving path로 이동하려면 모델 artifact 외에 serving contract를 만족해야 한다. 이 계약은 offline 실험 성능과 online 추천 동작을 분리하기 위한 최소 조건이다.
+
+입력:
+
+```json
+{
+  "person_uuid": "",
+  "known_hobbies": [],
+  "persona_context": {},
+  "candidate_k": 50,
+  "top_n": 10,
+  "model_version": ""
+}
+```
+
+출력:
+
+```json
+{
+  "person_uuid": "",
+  "recommendations": [
+    {
+      "hobby_id": 0,
+      "canonical_hobby": "",
+      "display_name": "",
+      "score": 0.0,
+      "rank": 1,
+      "reason": "",
+      "sources": ["popularity", "cooccurrence", "lightgbm"],
+      "feature_snapshot": {}
+    }
+  ],
+  "model_version": "",
+  "artifact_version": "",
+  "fallback_used": false,
+  "fallback_reason": ""
+}
+```
+
+fallback 정책:
+
+- unknown `person_uuid`: explicit error 또는 gated popularity fallback 중 하나를 serving ADR에서 선택한다.
+- LightGBM model load 실패: deterministic reranker 또는 Stage1 ranking fallback.
+- mapping miss: canonical vocabulary mapping을 우선 재조회하고, 실패 시 fallback reason을 기록한다.
+- feature cache miss는 serving request path에서 대량 rebuild하지 않는다.
+- serving latency 목표는 root F11 API 목표와 맞춘다. LLM 동기 호출은 추천 scoring path에 넣지 않는다.
+
+artifact versioning:
+
+- model artifact는 `model_version`, `feature_schema_version`, `candidate_pool_policy`, `canonical_vocabulary_hash`, `training_data_snapshot_id`를 포함해야 한다.
+- serving output은 어떤 model/version으로 생성됐는지 추적 가능해야 한다.
+
 구현 전 `.gitignore`에 다음 항목을 추가해야 한다.
 
 ```gitignore
@@ -1266,6 +1558,41 @@ Stage 1 provider 실험은 폐쇄되었고, 현재 개선 방향은 **Stage 1 �
 - stability gate: `candidate_recall@50` 및 fallback 제약 유지
 - cold-start 보조 지표: `known_hobbies <= 1` subset의 recall@10, ndcg@10, coverage@10, novelty@10, intra_list_diversity@10을 별도 기록
 
+### Cold-start Gate Policy
+
+cold-start는 `known_hobbies <= 1`인 person subset으로 고정한다. cold-start 지표는 전체 default promotion hard gate를 대체하지 않는다. 즉 전체 Recall/NDCG가 gate를 실패한 실험은 cold-start가 좋아도 default로 승격하지 않는다.
+
+사용 원칙:
+
+- 전체 metric: default promotion hard gate
+- cold-start metric: secondary gate 또는 diversity probe 근거
+- KURE/text embedding feature는 cold-start에서 개선이 기대되는 실험이므로 cold-start 지표를 반드시 기록한다.
+- cold-start 개선만으로 test split을 실행하려면 전체 `diversity_probe` accuracy gate를 먼저 통과해야 한다.
+- cold-start 지표가 악화되면 전체 metric이 좋아도 qualitative review를 요구한다.
+
+필수 기록 항목:
+
+```json
+{
+  "cold_start_definition": "known_hobbies <= 1",
+  "cold_start_person_count": 0,
+  "cold_start_metrics": {
+    "recall@10": 0.0,
+    "ndcg@10": 0.0,
+    "coverage@10": 0.0,
+    "novelty@10": 0.0,
+    "intra_list_diversity@10": 0.0
+  },
+  "delta_vs_baseline": {
+    "recall@10": 0.0,
+    "ndcg@10": 0.0,
+    "coverage@10": 0.0,
+    "novelty@10": 0.0,
+    "intra_list_diversity@10": 0.0
+  }
+}
+```
+
 ### 과거 완료 항목 (문서 정합)
 
 1. **LightGBM regularization tuning** — completed, promoted candidate
@@ -1305,11 +1632,11 @@ Stage 1 provider 실험은 폐쇄되었고, 현재 개선 방향은 **Stage 1 �
 - feature importance가 `cooccurrence_score + popularity_prior`에 과도하게 집중
 - canonical singleton ratio `0.848`이 raw `0.834`보다 높아 taxonomy over-merge 가능성 존재
 
-### Phase 5-A 계획: KURE dense embedding MMR 재평가
+### Phase 5-A 결과: KURE dense embedding MMR 재평가
 
-Phase 2.5 default decision closure 이후 첫 번째 후속 실험은 **KURE dense embedding 기반 MMR 재평가**로 한다. 이 실험은 Phase 2.5 default를 직접 덮어쓰는 튜닝이 아니라, closed default 대비 diversity 개선 가능성을 검증하는 별도 실험군이다.
+Phase 5-A KURE dense embedding MMR re-evaluation is closed as **NO-GO**. It did not replace or modify the closed Phase 2.5 default.
 
-고정 baseline:
+Fixed baseline used for this closed experiment:
 
 ```text
 Stage 1 = popularity + cooccurrence
@@ -1323,119 +1650,21 @@ include_text_embedding_feature=false
 MMR=false
 ```
 
-핵심 목적:
+Validation results against the closed baseline:
 
-- category one-hot MMR의 한계를 KURE-v1 dense hobby embedding으로 재검증한다.
-- current default의 accuracy 우위를 과도하게 훼손하지 않으면서 `coverage@10`, `novelty@10`, `intra_list_diversity@10` 중 최소 2개를 **정량 임계치**(coverage +0.025 / novelty +0.10 / ILD +0.02) 기반으로 개선할 수 있는지 확인한다.
-- candidate recall이 이미 높으므로 retrieval 확장이 아니라 top-k 재정렬의 diversity/accuracy trade-off를 검증한다.
-
-구현 전 필수 요구사항:
-
-- MMR은 LightGBM이 scoring한 `candidate_k=50` 전체 후보에 적용한 뒤 top-k를 선택해야 한다.
-- top-10을 먼저 자른 뒤 MMR을 적용하는 방식은 금지한다.
-- 기존 category one-hot 경로는 regression 비교와 fallback 용도로 유지한다.
-- KURE hobby embedding은 `HobbyEmbeddingCache` 또는 동등한 캐시를 사용해 재사용한다.
-- KURE embedding은 L2-normalized dense matrix로 MMR에 전달한다.
-- embedding cache key 또는 metadata에는 model name(`nlpai-lab/KURE-v1`), hobby name list/hash, 생성 시각을 남긴다.
-- CUDA 사용 가능 시 모델 encoding은 CUDA를 사용할 수 있으나 batch size는 CLI/config로 제어 가능해야 한다.
-
-권장 CLI/API 변경:
-
-```text
-evaluate_ranker.py
-  --use-mmr
-  --mmr-lambda <float>
-  --mmr-embedding-method category_onehot|kure
-  --embedding-cache-dir <path>
-  --embedding-batch-size <int>
-```
-
-기본값:
-
-- `--mmr-embedding-method=category_onehot`로 기존 동작을 유지한다.
-- KURE 재평가 명령에서만 `--mmr-embedding-method=kure`를 명시한다.
-- `--use-mmr`가 없으면 default는 계속 no-MMR이다.
-
-Validation lambda 후보:
-
-```text
-lambda = 0.5, 0.7, 0.8, 0.9
-optional = 0.3 (accuracy 손실 확인용, 필요 시만 실행)
-```
-
-선택 기준:
-
-- validation에서만 lambda를 선택한다.
-- test는 validation winner 1개 설정에 대해서만 1회 실행한다.
-- test 결과를 보고 lambda를 다시 조정하면 해당 test metric은 최종 성능 주장에 사용할 수 없다.
-
-Validation gate:
-
-```text
-accuracy gate:
-  delta_recall@10 >= -0.002 vs closed Phase 2.5 default
-  delta_ndcg@10 >= -0.002 vs closed Phase 2.5 default
-
-diversity gate:
-  coverage@10, novelty@10, intra_list_diversity@10 중 최소 2개 개선
-  - coverage@10: +0.025
-  - novelty@10: +0.10
-  - intra_list_diversity@10: +0.02
-  coverage@10은 가능하면 반드시 개선되어야 함
-
-stability gate:
-  v2_fallback_count = 0 유지
-  candidate_recall@50 동일 수준 유지
-  KURE embedding cache 재사용 가능
-```
-
-Baseline validation reference:
-
-```text
-Recall@10=0.7390509094604207
-NDCG@10=0.45797028878684237
-coverage@10=0.15555555555555556
-novelty@10=4.584286633989583
-candidate_recall@50=0.9776445483182603
-intra_list_diversity@10=0.99
-```
-
-Baseline test reference:
-
-```text
-Recall@10=0.7096839752057718
-NDCG@10=0.447712669317698
-coverage@10=0.15555555555555556
-novelty@10=4.584286633989583
-candidate_recall@50=0.977136469870948
-intra_list_diversity@10=0.99
-```
-
-산출물:
-
-- `artifacts/experiments/phase5_kure_mmr_lambda_<lambda>/validation_metrics.json`
-- `artifacts/experiments/phase5_kure_mmr_lambda_<lambda>/validation_metrics.status.json`
-- `artifacts/experiments/phase5_kure_mmr_lambda_<lambda>/test_metrics.json` (선택된 lambda만)
-- `artifacts/experiments/phase5_kure_mmr_summary.md`
-- `artifacts/experiment_decisions.json`의 `phase5_kure_mmr` 결정 기록
-- `artifacts/experiment_run_summary.md`의 Phase 5 결과 요약
-
-Phase 5 실행 결과 (closed baseline 대비):
-
-| lambda | validation recall@10 | validation ndcg@10 | coverage@10 | novelty@10 | 상태 |
+| lambda | validation recall@10 | validation ndcg@10 | coverage@10 | novelty@10 | status |
 |:---|---:|---:|---:|---:|:---|
 | 0.5 | 0.7025708769434 | 0.44405002047689657 | 0.17222222222222222 | 4.600134502809017 | blocked |
 | 0.7 | 0.7230972462148155 | 0.45215806458894897 | 0.14444444444444443 | 4.574651938789798 | blocked |
 | 0.8 | 0.7293974189614877 | 0.4544781022168803 | 0.14444444444444443 | 4.572329701397024 | blocked |
 | 0.9 | 0.7288893405141754 | 0.45464407336870966 | 0.15000000000000002 | 4.574799041368609 | blocked |
 
-결과: 모든 설정이 `delta_recall@10 < -0.002` 및 `delta_ndcg@10 < -0.002`를 보였고, 검증 winner가 없어 test는 실행되지 않았다.
+Decision:
 
-Go/No-Go:
-
-- GO: accuracy gate를 통과하고 diversity gate를 통과하면 `MMR=false` default를 즉시 바꾸지 않고, `KURE MMR candidate`로 승격한다. 운영/루트 연동 전 별도 승인 필요.
-- NO-GO: validation에서 gate를 통과한 lambda가 없으면 test를 생략하고 `MMR=false` default를 유지한다.
-- PROMOTE: selected validation winner가 final test에서도 accuracy/diversity gate를 통과하고 qualitative sample review가 통과할 때만 default 변경 후보로 기록한다.
+- All lambdas failed the accuracy gate versus the closed Phase 2.5 default.
+- No validation winner was selected, so winner-only test execution was intentionally skipped.
+- `MMR=false` remains the default; KURE MMR remains flag-only/non-default historical evidence.
+- Future MMR work must not rerun a blind lambda sweep. It needs a new hypothesis, fixed baseline, validation-first gating, and decision artifacts before any test execution.
 
 ## 14. 향후 확장
 

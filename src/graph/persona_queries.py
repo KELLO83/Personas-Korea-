@@ -9,7 +9,7 @@ OPTIONAL MATCH (p)-[:MILITARY_STATUS]->(mil:MilitaryStatus)
 OPTIONAL MATCH (p)-[:LIVES_WITH]->(ft:FamilyType)
 OPTIONAL MATCH (p)-[:LIVES_IN_HOUSING]->(ht:HousingType)
 OPTIONAL MATCH (p)-[:HAS_SKILL]->(s:Skill)
-OPTIONAL MATCH (p)-[:ENJOYS_HOBBY]->(h:Hobby)
+OPTIONAL MATCH (p)-[:ENJOYS_HOBBY|LIKES]->(h:Hobby)
 RETURN p,
        d.name AS district_name, d.key AS district_key,
        prov.name AS province_name,
@@ -27,7 +27,7 @@ RETURN p,
 
 SIMILAR_PREVIEW_QUERY = """
 MATCH (p:Person {uuid: $uuid})-[r:SIMILAR_TO]->(sim:Person)
-OPTIONAL MATCH (p)-[:ENJOYS_HOBBY]->(h1:Hobby)<-[:ENJOYS_HOBBY]-(sim)
+OPTIONAL MATCH (p)-[:ENJOYS_HOBBY|LIKES]->(h1:Hobby)<-[:ENJOYS_HOBBY|LIKES]-(sim)
 RETURN sim.uuid AS uuid, sim.display_name AS display_name, sim.age AS age,
        r.score AS similarity, collect(DISTINCT h1.name) AS shared_hobbies
 ORDER BY r.score DESC LIMIT 3
@@ -36,7 +36,7 @@ ORDER BY r.score DESC LIMIT 3
 GRAPH_STATS_QUERY = """
 MATCH (p:Person {uuid: $uuid})
 OPTIONAL MATCH (p)-[r]-()
-OPTIONAL MATCH (p)-[:ENJOYS_HOBBY]->(h:Hobby)
+OPTIONAL MATCH (p)-[:ENJOYS_HOBBY|LIKES]->(h:Hobby)
 OPTIONAL MATCH (p)-[:HAS_SKILL]->(s:Skill)
 RETURN count(DISTINCT r) AS total_connections,
        count(DISTINCT h) AS hobby_count,

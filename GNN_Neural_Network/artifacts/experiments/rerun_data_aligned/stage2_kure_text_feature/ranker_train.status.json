@@ -1,0 +1,16 @@
+{
+  "experiment_id": "rerun_data_aligned_stage2_kure_text_feature",
+  "status": "trained",
+  "data_split": "validation_internal_ranker_split",
+  "input_config_summary": {
+    "config_path": "GNN_Neural_Network\\configs\\lightgcn_hobby.yaml",
+    "candidate_pool_size": 50,
+    "score_normalization": "rank_percentile"
+  },
+  "summary": {
+    "text_embedding_enabled": true,
+    "text_embedding_audit_path": "GNN_Neural_Network\\artifacts\\experiments\\rerun_data_aligned\\stage2_kure_text_feature\\text_leakage_audit.json",
+    "text_embedding_audit_pass": true
+  },
+  "runtime_seconds": 875.7578339000174
+}

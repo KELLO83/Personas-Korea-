@@ -55,8 +55,8 @@ ORDER BY type, name
 """
 
 SHARED_HOBBIES_QUERY = """
-MATCH (source:Person {uuid: $source_uuid})-[:ENJOYS_HOBBY]->(hobby:Hobby)<-[:ENJOYS_HOBBY]-(target:Person {uuid: $target_uuid})
-RETURN hobby.name AS name
+MATCH (source:Person {uuid: $source_uuid})-[:ENJOYS_HOBBY|LIKES]->(hobby:Hobby)<-[:ENJOYS_HOBBY|LIKES]-(target:Person {uuid: $target_uuid})
+RETURN DISTINCT hobby.name AS name
 ORDER BY hobby.name
 """
 

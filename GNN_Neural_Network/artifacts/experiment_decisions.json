@@ -1,14 +1,16 @@
 {
   "snapshot_date": "2026-05-01",
   "scope": "GNN_Neural_Network offline recommender snapshot",
-  "source_artifacts": [
+      "source_artifacts": [
     "artifacts/metrics.json",
     "artifacts/stage1_ablation_validation.json",
     "artifacts/stage1_ablation_test.json",
     "artifacts/rerank_metrics.json",
     "artifacts/recommendation_quality_audit.json",
     "artifacts/vocabulary_report.json",
-    "artifacts/experiments/phase5_kure_mmr_summary.md"
+    "artifacts/experiments/phase5_kure_mmr_summary.md",
+    "artifacts/experiments/phase2_5_cold_start_baseline/validation_metrics.json",
+    "artifacts/experiments/phase2_5_cold_start_baseline/test_metrics.json"
   ],
   "current_system": {
     "stage1": {
@@ -43,7 +45,10 @@
     "phase2_5_default": {
       "status": "closed",
       "strategy": "accuracy-oriented default",
-      "stage1": ["popularity", "cooccurrence"],
+      "stage1": [
+        "popularity",
+        "cooccurrence"
+      ],
       "stage2": "LightGBM learned ranker",
       "model_path": "artifacts/experiments/phase2_5_num_leaves_31/ranker_model.txt",
       "config": {
@@ -217,23 +222,13 @@
   "next_priorities": [
     {
       "priority": 1,
-      "task": "LightGBM regularization and Phase 2.5 robustness tracking",
-      "goal": "Keep the promoted LightGBM defaults stable while any post-Phase 2.5 diversity probes remain gated."
+      "task": "Gated KURE/KRUE text embedding feature ablation",
+      "goal": "Run only with explicit opt-in, masking, post-mask leakage audit, validation-first selection, and no default change unless gates pass."
     },
     {
       "priority": 2,
-      "task": "Phase 5-A closure: lock winnerless KURE MMR result as NO-GO",
-      "goal": "Maintain `MMR=false` default and document this in decision/run summaries."
-    },
-    {
-      "priority": 3,
-      "task": "Phase 5 integration: text embedding feature ablation",
-      "goal": "Run with --use-text-embedding after leakage audit, measure accuracy impact"
-    },
-    {
-      "priority": 4,
-      "task": "Cold-start and segment ablations",
-      "goal": "Validate phase 2.5 default robustness on sparse and segment-specific subgroups before any candidate default change"
+      "task": "Cold-start and taxonomy review of any KURE/KRUE result",
+      "goal": "Compare sparse-user metrics and taxonomy concentration before treating diversity gains as production-ready."
     }
   ],
   "phase4_implementation": {
@@ -352,38 +347,83 @@
     "reason": "Validation favored hard_ratio=1.0, but the single final test check underperformed the current hard_ratio=0.8 default on Recall@10 and NDCG@10. Keep current default and do not promote the negative-sampling change.",
     "validation_trials": [
       {
-        "config": {"neg_ratio": 1, "hard_ratio": 0.8},
-        "recall@10": 0.693934, "ndcg@10": 0.435216, "coverage@10": 0.155556, "novelty@10": 4.484836,
-        "decision": "rejected", "reason": "below Stage 1 baseline and current default"
+        "config": {
+          "neg_ratio": 1,
+          "hard_ratio": 0.8
+        },
+        "recall@10": 0.693934,
+        "ndcg@10": 0.435216,
+        "coverage@10": 0.155556,
+        "novelty@10": 4.484836,
+        "decision": "rejected",
+        "reason": "below Stage 1 baseline and current default"
       },
       {
-        "config": {"neg_ratio": 2, "hard_ratio": 0.8},
-        "recall@10": 0.726857, "ndcg@10": 0.451182, "coverage@10": 0.138889, "novelty@10": 4.568721,
-        "decision": "rejected", "reason": "below current default validation recall and ndcg"
+        "config": {
+          "neg_ratio": 2,
+          "hard_ratio": 0.8
+        },
+        "recall@10": 0.726857,
+        "ndcg@10": 0.451182,
+        "coverage@10": 0.138889,
+        "novelty@10": 4.568721,
+        "decision": "rejected",
+        "reason": "below current default validation recall and ndcg"
       },
       {
-        "config": {"neg_ratio": 4, "hard_ratio": 0.8},
-        "recall@10": 0.7390509094604207, "ndcg@10": 0.45797028878684237, "coverage@10": 0.15555555555555556, "novelty@10": 4.584286633989583,
-        "decision": "baseline", "reason": "current default before negative sampling ablation"
+        "config": {
+          "neg_ratio": 4,
+          "hard_ratio": 0.8
+        },
+        "recall@10": 0.7390509094604207,
+        "ndcg@10": 0.45797028878684237,
+        "coverage@10": 0.15555555555555556,
+        "novelty@10": 4.584286633989583,
+        "decision": "baseline",
+        "reason": "current default before negative sampling ablation"
       },
       {
-        "config": {"neg_ratio": 8, "hard_ratio": 0.8},
-        "recall@10": 0.737323, "ndcg@10": 0.457867, "coverage@10": 0.155556, "novelty@10": 4.584538,
-        "decision": "rejected", "reason": "slightly below current default validation recall and ndcg"
+        "config": {
+          "neg_ratio": 8,
+          "hard_ratio": 0.8
+        },
+        "recall@10": 0.737323,
+        "ndcg@10": 0.457867,
+        "coverage@10": 0.155556,
+        "novelty@10": 4.584538,
+        "decision": "rejected",
+        "reason": "slightly below current default validation recall and ndcg"
       },
       {
-        "config": {"neg_ratio": 4, "hard_ratio": 0.5},
-        "recall@10": 0.730210, "ndcg@10": 0.452869, "coverage@10": 0.138889, "novelty@10": 4.588810,
-        "decision": "rejected", "reason": "below current default validation recall and ndcg"
+        "config": {
+          "neg_ratio": 4,
+          "hard_ratio": 0.5
+        },
+        "recall@10": 0.73021,
+        "ndcg@10": 0.452869,
+        "coverage@10": 0.138889,
+        "novelty@10": 4.58881,
+        "decision": "rejected",
+        "reason": "below current default validation recall and ndcg"
       },
       {
-        "config": {"neg_ratio": 4, "hard_ratio": 1.0},
-        "recall@10": 0.7424042272126816, "ndcg@10": 0.45862024557767694, "coverage@10": 0.15555555555555556, "novelty@10": 4.600143,
-        "decision": "selected_for_test", "reason": "best validation recall and ndcg among tested negative sampling configs"
+        "config": {
+          "neg_ratio": 4,
+          "hard_ratio": 1.0
+        },
+        "recall@10": 0.7424042272126816,
+        "ndcg@10": 0.45862024557767694,
+        "coverage@10": 0.15555555555555556,
+        "novelty@10": 4.600143,
+        "decision": "selected_for_test",
+        "reason": "best validation recall and ndcg among tested negative sampling configs"
       }
     ],
     "final_test_check": {
-      "config": {"neg_ratio": 4, "hard_ratio": 1.0},
+      "config": {
+        "neg_ratio": 4,
+        "hard_ratio": 1.0
+      },
       "recall@10": 0.7089726653795346,
       "ndcg@10": 0.44667618759401445,
       "coverage@10": 0.15555555555555556,
@@ -424,14 +464,18 @@
     },
     "reason": "Adding source one-hot features lowered validation Recall@10 and NDCG@10 versus the current default. Per split discipline, final test was skipped.",
     "baseline_validation": {
-      "config": {"include_source_features": false},
+      "config": {
+        "include_source_features": false
+      },
       "recall@10": 0.7390509094604207,
       "ndcg@10": 0.45797028878684237,
       "coverage@10": 0.15555555555555556,
       "novelty@10": 4.584286633989583
     },
     "source_onehot_validation": {
-      "config": {"include_source_features": true},
+      "config": {
+        "include_source_features": true
+      },
       "recall@10": 0.7379331368763337,
       "ndcg@10": 0.45714097508144047,
       "coverage@10": 0.1388888888888889,
@@ -544,7 +588,10 @@
     "status": "closed",
     "decision": "promote_current_default",
     "default_path": {
-      "stage1": ["popularity", "cooccurrence"],
+      "stage1": [
+        "popularity",
+        "cooccurrence"
+      ],
       "stage2": "LightGBM learned ranker",
       "mmr": false
     },
@@ -608,6 +655,91 @@
     ],
     "next_step": "Use this default as the fixed baseline for KURE dense embedding MMR or leakage-safe text embedding experiments."
   },
+  "phase5_text_embedding_ablation": {
+    "experiment": "Phase5_C_Text_Embedding_Feature_Ablation",
+    "timestamp": "2026-05-05",
+    "status": "rejected_needs_followup",
+    "decision": "do_not_promote_text_embedding_feature",
+    "default_change": false,
+    "run_id": "kure_text_feature_003_full_ranker_fallback",
+    "model": "nlpai-lab/KURE-v1",
+    "feature_policy": {
+      "include_source_features": false,
+      "include_text_embedding_feature": true,
+      "text_feature_name": "text_embedding_similarity"
+    },
+    "baseline": {
+      "name": "closed Phase 2.5 default",
+      "stage1": [
+        "popularity",
+        "cooccurrence"
+      ],
+      "stage2": "LightGBM learned ranker",
+      "include_text_embedding_feature": false,
+      "validation_recall@10": 0.7390509094604207,
+      "validation_ndcg@10": 0.45797028878684237,
+      "validation_coverage@10": 0.15555555555555556,
+      "validation_novelty@10": 4.584286633989583,
+      "validation_candidate_recall@50": 0.9776445483182603
+    },
+    "leakage_gate": {
+      "threshold": 0.05,
+      "status": "passed_after_context_coverage_fix",
+      "passed_person_count": 211,
+      "failed_person_count": 0,
+      "missing_context_person_count": 19677,
+      "audit_eligible_person_count": 211
+    },
+    "validation_runs": {
+      "kure_text_feature_002_context_coverage_gate": {
+        "stage2_scope": "context-covered persons only; missing context falls back to Stage 1",
+        "train_rows": 830,
+        "validation_rows": 225,
+        "validation_recall@10": 0.6811645213193885,
+        "validation_ndcg@10": 0.4195203031397684,
+        "delta_recall@10_vs_stage1": 0.0007039420756234094,
+        "delta_ndcg@10_vs_stage1": 0.00015070579410964013,
+        "v2_fallback_count": 19677,
+        "decision": "not_promoted"
+      },
+      "kure_text_feature_003_full_ranker_fallback": {
+        "stage2_scope": "all persons; missing context uses empty context and text_embedding_similarity=0",
+        "train_rows": 16035,
+        "validation_rows": 4040,
+        "validation_recall@10": 0.6793543845534996,
+        "validation_ndcg@10": 0.4195670061858815,
+        "delta_recall@10_vs_stage1": -0.0011061946902655162,
+        "delta_ndcg@10_vs_stage1": 0.00019740884022273475,
+        "v2_fallback_count": 0,
+        "decision": "rejected"
+      },
+      "control_no_text_full_ranker_fallback": {
+        "include_text_embedding_feature": false,
+        "train_rows": 16035,
+        "validation_rows": 4040,
+        "validation_recall@10": 0.6773431214802896,
+        "validation_ndcg@10": 0.41895162835463207,
+        "delta_recall@10_vs_stage1": -0.003117457763475495,
+        "delta_ndcg@10_vs_stage1": -0.00041796899102669594,
+        "decision": "control_only"
+      }
+    },
+    "artifacts": [
+      "artifacts/experiments/phase5_c_text_embedding/kure_text_feature_001/text_leakage_audit.json",
+      "artifacts/experiments/phase5_c_text_embedding/kure_text_feature_001/ranker_params.json",
+      "artifacts/experiments/phase5_c_text_embedding/kure_text_feature_001/ranker_train.status.json",
+      "artifacts/experiments/phase5_c_text_embedding/kure_text_feature_001/validation_metrics.status.json",
+      "artifacts/experiments/phase5_c_text_embedding/kure_text_feature_002_context_coverage_gate/validation_metrics.json",
+      "artifacts/experiments/phase5_c_text_embedding/kure_text_feature_003_full_ranker_fallback/validation_metrics.json",
+      "artifacts/experiments/phase5_c_text_embedding/control_no_text_full_ranker_fallback/validation_metrics.json",
+      "artifacts/experiments/phase5_c_text_embedding/phase5_c_text_embedding_summary.md",
+      "artifacts/experiments/phase5_c_text_embedding/phase5_c_text_embedding_summary.json",
+      "artifacts/experiments/phase5_c_text_embedding/phase5_c_text_embedding_rerun_summary.md",
+      "artifacts/experiments/phase5_c_text_embedding/phase5_c_text_embedding_rerun_summary.json"
+    ],
+    "reason": "The corrected leakage gate passed, but current person_context coverage is only 211 validation persons. The context-covered KURE run produced only a tiny validation gain with 19677 Stage 1 fallbacks, and the full-ranker KURE run degraded Recall@10 versus Stage 1. It remains below the closed Phase 2.5 selected default.",
+    "next_step": "Do not run test for KURE text feature. Improve person_context coverage or regenerate split-aligned persona context before another text embedding ablation."
+  },
   "phase3_mmr_diversity": {
     "experiment": "Phase3_MMR_Diversity_Reordering",
     "timestamp": "2026-04-30",
@@ -651,5 +783,152 @@
       "3. Source one-hot feature ablation",
       "4. KURE embedding cache (Phase 5) for MMR re-evaluation"
     ]
+  },
+  "phase5_pre_kure_closure": {
+    "experiment": "Phase5_Pre_KURE_Blocker_Closure",
+    "timestamp": "2026-05-15",
+    "status": "closed_with_taxonomy_warning",
+    "decision": "ready_for_gated_kure_text_ablation",
+    "default_change": false,
+    "default_path_after_closure": {
+      "stage1": [
+        "popularity",
+        "cooccurrence"
+      ],
+      "stage2": "LightGBM learned ranker",
+      "include_source_features": false,
+      "include_text_embedding_feature": false,
+      "mmr": false
+    },
+    "canonical_fallback_baseline": {
+      "status": "closed_prepare_only",
+      "command": ".\\.venv\\Scripts\\python.exe GNN_Neural_Network\\scripts\\train_lightgcn.py --prepare-only",
+      "config": "GNN_Neural_Network/configs/lightgcn_hobby.yaml",
+      "rare_item_policy": "keep_with_fallback",
+      "raw_edges": 50000,
+      "retained_edges": 48811,
+      "dropped_edges": 0,
+      "rare_items_count": 7423,
+      "fallback_edges_count": 7457,
+      "artifacts": [
+        "GNN_Neural_Network/artifacts/vocabulary_report.json",
+        "GNN_Neural_Network/artifacts/train_edges.csv",
+        "GNN_Neural_Network/artifacts/validation_edges.csv",
+        "GNN_Neural_Network/artifacts/test_edges.csv",
+        "GNN_Neural_Network/artifacts/hobby_profile.json",
+        "GNN_Neural_Network/artifacts/leakage_audit.json",
+        "GNN_Neural_Network/artifacts/score_normalization.json"
+      ],
+      "decision": "Canonical/fallback preparation is current for the local 50K data slice; rare items are preserved with fallback and dropped_edges remains 0."
+    },
+    "phase5_b2_feature_balance": {
+      "status": "completed_no_default_change",
+      "baseline_scope": "50K validation candidate pool, no text embedding feature",
+      "runs": [
+        {
+          "experiment_id": "phase5_b2_feature_balance_feature_fraction_0_7",
+          "feature_fraction": 0.7,
+          "model_path": "GNN_Neural_Network/artifacts/experiments/phase5_b2_feature_balance/feature_fraction_0_7/ranker_model.txt",
+          "validation_metrics_path": "GNN_Neural_Network/artifacts/experiments/phase5_b2_feature_balance/feature_fraction_0_7/validation_metrics.json",
+          "best_iteration": 64,
+          "best_auc": 0.888715317229139,
+          "stage1_recall@10": 0.6804605792437651,
+          "stage1_ndcg@10": 0.41936959734565876,
+          "v2_recall@10": 0.6807119871279164,
+          "v2_ndcg@10": 0.4194971532788993,
+          "delta_recall@10_vs_stage1": 0.0002514078841512335,
+          "delta_ndcg@10_vs_stage1": 0.00012755593324054182,
+          "candidate_recall@50": 0.9930108608205953,
+          "v2_fallback_count": 19677,
+          "cold_start_recall@10": 0.6870838881491345,
+          "cold_start_ndcg@10": 0.4247177886080592,
+          "cold_start_coverage@10": 0.14444444444444443,
+          "decision": "blocked",
+          "reason": "Only marginal ranking improvement over Stage 1 and large v2 fallback count; not eligible as a pre-KRUE default candidate."
+        },
+        {
+          "experiment_id": "phase5_b2_feature_balance_feature_fraction_0_8",
+          "feature_fraction": 0.8,
+          "model_path": "GNN_Neural_Network/artifacts/experiments/phase5_b2_feature_balance/feature_fraction_0_8/ranker_model.txt",
+          "validation_metrics_path": "GNN_Neural_Network/artifacts/experiments/phase5_b2_feature_balance/feature_fraction_0_8/validation_metrics.json",
+          "best_iteration": 34,
+          "best_auc": 0.8371604938271605,
+          "stage1_recall@10": 0.6804605792437651,
+          "stage1_ndcg@10": 0.41936959734565876,
+          "v2_recall@10": 0.6808628318584071,
+          "v2_ndcg@10": 0.4195721900005691,
+          "delta_recall@10_vs_stage1": 0.0004022526146419958,
+          "delta_ndcg@10_vs_stage1": 0.0002025926549103496,
+          "candidate_recall@50": 0.9930108608205953,
+          "v2_fallback_count": 19677,
+          "cold_start_recall@10": 0.6871996757945927,
+          "cold_start_ndcg@10": 0.42478522913804456,
+          "cold_start_coverage@10": 0.15555555555555556,
+          "decision": "blocked",
+          "reason": "Slightly better than feature_fraction=0.7 but still only marginally above Stage 1 and has the same large fallback count."
+        }
+      ],
+      "selected_pre_krue_candidate": null,
+      "decision": "Keep the closed Phase 2.5 default as the comparison baseline for KRUE/KURE semantic similarity feature experiments."
+    },
+    "phase2_5_cold_start_baseline": {
+      "status": "completed",
+      "subset_definition": "known_hobbies <= 1",
+      "model_path": "GNN_Neural_Network/artifacts/experiments/phase2_5_num_leaves_31/ranker_model.txt",
+      "validation_metrics_path": "GNN_Neural_Network/artifacts/experiments/phase2_5_cold_start_baseline/validation_metrics.json",
+      "test_metrics_path": "GNN_Neural_Network/artifacts/experiments/phase2_5_cold_start_baseline/test_metrics.json",
+      "validation": {
+        "person_count": 8563,
+        "v2_recall@10": 0.5921989956790844,
+        "v2_ndcg@10": 0.36779812877277507,
+        "v2_coverage@10": 0.002801867911941294,
+        "v2_novelty@10": 4.570525816761743,
+        "v2_intra_list_diversity@10": 0.9674439124398992,
+        "stage1_recall@10": 0.5823893495270349,
+        "stage1_ndcg@10": 0.36370648897645547,
+        "candidate_recall@50": 0.8276687851155936,
+        "v2_fallback_count": 0
+      },
+      "test": {
+        "person_count": 8563,
+        "v2_recall@10": 0.5895130211374519,
+        "v2_ndcg@10": 0.368271036693895,
+        "v2_coverage@10": 0.002801867911941294,
+        "v2_novelty@10": 4.570525816761743,
+        "v2_intra_list_diversity@10": 0.9674439124398992,
+        "stage1_recall@10": 0.5783019969636809,
+        "stage1_ndcg@10": 0.3647365523995676,
+        "candidate_recall@50": 0.8272082527401676,
+        "v2_fallback_count": 0,
+        "feature_builder_parallelism": "process_pool_by_person",
+        "default_cpu_threads": 20,
+        "runtime_seconds": 344.2782450999948
+      },
+      "decision": "Use as the fixed sparse-user comparison baseline before any KURE/KRUE text feature default discussion."
+    },
+    "taxonomy_overmerge": {
+      "status": "warning_closed_for_pre_kure",
+      "report_path": "GNN_Neural_Network/artifacts/experiments/phase5_taxonomy_overmerge/overmerge_report.json",
+      "total_hobbies": 49558,
+      "avg_user_top_category_ratio": 0.7509865788052823,
+      "rare_hobby_count": 49262,
+      "rare_hobby_threshold": 1,
+      "overmerge_warning_categories": [
+        "기타/다양"
+      ],
+      "decision": "Taxonomy/category balance remains a documented warning, not a blocker to a gated validation-only KURE text ablation; any future coverage/novelty gain must be reviewed against this taxonomy risk."
+    },
+    "reason": "Prepare-only artifacts were refreshed, Phase 5-B2 feature-fraction validation artifacts are complete with no promoted candidate, dedicated closed Phase 2.5 validation/test cold-start baseline artifacts are present, and taxonomy over-merge is documented as a warning rather than a default-changing result.",
+    "artifacts": [
+      "artifacts/experiments/pre_kure_experiment_summary.json",
+      "artifacts/experiments/pre_kure_experiment_summary.md",
+      "artifacts/vocabulary_report.json",
+      "artifacts/experiments/phase5_b2_feature_balance/feature_fraction_0_7/validation_metrics.json",
+      "artifacts/experiments/phase5_b2_feature_balance/feature_fraction_0_8/validation_metrics.json",
+      "artifacts/experiments/phase2_5_cold_start_baseline/validation_metrics.json",
+      "artifacts/experiments/phase2_5_cold_start_baseline/test_metrics.json",
+      "artifacts/experiments/phase5_taxonomy_overmerge/overmerge_report.json"
+    ],
+    "next_step": "Run KURE/KRUE text embedding only as an explicit opt-in validation-first ablation with leakage audit and no default change unless gates pass."
   }
 }

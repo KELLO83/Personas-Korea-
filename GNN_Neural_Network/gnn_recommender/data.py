@@ -94,6 +94,32 @@ class PersonContext:
     embedding_text: str
 
 
+def empty_person_context(person_uuid: str = "") -> PersonContext:
+    return PersonContext(
+        person_uuid=person_uuid,
+        age="",
+        age_group="",
+        sex="",
+        occupation="",
+        district="",
+        province="",
+        family_type="",
+        housing_type="",
+        education_level="",
+        persona_text="",
+        professional_text="",
+        sports_text="",
+        arts_text="",
+        travel_text="",
+        culinary_text="",
+        family_text="",
+        hobbies_text="",
+        skills_text="",
+        career_goals="",
+        embedding_text="",
+    )
+
+
 PERSON_CONTEXT_FIELDS = [
     "person_uuid",
     "age",

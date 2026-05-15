@@ -101,6 +101,39 @@ def per_segment_metrics(
     return result
 
 
+def cold_start_subset_metrics(
+    truth_by_person: dict[int, set[int]],
+    recommendations_by_person: dict[int, list[int]],
+    known_by_person: dict[int, set[int]],
+    top_k_values: tuple[int, ...],
+    *,
+    max_known_hobbies: int = 1,
+) -> dict[str, object]:
+    cold_persons = [
+        person_id
+        for person_id, relevant in truth_by_person.items()
+        if relevant and len(known_by_person.get(person_id, set())) <= max_known_hobbies
+    ]
+    metrics: dict[str, object] = {
+        "definition": f"known_hobbies <= {max_known_hobbies}",
+        "person_count": len(cold_persons),
+        "max_known_hobbies": max_known_hobbies,
+    }
+    for k in top_k_values:
+        if not cold_persons:
+            metrics[f"recall@{k}"] = 0.0
+            metrics[f"ndcg@{k}"] = 0.0
+            metrics[f"hit_rate@{k}"] = 0.0
+            continue
+        recalls = [recall_at_k(truth_by_person[p], recommendations_by_person.get(p, []), k) for p in cold_persons]
+        ndcgs = [ndcg_at_k(truth_by_person[p], recommendations_by_person.get(p, []), k) for p in cold_persons]
+        hits = [hit_rate_at_k(truth_by_person[p], recommendations_by_person.get(p, []), k) for p in cold_persons]
+        metrics[f"recall@{k}"] = sum(recalls) / len(recalls)
+        metrics[f"ndcg@{k}"] = sum(ndcgs) / len(ndcgs)
+        metrics[f"hit_rate@{k}"] = sum(hits) / len(hits)
+    return metrics
+
+
 def summarize_ranking_metrics(
     truth_by_person: dict[int, set[int]],
     recommendations_by_person: dict[int, list[int]],
@@ -110,6 +143,8 @@ def summarize_ranking_metrics(
     hobby_categories: dict[int, str] | None = None,
     candidate_pool_by_person: dict[int, list[int]] | None = None,
     person_segments: dict[int, dict[str, str]] | None = None,
+    known_by_person: dict[int, set[int]] | None = None,
+    cold_start_max_known_hobbies: int = 1,
 ) -> dict[str, object]:
     metrics: dict[str, object] = {}
     persons = [person_id for person_id, relevant in truth_by_person.items() if relevant]
@@ -135,7 +170,7 @@ def summarize_ranking_metrics(
             metrics[f"catalog_coverage@{k}"] = len(recommended_items) / num_total_items
 
         if item_popularity is not None:
-            novelties = []
+            novelties: list[float] = []
             for p in persons:
                 recs = recommendations_by_person.get(p, [])[:k]
                 if not recs:
@@ -161,6 +196,15 @@ def summarize_ranking_metrics(
         max_k = max(top_k_values)
         metrics["per_segment"] = per_segment_metrics(
             truth_by_person, recommendations_by_person, person_segments, max_k,
+        )
+
+    if known_by_person is not None:
+        metrics["cold_start"] = cold_start_subset_metrics(
+            truth_by_person,
+            recommendations_by_person,
+            known_by_person,
+            top_k_values,
+            max_known_hobbies=cold_start_max_known_hobbies,
         )
 
     return metrics

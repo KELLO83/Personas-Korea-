@@ -24,6 +24,16 @@ type PositionedEdge = {
   target: PositionedNode;
 };
 
+type LayoutNode = PositionedNode & {
+  fixed: boolean;
+};
+
+type CurvedEdgeGeometry = {
+  path: string;
+  labelLeft: number;
+  labelTop: number;
+};
+
 type LaneKey = "center" | "hobbies" | "work" | "place" | "life" | "similar" | "outer";
 
 type LaneConfig = {
@@ -42,10 +52,16 @@ type NodeDragState = {
 
 const GRAPH_NODE_LIMIT = 36;
 const GRAPH_EDGE_LIMIT = 90;
-const EDGE_LABEL_VIS_LIMIT = 18;
+const EDGE_LABEL_VIS_LIMIT = 16;
 const DRAG_DISTANCE_THRESHOLD = 3;
+const DRAG_POSITION_EPSILON = 0.08;
+const WHEEL_ZOOM_SENSITIVITY = 0.0014;
+const KEYBOARD_ZOOM_FACTOR = 1.12;
 const MIN_PADDING = 5;
 const MAX_PADDING = 95;
+const COLLISION_ITERATIONS = 9;
+const LABEL_ZOOM_DISCLOSURE = 1.34;
+const DETAIL_LABEL_ZOOM_DISCLOSURE = 1.56;
 
 const LANE_CONFIG: Record<LaneKey, LaneConfig> = {
   center: { label: "중심", angle: 0, directRadius: 0, outerRadius: 0 },
@@ -59,6 +75,7 @@ const LANE_CONFIG: Record<LaneKey, LaneConfig> = {
 
 const RELATION_LANE: Record<string, LaneKey> = {
   ENJOYS_HOBBY: "hobbies",
+  LIKES: "hobbies",
   HAS_SKILL: "work",
   WORKS_AS: "work",
   LIVES_IN: "place",
@@ -78,22 +95,103 @@ type EdgeStyle = {
 };
 
 const EDGE_STYLES: Record<string, EdgeStyle> = {
-  ENJOYS_HOBBY: { color: "#8cff8f", width: 0.14, activeWidth: 0.34, opacity: 0.34 },
-  HAS_SKILL: { color: "#ffd166", width: 0.15, activeWidth: 0.35, opacity: 0.38 },
-  WORKS_AS: { color: "#cdb2ff", width: 0.16, activeWidth: 0.36, opacity: 0.4 },
-  LIVES_IN: { color: "#74d6ff", width: 0.14, activeWidth: 0.32, opacity: 0.34 },
-  LIVES_IN_HOUSING: { color: "#ffb8ff", width: 0.13, activeWidth: 0.3, opacity: 0.3 },
-  LIVES_WITH: { color: "#ffb1d4", width: 0.13, activeWidth: 0.3, opacity: 0.3 },
-  EDUCATED_AT: { color: "#6ec8f9", width: 0.14, activeWidth: 0.31, opacity: 0.34 },
-  MARITAL_STATUS: { color: "#ff9f7b", width: 0.13, activeWidth: 0.3, opacity: 0.3 },
-  MILITARY_STATUS: { color: "#babfc8", width: 0.12, activeWidth: 0.28, opacity: 0.28 },
-  SIMILAR_TO: { color: "#ffffff", width: 0.13, activeWidth: 0.34, opacity: 0.42 },
+  ENJOYS_HOBBY: { color: "var(--green)", width: 0.14, activeWidth: 0.34, opacity: 0.34 },
+  LIKES: { color: "var(--green)", width: 0.14, activeWidth: 0.34, opacity: 0.34 },
+  HAS_SKILL: { color: "var(--amber)", width: 0.15, activeWidth: 0.35, opacity: 0.38 },
+  WORKS_AS: { color: "var(--violet)", width: 0.16, activeWidth: 0.36, opacity: 0.4 },
+  LIVES_IN: { color: "var(--cyan)", width: 0.14, activeWidth: 0.32, opacity: 0.34 },
+  LIVES_IN_HOUSING: { color: "var(--violet)", width: 0.13, activeWidth: 0.3, opacity: 0.3 },
+  LIVES_WITH: { color: "var(--red)", width: 0.13, activeWidth: 0.3, opacity: 0.3 },
+  EDUCATED_AT: { color: "var(--cyan)", width: 0.14, activeWidth: 0.31, opacity: 0.34 },
+  MARITAL_STATUS: { color: "var(--amber)", width: 0.13, activeWidth: 0.3, opacity: 0.3 },
+  MILITARY_STATUS: { color: "var(--muted)", width: 0.12, activeWidth: 0.28, opacity: 0.28 },
+  SIMILAR_TO: { color: "var(--text)", width: 0.13, activeWidth: 0.34, opacity: 0.42 },
 };
 
-const DEFAULT_EDGE_STYLE: EdgeStyle = { color: "#ffffff", width: 0.13, activeWidth: 0.3, opacity: 0.34 };
+const DEFAULT_EDGE_STYLE: EdgeStyle = { color: "var(--text)", width: 0.13, activeWidth: 0.3, opacity: 0.34 };
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
+}
+
+function stableHash(input: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < input.length; index += 1) {
+    hash = Math.imul(hash ^ input.charCodeAt(index), 16777619);
+  }
+  return hash >>> 0;
+}
+
+function deterministicSigned(id: string, salt: string) {
+  return (stableHash(`${id}:${salt}`) / 0xffffffff) * 2 - 1;
+}
+
+function nodeCollisionRadius(item: PositionedNode) {
+  if (item.depth <= 0) return 7.2;
+  const baseRadius = item.depth <= 1 ? 5.4 : 4.8;
+  const degreeWeight = clamp(item.degree * 0.12, 0, 0.72);
+  return baseRadius + degreeWeight;
+}
+
+function resolveLayoutCollisions(nodes: LayoutNode[]) {
+  for (let iteration = 0; iteration < COLLISION_ITERATIONS; iteration += 1) {
+    for (let firstIndex = 0; firstIndex < nodes.length; firstIndex += 1) {
+      for (let secondIndex = firstIndex + 1; secondIndex < nodes.length; secondIndex += 1) {
+        const first = nodes[firstIndex];
+        const second = nodes[secondIndex];
+        if (first.fixed && second.fixed) continue;
+
+        let deltaLeft = second.left - first.left;
+        let deltaTop = second.top - first.top;
+        let distance = Math.hypot(deltaLeft, deltaTop);
+        if (distance < 0.001) {
+          const angle = deterministicSigned(`${first.node.id}-${second.node.id}`, "collision-angle") * Math.PI;
+          deltaLeft = Math.cos(angle);
+          deltaTop = Math.sin(angle);
+          distance = 1;
+        }
+
+        const laneBuffer = first.lane === second.lane ? 0.85 : 0.35;
+        const minDistance = nodeCollisionRadius(first) + nodeCollisionRadius(second) + laneBuffer;
+        if (distance >= minDistance) continue;
+
+        const push = (minDistance - distance) * 0.58;
+        const normalLeft = deltaLeft / distance;
+        const normalTop = deltaTop / distance;
+        const firstShare = first.fixed ? 0 : second.fixed ? 1 : 0.5;
+        const secondShare = second.fixed ? 0 : first.fixed ? 1 : 0.5;
+
+        first.left = clamp(first.left - normalLeft * push * firstShare, MIN_PADDING, MAX_PADDING);
+        first.top = clamp(first.top - normalTop * push * firstShare, MIN_PADDING, MAX_PADDING);
+        second.left = clamp(second.left + normalLeft * push * secondShare, MIN_PADDING, MAX_PADDING);
+        second.top = clamp(second.top + normalTop * push * secondShare, MIN_PADDING, MAX_PADDING);
+      }
+    }
+  }
+}
+
+function getCurvedEdgeGeometry({ edge, source, target }: PositionedEdge, index: number): CurvedEdgeGeometry {
+  const deltaLeft = target.left - source.left;
+  const deltaTop = target.top - source.top;
+  const distance = Math.hypot(deltaLeft, deltaTop);
+  const midpointLeft = (source.left + target.left) / 2;
+  const midpointTop = (source.top + target.top) / 2;
+
+  if (distance < 0.01) {
+    return { path: `M ${source.left} ${source.top} L ${target.left} ${target.top}`, labelLeft: midpointLeft, labelTop: midpointTop };
+  }
+
+  const side = stableHash(`${edge.source}-${edge.target}-${edge.type}-${index}`) % 2 === 0 ? 1 : -1;
+  const sameLane = source.lane === target.lane && source.lane !== "center";
+  const curveStrength = clamp(distance * (sameLane ? 0.24 : 0.18), 2.1, edge.type === "SIMILAR_TO" ? 8.5 : 6.7);
+  const controlLeft = midpointLeft - (deltaTop / distance) * curveStrength * side;
+  const controlTop = midpointTop + (deltaLeft / distance) * curveStrength * side;
+
+  return {
+    path: `M ${source.left} ${source.top} Q ${controlLeft} ${controlTop} ${target.left} ${target.top}`,
+    labelLeft: source.left * 0.25 + controlLeft * 0.5 + target.left * 0.25,
+    labelTop: source.top * 0.25 + controlTop * 0.5 + target.top * 0.25,
+  };
 }
 
 function resolveCenterNodeId(graph: SubgraphResponse | null): string | null {
@@ -185,13 +283,14 @@ function semanticLayout(graph: SubgraphResponse | null, manualPositions: Record<
     laneGroups.set(lane, group);
   }
 
-  const positionById = new Map<string, PositionedNode>();
+  const layoutNodes: LayoutNode[] = [];
   for (const node of selectedNodes) {
     const isCenter = node.id === centerNodeId;
     const relationType = relationById.get(node.id) ?? null;
     const lane = isCenter ? "center" : getLaneForRelation(relationType);
     const depth = isCenter ? 0 : depthById.get(node.id) ?? 2;
     const config = LANE_CONFIG[lane];
+    const manual = manualPositions[node.id];
     let left = 50;
     let top = 50;
 
@@ -199,16 +298,23 @@ function semanticLayout(graph: SubgraphResponse | null, manualPositions: Record<
       const group = laneGroups.get(lane) ?? [node];
       const index = Math.max(0, group.findIndex((item) => item.id === node.id));
       const count = Math.max(1, group.length);
-      const spread = lane === "similar" ? 72 : 54;
-      const localAngle = config.angle + (index - (count - 1) / 2) * (spread / Math.max(count, 2));
-      const radius = depth <= 1 ? config.directRadius : config.outerRadius;
-      const wave = (index % 2 === 0 ? -1 : 1) * Math.min(3, Math.floor(index / 2) + 1);
-      left = 50 + Math.cos((localAngle * Math.PI) / 180) * (radius + wave);
-      top = 50 + Math.sin((localAngle * Math.PI) / 180) * (radius + wave * 0.7);
+      const spread = count > 8 ? 92 : lane === "similar" ? 78 : 64;
+      const densityPush = clamp((count - 5) * 1.08, 0, 8.4);
+      const localAngle = config.angle
+        + (index - (count - 1) / 2) * (spread / Math.max(count, 2))
+        + deterministicSigned(node.id, "angle") * 7.2
+        + deterministicSigned(`${lane}-${index}`, "lane-wave") * 3.8;
+      const baseRadius = depth <= 1 ? config.directRadius : config.outerRadius;
+      const ringOffset = (index % 3 - 1) * 1.7 + deterministicSigned(node.id, "radius") * 3.4;
+      const radius = baseRadius + densityPush + ringOffset;
+      const angleRadians = (localAngle * Math.PI) / 180;
+      const tangentJitter = deterministicSigned(node.id, "tangent") * (lane === "similar" ? 3.2 : 2.4);
+
+      left = 50 + Math.cos(angleRadians) * radius + Math.cos(angleRadians + Math.PI / 2) * tangentJitter;
+      top = 50 + Math.sin(angleRadians) * radius + Math.sin(angleRadians + Math.PI / 2) * tangentJitter;
     }
 
-    const manual = manualPositions[node.id];
-    positionById.set(node.id, {
+    layoutNodes.push({
       node,
       left: manual ? manual.left : clamp(left, MIN_PADDING, MAX_PADDING),
       top: manual ? manual.top : clamp(top, MIN_PADDING, MAX_PADDING),
@@ -216,10 +322,20 @@ function semanticLayout(graph: SubgraphResponse | null, manualPositions: Record<
       relationType: isCenter ? null : relationType,
       lane,
       degree: degree.get(node.id) ?? 0,
+      fixed: isCenter || Boolean(manual),
     });
   }
 
-  return selectedNodes.map((node) => positionById.get(node.id)).filter((node): node is PositionedNode => Boolean(node));
+  resolveLayoutCollisions(layoutNodes);
+  return layoutNodes.map((item) => ({
+    node: item.node,
+    left: item.left,
+    top: item.top,
+    depth: item.depth,
+    relationType: item.relationType,
+    lane: item.lane,
+    degree: item.degree,
+  }));
 }
 
 function getWorldPercent(event: PointerEvent, pan: { x: number; y: number }, zoom: number, canvasRect: DOMRect) {
@@ -310,6 +426,14 @@ export function GraphSection({ graph, profile, onSelectPersona }: GraphSectionPr
       .slice(0, GRAPH_EDGE_LIMIT);
   }, [graph.data, positionedNodes]);
 
+  const sourceNodeCount = graph.data?.node_count ?? 0;
+  const sourceEdgeCount = graph.data?.edge_count ?? 0;
+  const renderedNodeCount = positionedNodes.length;
+  const renderedEdgeCount = positionedEdges.length;
+  const countSummary = renderedNodeCount < sourceNodeCount || renderedEdgeCount < sourceEdgeCount
+    ? `표시 ${renderedNodeCount}/${sourceNodeCount}개 · 관계 ${renderedEdgeCount}/${sourceEdgeCount}개`
+    : `노드 ${sourceNodeCount}개 · 관계 ${sourceEdgeCount}개`;
+
   const connectedByNode = useMemo(() => {
     const map = new Map<string, Set<string>>();
     for (const { edge } of positionedEdges) {
@@ -348,6 +472,9 @@ export function GraphSection({ graph, profile, onSelectPersona }: GraphSectionPr
 
   function setZoomByLevel(nextZoom: number, anchor?: { x: number; y: number }) {
     const boundedZoom = clamp(nextZoom, zoomLimits.min, zoomLimits.max);
+    const previousZoom = zoomRef.current;
+    if (Math.abs(boundedZoom - previousZoom) < 0.001) return;
+
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect || !anchor) {
       zoomRef.current = boundedZoom;
@@ -357,8 +484,8 @@ export function GraphSection({ graph, profile, onSelectPersona }: GraphSectionPr
     }
 
     const currentPan = panRef.current;
-    const anchorWorldX = (anchor.x - rect.left - currentPan.x) / zoomRef.current;
-    const anchorWorldY = (anchor.y - rect.top - currentPan.y) / zoomRef.current;
+    const anchorWorldX = (anchor.x - rect.left - currentPan.x) / previousZoom;
+    const anchorWorldY = (anchor.y - rect.top - currentPan.y) / previousZoom;
     panRef.current = {
       x: anchor.x - rect.left - anchorWorldX * boundedZoom,
       y: anchor.y - rect.top - anchorWorldY * boundedZoom,
@@ -378,9 +505,9 @@ export function GraphSection({ graph, profile, onSelectPersona }: GraphSectionPr
     setManualPositions({});
   }
 
-  function zoomStep(step: number) {
+  function zoomByFactor(factor: number) {
     const rect = canvasRef.current?.getBoundingClientRect();
-    setZoomByLevel(zoomRef.current + step, rect ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 } : undefined);
+    setZoomByLevel(zoomRef.current * factor, rect ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 } : undefined);
   }
 
   function startPan(event: PointerEvent<HTMLDivElement>) {
@@ -404,16 +531,18 @@ export function GraphSection({ graph, profile, onSelectPersona }: GraphSectionPr
 
   function wheelZoom(event: WheelEvent<HTMLDivElement>) {
     event.preventDefault();
-    setZoomByLevel(zoomRef.current + (event.deltaY > 0 ? -0.12 : 0.12), { x: event.clientX, y: event.clientY });
+    const deltaPixels = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 400 : 1);
+    const nextZoom = zoomRef.current * Math.exp(-deltaPixels * WHEEL_ZOOM_SENSITIVITY);
+    setZoomByLevel(nextZoom, { x: event.clientX, y: event.clientY });
   }
 
   function handleCanvasKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key === "+" || event.key === "=") {
       event.preventDefault();
-      zoomStep(0.12);
+      zoomByFactor(KEYBOARD_ZOOM_FACTOR);
     } else if (event.key === "-") {
       event.preventDefault();
-      zoomStep(-0.12);
+      zoomByFactor(1 / KEYBOARD_ZOOM_FACTOR);
     } else if (event.key === "Escape") {
       event.preventDefault();
       setFocusedNodeId(null);
@@ -447,7 +576,17 @@ export function GraphSection({ graph, profile, onSelectPersona }: GraphSectionPr
       const pending = pendingManualPositionRef.current;
       if (!pending) return;
       pendingManualPositionRef.current = null;
-      setManualPositions((current) => ({ ...current, [pending.nodeId]: pending.position }));
+      setManualPositions((current) => {
+        const currentPosition = current[pending.nodeId];
+        if (
+          currentPosition &&
+          Math.abs(currentPosition.left - pending.position.left) < DRAG_POSITION_EPSILON &&
+          Math.abs(currentPosition.top - pending.position.top) < DRAG_POSITION_EPSILON
+        ) {
+          return current;
+        }
+        return { ...current, [pending.nodeId]: pending.position };
+      });
     });
   }
 
@@ -487,7 +626,7 @@ export function GraphSection({ graph, profile, onSelectPersona }: GraphSectionPr
       <div className="grid two">
         <div className="card">
           <h2>{graph.data?.center_label ?? profile?.display_name ?? "관계 그래프"}</h2>
-          <p className="muted">노드 {graph.data?.node_count ?? 0}개 · 관계 {graph.data?.edge_count ?? 0}개</p>
+          <p className="muted">{countSummary}</p>
         </div>
         <div className="card">
           <h3>관계 관점</h3>
@@ -498,9 +637,9 @@ export function GraphSection({ graph, profile, onSelectPersona }: GraphSectionPr
       </div>
       <div className="graph-stage">
         <div className="graph-toolbar" aria-label="그래프 조작 도구">
-          <button className="ghost-button" type="button" onClick={() => zoomStep(-0.12)}>축소</button>
+          <button className="ghost-button" type="button" onClick={() => zoomByFactor(1 / KEYBOARD_ZOOM_FACTOR)}>축소</button>
           <span className="pill">{Math.round(zoom * 100)}%</span>
-          <button className="ghost-button" type="button" onClick={() => zoomStep(0.12)}>확대</button>
+          <button className="ghost-button" type="button" onClick={() => zoomByFactor(KEYBOARD_ZOOM_FACTOR)}>확대</button>
           <button className="ghost-button" type="button" onClick={resetViewport}>리셋</button>
           <button className="ghost-button" type="button" onClick={() => setShowAllEdgeLabels((current) => !current)} aria-pressed={showAllEdgeLabels}>
             라벨: {showAllEdgeLabels ? "상시" : "선택시"}
@@ -514,8 +653,9 @@ export function GraphSection({ graph, profile, onSelectPersona }: GraphSectionPr
         <div
           ref={canvasRef}
           className="graph-canvas"
-          role="img"
+          role="application"
           aria-label="페르소나와 속성 간 관계 지도"
+          aria-roledescription="드래그와 확대축소가 가능한 관계 그래프"
           tabIndex={0}
           onKeyDown={handleCanvasKeyDown}
           onPointerDown={startPan}
@@ -540,20 +680,18 @@ export function GraphSection({ graph, profile, onSelectPersona }: GraphSectionPr
                 const isActive = activeNodeId !== null && activeAdjacency.has(source.node.id) && activeAdjacency.has(target.node.id);
                 const isDim = activeNodeId !== null && !isActive;
                 const edgeStyle = getEdgeStyle(edge.type);
+                const geometry = getCurvedEdgeGeometry({ edge, source, target }, index);
                 return (
-                  <line
+                  <path
                     className={`graph-edge ${isActive ? "is-active" : ""} ${isDim ? "is-dim" : ""}`}
                     key={`${edge.source}-${edge.target}-${edge.type}-${index}`}
                     style={{
                       stroke: edgeStyle.color,
                       strokeWidth: isActive ? edgeStyle.activeWidth : edgeStyle.width,
-                      strokeOpacity: isDim ? 0.08 : isActive ? 0.98 : edgeStyle.opacity,
+                      strokeOpacity: isDim ? 0.18 : isActive ? 0.92 : edgeStyle.opacity,
                       strokeDasharray: edge.type === "SIMILAR_TO" || source.depth > 1 || target.depth > 1 ? "1.8 1.6" : undefined,
                     }}
-                    x1={source.left}
-                    y1={source.top}
-                    x2={target.left}
-                    y2={target.top}
+                    d={geometry.path}
                   />
                 );
               })}
@@ -561,20 +699,23 @@ export function GraphSection({ graph, profile, onSelectPersona }: GraphSectionPr
             {positionedEdges.map(({ edge, source, target }, index) => {
               if (!shouldRenderEdgeLabels) return null;
               const isActive = activeNodeId !== null && activeAdjacency.has(source.node.id) && activeAdjacency.has(target.node.id);
+              const isLowPriorityEdge = (source.depth > 1 || target.depth > 1) && zoom < DETAIL_LABEL_ZOOM_DISCLOSURE;
               if (!showAllEdgeLabels && !isActive) return null;
               if (showAllEdgeLabels && index >= EDGE_LABEL_VIS_LIMIT) return null;
+              if (showAllEdgeLabels && isLowPriorityEdge && !isActive) return null;
 
+              const geometry = getCurvedEdgeGeometry({ edge, source, target }, index);
               return (
                 <span
-                  className={`graph-edge-label ${isActive ? "is-active" : ""}`}
+                  className={`graph-edge-label ${isActive ? "is-active" : ""} ${isLowPriorityEdge ? "is-secondary" : ""}`}
                   key={`label-${edge.source}-${edge.target}-${edge.type}-${index}`}
-                  style={{ left: `${(source.left + target.left) / 2}%`, top: `${(source.top + target.top) / 2}%` }}
+                  style={{ left: `${geometry.labelLeft}%`, top: `${geometry.labelTop}%` }}
                 >
                   {relationLabel(edge.type)}
                 </span>
               );
             })}
-            {positionedNodes.map(({ node, left, top, depth, degree }) => {
+            {positionedNodes.map(({ node, left, top, depth, lane, degree }) => {
               const isCenter = centerNodeId !== null && node.id === centerNodeId;
               const isActive = activeNodeId !== null && activeAdjacency.has(node.id);
               const isDimmed = activeNodeId !== null && !isActive;
@@ -582,8 +723,10 @@ export function GraphSection({ graph, profile, onSelectPersona }: GraphSectionPr
               const isFocused = focusedNodeId === node.id;
               const canRecenter = Boolean(extractPersonaUuid(node)) && !isCenter;
               const nodeColor = NODE_COLORS[node.type] ?? "var(--line-strong)";
-              const nodeClass = `graph-node depth-${Math.min(depth, 2)} ${isCenter ? "center" : ""} ${isActive ? "is-active" : ""} ${isDimmed ? "is-dim" : ""} ${isDragging ? "is-dragging" : ""} ${isFocused ? "is-focused" : ""} ${canRecenter ? "can-recenter" : ""}`;
-              const scale = isCenter ? 1 : clamp(0.86 + degree * 0.035, 0.86, 1.12);
+              const isLabelQuiet = !isCenter && depth >= 2 && !isActive && !isFocused && zoom < LABEL_ZOOM_DISCLOSURE;
+              const isDetailLabelQuiet = !isCenter && depth >= 2 && !isActive && !isFocused && zoom < DETAIL_LABEL_ZOOM_DISCLOSURE;
+              const nodeClass = `graph-node depth-${Math.min(depth, 2)} lane-${lane} ${isCenter ? "center" : ""} ${isActive ? "is-active" : ""} ${isDimmed ? "is-dim" : ""} ${isDragging ? "is-dragging" : ""} ${isFocused ? "is-focused" : ""} ${canRecenter ? "can-recenter" : ""} ${isLabelQuiet ? "is-label-quiet" : ""} ${isDetailLabelQuiet ? "is-detail-label-quiet" : ""}`;
+              const scale = isCenter ? 1 : clamp(0.92 + degree * 0.02, 0.9, 1.08);
 
               return (
                 <div
@@ -601,9 +744,9 @@ export function GraphSection({ graph, profile, onSelectPersona }: GraphSectionPr
                   onPointerMove={moveNodeDrag}
                   onPointerUp={endNodeDrag}
                   onPointerCancel={endNodeDrag}
-                  onPointerEnter={() => setHoveredNodeId(node.id)}
+                  onPointerEnter={() => setHoveredNodeId((current) => (current === node.id ? current : node.id))}
                   onPointerLeave={() => setHoveredNodeId((current) => (current === node.id ? null : current))}
-                  onFocus={() => setHoveredNodeId(node.id)}
+                  onFocus={() => setHoveredNodeId((current) => (current === node.id ? current : node.id))}
                   onBlur={() => setHoveredNodeId((current) => (current === node.id ? null : current))}
                   onDoubleClick={(event) => handleNodeDoubleClick(event, node)}
                   onKeyDown={(event) => handleNodeKeyDown(event, node)}

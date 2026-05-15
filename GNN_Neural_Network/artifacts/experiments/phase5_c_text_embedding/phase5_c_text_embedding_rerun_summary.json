@@ -1,0 +1,84 @@
+{
+  "experiment": "Phase5_C_Text_Embedding_Feature_Ablation_Rerun",
+  "timestamp": "2026-05-05",
+  "status": "rejected_needs_followup",
+  "decision": "do_not_promote_text_embedding_feature",
+  "default_change": false,
+  "selected_default": {
+    "stage1": ["popularity", "cooccurrence"],
+    "stage2": "LightGBM learned ranker",
+    "include_text_embedding_feature": false
+  },
+  "code_changes": [
+    "Missing person context is now tracked as coverage miss, not leakage failure.",
+    "Text leakage audit now uses the same Korean boundary pattern as masking.",
+    "Stage 2 ranker can score missing-context persons with an empty context and text_embedding_similarity=0."
+  ],
+  "runs": {
+    "kure_text_feature_002_context_coverage_gate": {
+      "include_text_embedding_feature": true,
+      "stage2_scope": "context-covered persons only; missing context falls back to Stage 1",
+      "audit": {
+        "pass": true,
+        "passed_person_count": 211,
+        "failed_person_count": 0,
+        "missing_context_person_count": 19677,
+        "audit_eligible_person_count": 211
+      },
+      "train_rows": 830,
+      "validation_rows": 225,
+      "validation": {
+        "stage1_recall@10": 0.6804605792437651,
+        "stage1_ndcg@10": 0.41936959734565876,
+        "ranker_recall@10": 0.6811645213193885,
+        "ranker_ndcg@10": 0.4195203031397684,
+        "delta_recall@10": 0.0007039420756234094,
+        "delta_ndcg@10": 0.00015070579410964013,
+        "v2_fallback_count": 19677
+      },
+      "decision": "not_promoted",
+      "reason": "Tiny positive validation delta, but only 211 audit-eligible context persons and 19677 Stage 1 fallbacks."
+    },
+    "kure_text_feature_003_full_ranker_fallback": {
+      "include_text_embedding_feature": true,
+      "stage2_scope": "all validation persons; missing context uses empty context and text_embedding_similarity=0",
+      "train_rows": 16035,
+      "validation_rows": 4040,
+      "validation": {
+        "stage1_recall@10": 0.6804605792437651,
+        "stage1_ndcg@10": 0.41936959734565876,
+        "ranker_recall@10": 0.6793543845534996,
+        "ranker_ndcg@10": 0.4195670061858815,
+        "delta_recall@10": -0.0011061946902655162,
+        "delta_ndcg@10": 0.00019740884022273475,
+        "v2_fallback_count": 0
+      },
+      "decision": "rejected",
+      "reason": "Full Stage 2 application degraded Recall@10 versus Stage 1."
+    },
+    "control_no_text_full_ranker_fallback": {
+      "include_text_embedding_feature": false,
+      "stage2_scope": "all validation persons; missing context uses empty context",
+      "train_rows": 16035,
+      "validation_rows": 4040,
+      "validation": {
+        "stage1_recall@10": 0.6804605792437651,
+        "stage1_ndcg@10": 0.41936959734565876,
+        "ranker_recall@10": 0.6773431214802896,
+        "ranker_ndcg@10": 0.41895162835463207,
+        "delta_recall@10": -0.003117457763475495,
+        "delta_ndcg@10": -0.00041796899102669594,
+        "v2_fallback_count": 0
+      },
+      "decision": "control_only",
+      "reason": "Apples-to-apples no-text control for the missing-context fallback design."
+    }
+  },
+  "baseline_reference": {
+    "name": "closed Phase 2.5 default decision artifact",
+    "validation_recall@10": 0.7390509094604207,
+    "validation_ndcg@10": 0.45797028878684237
+  },
+  "final_reason": "KURE text feature does not beat the selected Phase 2.5 default and does not produce a robust Stage 1 improvement under current context coverage.",
+  "next_step": "Do not run test for KURE text feature. Improve person_context coverage or regenerate split-aligned persona context before another KURE feature ablation."
+}

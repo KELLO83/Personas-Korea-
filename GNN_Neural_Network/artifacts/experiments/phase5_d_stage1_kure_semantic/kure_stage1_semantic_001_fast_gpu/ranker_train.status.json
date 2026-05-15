@@ -1,0 +1,15 @@
+{
+  "experiment_id": "kure_stage1_semantic_001_fast_gpu",
+  "status": "started",
+  "data_split": "validation_internal_ranker_split",
+  "input_config_summary": {
+    "config_path": "GNN_Neural_Network\\configs\\kure_text_optin_ranker.yaml",
+    "candidate_pool_size": 50,
+    "score_normalization": "rank_percentile"
+  },
+  "summary": {
+    "text_embedding_enabled": false,
+    "text_embedding_audit_path": "GNN_Neural_Network\\artifacts\\experiments\\phase5_d_stage1_kure_semantic\\kure_stage1_semantic_001_fast_gpu\\text_leakage_audit.json"
+  },
+  "runtime_seconds": 0.0
+}

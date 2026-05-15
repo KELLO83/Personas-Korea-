@@ -204,6 +204,35 @@ def cooccurrence_candidate_provider(
     return candidates
 
 
+def kure_semantic_candidate_provider(
+    person_id: int,
+    known_hobbies: set[int],
+    top_k: int,
+    semantic_scores_by_person: dict[int, dict[int, float]],
+) -> list[Candidate]:
+    if top_k <= 0:
+        raise ValueError("top_k must be positive")
+    scores = semantic_scores_by_person.get(person_id, {})
+    candidates: list[Candidate] = []
+    ranked = sorted(scores.items(), key=lambda item: (-float(item[1]), item[0]))
+    for rank, (hobby_id, score) in enumerate(ranked, start=1):
+        if hobby_id in known_hobbies:
+            continue
+        candidates.append(
+            Candidate(
+                hobby_id=hobby_id,
+                provider="kure_semantic",
+                raw_score=float(score),
+                rank=rank,
+                reason_features={"kure_semantic_score": float(score), "person_id": person_id},
+                source_scores={"kure_semantic": float(score)},
+            )
+        )
+        if len(candidates) >= top_k:
+            break
+    return candidates
+
+
 def _build_cooccurrence_counts(train_edges: list[tuple[int, int]]) -> dict[int, Counter[int]]:
     hobbies_by_person: dict[int, set[int]] = {}
     for person_id, hobby_id in train_edges:

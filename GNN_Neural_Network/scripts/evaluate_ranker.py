@@ -4,16 +4,22 @@ import argparse
 import csv
 import hashlib
 import json
+import logging
+import os
 import shlex
+import subprocess
 import time
 import sys
 from collections import Counter, defaultdict
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Any, Iterable, Mapping, cast
 
 import numpy as np
 import torch
 from tqdm import tqdm
+
+LOGGER = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -23,10 +29,11 @@ from GNN_Neural_Network.gnn_recommender.baseline import (  # noqa: E402
     build_cooccurrence_counts,
     build_popularity_counts,
 )
-from GNN_Neural_Network.gnn_recommender.config import load_config  # noqa: E402
+from GNN_Neural_Network.gnn_recommender.config import load_config, validate_experimental_feature_policy  # noqa: E402
 from GNN_Neural_Network.gnn_recommender.data import (
     LEAKAGE_TEXT_FIELDS,
     PersonContext,
+    empty_person_context,
     load_alias_map,
     load_json,
     load_person_contexts,
@@ -47,6 +54,7 @@ from GNN_Neural_Network.gnn_recommender.ranker import (
     LightGBMRanker,
     load_or_build_candidate_pool,
     get_candidate_pool_cache_key,
+    build_kure_semantic_candidate_scores,
 )  # noqa: E402
 from GNN_Neural_Network.gnn_recommender.text_embedding import KURE_MODEL_NAME, mask_holdout_hobbies, post_mask_leakage_audit  # noqa: E402
 from GNN_Neural_Network.gnn_recommender.rerank import (  # noqa: E402
@@ -95,11 +103,53 @@ _TQDM_KWARGS = {
     "leave": False,
     "file": sys.stderr,
 }
+FEATURE_CACHE_VERSION = 2
+_feature_worker_hobby_profile: dict[str, object] | None = None
+_feature_worker_reranker_config: Any = None
+_feature_worker_model_feature_columns: list[str] = []
+
+
+def _init_feature_worker(
+    hobby_profile: dict[str, object],
+    reranker_config: Any,
+    model_feature_columns: list[str],
+) -> None:
+    global _feature_worker_hobby_profile
+    global _feature_worker_reranker_config
+    global _feature_worker_model_feature_columns
+    _feature_worker_hobby_profile = hobby_profile
+    _feature_worker_reranker_config = reranker_config
+    _feature_worker_model_feature_columns = model_feature_columns
+
+
+def _build_feature_rows_for_person(payload: tuple[int, PersonContext, list[Any], set[str], dict[int, float]]) -> tuple[int, list[list[float]], list[int], bool]:
+    person_id, person_context, hobby_candidates, known_names, text_scores = payload
+    if not hobby_candidates:
+        return person_id, [], [], True
+    if _feature_worker_hobby_profile is None or _feature_worker_reranker_config is None:
+        raise RuntimeError("feature worker was not initialized")
+
+    rows: list[list[float]] = []
+    hobby_ids: list[int] = []
+    for candidate in hobby_candidates:
+        features = build_rerank_features(
+            person_context,
+            candidate,
+            _feature_worker_hobby_profile,
+            known_names,
+            _feature_worker_reranker_config,
+            text_embedding_similarity=float(text_scores.get(candidate.hobby_id, 0.0)),
+        )
+        features.pop("similar_person_score", None)
+        features.pop("persona_text_fit", None)
+        rows.append([features.get(col, 0.0) for col in _feature_worker_model_feature_columns])
+        hobby_ids.append(candidate.hobby_id)
+    return person_id, rows, hobby_ids, False
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Evaluate LightGBM ranker on a single split.")
-    parser.add_argument("--config", type=Path, default=Path("GNN_Neural_Network/configs/lightgcn_hobby.yaml"))
+    parser.add_argument("--config", type=Path, default=Path("GNN_Neural_Network/configs/lightgbm_ranker.yaml"))
     parser.add_argument("--split", choices=["validation", "test"], required=True)
     parser.add_argument("--model-path", type=Path, default=None)
     parser.add_argument("--output", type=Path, default=None)
@@ -114,10 +164,30 @@ def parse_args() -> argparse.Namespace:
         help="Diversity embedding source for MMR/DPP (category_onehot or kure)",
     )
     parser.add_argument("--skip-v1", action="store_true", help="Skip v1 deterministic reranker evaluation")
+    parser.add_argument("--stage1-kure-semantic-provider", action="store_true", help="Enable opt-in KURE-v1 Stage1 semantic candidate provider")
+    parser.add_argument("--stage1-kure-score-batch-size", type=int, default=128, help="Person batch size for KURE Stage1 semantic scoring")
     parser.add_argument("--pool-cache-dir", type=Path, default=None, help="Directory for candidate pool cache artifacts")
     parser.add_argument("--feature-cache-dir", type=Path, default=None, help="Directory for feature matrix cache artifacts")
+    parser.add_argument("--disable-feature-cache", action="store_true", help="Disable default feature matrix cache")
     parser.add_argument("--embedding-cache-dir", type=Path, default=None, help="Directory for KURE hobby embedding cache")
-    parser.add_argument("--embedding-batch-size", type=int, default=32, help="Batch size for KURE hobby embeddings")
+    parser.add_argument(
+        "--embedding-batch-size",
+        type=int,
+        default=32,
+        help="Batch size for KURE embeddings. Use 0 to auto-size from available GPU VRAM.",
+    )
+    parser.add_argument(
+        "--embedding-vram-utilization",
+        type=float,
+        default=0.85,
+        help="Target fraction of currently free GPU VRAM to use when --embedding-batch-size=0.",
+    )
+    parser.add_argument(
+        "--embedding-target-vram-mb",
+        type=int,
+        default=0,
+        help="Absolute target GPU VRAM MB for KURE embedding auto batch. Overrides utilization when >0.",
+    )
     parser.add_argument("--experiment-id", type=str, default="", help="Optional experiment identifier for artifact naming")
     parser.add_argument(
         "--phase5-kure-mmr",
@@ -133,6 +203,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--progress-mininterval", type=float, default=5.0, help="Minimum seconds between progress updates")
     parser.add_argument("--progress-maxinterval", type=float, default=30.0, help="Maximum seconds between progress updates")
     parser.add_argument("--progress-miniters", type=int, default=200, help="Minimum updates between progress refresh")
+    parser.add_argument(
+        "--cpu-thread-count",
+        type=int,
+        default=0,
+        help="CPU threads for PyTorch/LightGBM predict. Use 0 to auto-detect logical CPUs.",
+    )
     return parser.parse_args()
 
 
@@ -150,20 +226,68 @@ def _command_signature() -> str:
     return " ".join([Path(sys.argv[0]).name, *(shlex.quote(arg) for arg in sys.argv[1:])])
 
 
+def _resolve_system_resource_plan(args: argparse.Namespace) -> dict[str, object]:
+    logical_cpus = os.cpu_count() or 1
+    default_cpu_threads = max(1, logical_cpus - 2)
+    requested_threads = int(args.cpu_thread_count)
+    cpu_threads = default_cpu_threads if requested_threads <= 0 else max(1, min(requested_threads, logical_cpus))
+    memory_total_mb, memory_available_mb = _query_system_memory_mb()
+    gpu_total_mb, gpu_used_mb, gpu_free_mb = _query_gpu_memory_mb()
+    return {
+        "logical_cpus": logical_cpus,
+        "default_cpu_threads": default_cpu_threads,
+        "requested_cpu_threads": requested_threads,
+        "cpu_threads": cpu_threads,
+        "system_memory_total_mb": memory_total_mb,
+        "system_memory_available_mb": memory_available_mb,
+        "gpu_total_vram_mb": gpu_total_mb,
+        "gpu_used_vram_mb": gpu_used_mb,
+        "gpu_free_vram_mb": gpu_free_mb,
+        "feature_builder_parallelism": "process_pool_by_person",
+        "lightgbm_predict_threads": cpu_threads,
+        "torch_threads": cpu_threads,
+    }
+
+
+def _apply_cpu_resource_plan(plan: Mapping[str, object]) -> None:
+    cpu_threads = int(plan.get("cpu_threads", 1) or 1)
+    os.environ["OMP_NUM_THREADS"] = str(cpu_threads)
+    os.environ["MKL_NUM_THREADS"] = str(cpu_threads)
+    try:
+        torch.set_num_threads(cpu_threads)
+        torch.set_num_interop_threads(max(1, min(4, cpu_threads)))
+    except RuntimeError:
+        pass
+
+
+def _query_system_memory_mb() -> tuple[int, int]:
+    try:
+        import psutil
+
+        mem = psutil.virtual_memory()
+        return int(mem.total // (1024 * 1024)), int(mem.available // (1024 * 1024))
+    except Exception:
+        return 0, 0
+
+
 def _iter_with_progress(
     args: argparse.Namespace,
     iterable: Iterable[Any],
     desc: str,
+    total_count: int | None = None,
 ) -> Iterable[Any]:
     if args.progress_mode == "off":
         return iterable
     if args.progress_mode == "auto" and not sys.stderr.isatty():
         return iterable
 
-    try:
-        total = len(iterable)  # type: ignore[arg-type]
-    except Exception:
-        total = None
+    if total_count is not None:
+        total = total_count
+    else:
+        try:
+            total = len(iterable)  # type: ignore[arg-type]
+        except Exception:
+            total = None
 
     kwargs = dict(_TQDM_KWARGS)
     kwargs.update(
@@ -179,7 +303,22 @@ def _iter_with_progress(
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
+    _configure_third_party_logging()
     args = parse_args()
+    system_resource_plan = _resolve_system_resource_plan(args)
+    _apply_cpu_resource_plan(system_resource_plan)
+    LOGGER.info(
+        "Evaluation system resource plan: cpu_threads=%s, logical_cpus=%s, "
+        "system_memory_total_mb=%s, system_memory_available_mb=%s, "
+        "gpu_total_vram_mb=%s, gpu_free_vram_mb=%s",
+        system_resource_plan["cpu_threads"],
+        system_resource_plan["logical_cpus"],
+        system_resource_plan["system_memory_total_mb"],
+        system_resource_plan["system_memory_available_mb"],
+        system_resource_plan["gpu_total_vram_mb"],
+        system_resource_plan["gpu_free_vram_mb"],
+    )
     start_time = time.perf_counter()
     config = load_config(args.config)
     candidate_k = config.rerank.candidate_pool_size
@@ -217,13 +356,77 @@ def main() -> None:
     if not model_path.exists():
         raise FileNotFoundError(f"Ranker model not found: {model_path}. Run train_ranker.py first.")
     ranker = LightGBMRanker.load(model_path)
+    if ranker.model is not None and sys.platform != "win32":
+        try:
+            ranker.model.reset_parameter({"num_threads": int(system_resource_plan["cpu_threads"])})
+        except Exception as exc:
+            LOGGER.warning("LightGBM thread reset failed; continuing with model defaults: %s", exc)
     model_feature_columns = ranker.feature_columns()
+    model_feature_policy = _feature_policy(model_feature_columns)
+    validate_experimental_feature_policy(
+        config,
+        use_kure_mmr=(args.use_mmr or args.use_dpp) and args.mmr_embedding_method == "kure",
+        include_text_embedding_feature=model_feature_policy["include_text_embedding_feature"],
+        use_stage1_kure_provider=args.stage1_kure_semantic_provider,
+        include_source_features=model_feature_policy["include_source_features"],
+    )
     print(f"Loaded ranker model: {model_path} (best_iteration={ranker.best_iteration})")
+    if args.feature_cache_dir is None and not args.disable_feature_cache:
+        args.feature_cache_dir = model_path.parent / "feature_cache"
+        LOGGER.info("Default feature cache enabled: %s", args.feature_cache_dir)
 
     popularity_counts = build_popularity_counts(train_edges)
     cooccurrence_counts = build_cooccurrence_counts(train_edges)
     max_k = max(config.eval.top_k)
     truth_person_ids = sorted(truth.keys())
+
+    stage1_provider_names: tuple[str, ...] = ("popularity", "cooccurrence")
+    stage1_provider_cache_fingerprint = ""
+    stage1_kure_semantic_scores: dict[int, dict[int, float]] | None = None
+    stage1_kure_metadata: dict[str, object] = {"enabled": False}
+    if args.stage1_kure_semantic_provider:
+        stage1_provider_names = ("popularity", "cooccurrence", "kure_semantic")
+        hobby_aliases = _build_hobby_alias_map(config.paths.hobby_aliases, set(id_to_hobby.values())) if config.paths.hobby_aliases.exists() else {}
+        stage1_text_payload = _prepare_text_leakage_context(
+            person_ids=truth_person_ids,
+            target_edges=target_edges,
+            id_to_person=id_to_person,
+            contexts=contexts,
+            id_to_hobby=id_to_hobby,
+            alias_map=hobby_aliases,
+        )
+        stage1_text_audit = stage1_text_payload["summary"]
+        if _text_audit_failure_rate(stage1_text_audit) > 0.05:
+            raise ValueError("KURE Stage1 semantic provider blocked: post-mask leakage audit failure rate exceeds 0.05")
+        stage1_embedding_plan = _resolve_embedding_resource_plan(args)
+        stage1_embedding_batch_size = int(stage1_embedding_plan["effective_batch_size"])
+        stage1_text_cache_dir = args.embedding_cache_dir or (config.paths.artifact_dir / "text_embedding_cache")
+        stage1_text_device = "cuda" if torch.cuda.is_available() else "cpu"
+        stage1_person_embedding_cache = PersonEmbeddingCache(
+            stage1_text_cache_dir,
+            batch_size=stage1_embedding_batch_size,
+            device=stage1_text_device,
+        )
+        stage1_hobby_embedding_cache = HobbyEmbeddingCache(
+            stage1_text_cache_dir,
+            model_name=KURE_MODEL_NAME,
+            batch_size=stage1_embedding_batch_size,
+            device=stage1_text_device,
+        )
+        stage1_kure_semantic_scores, stage1_kure_metadata = build_kure_semantic_candidate_scores(
+            cast(dict[int, str], stage1_text_payload["person_text_by_id"]),
+            stage1_person_embedding_cache,
+            stage1_hobby_embedding_cache,
+            id_to_hobby,
+            train_known,
+            candidate_k,
+            score_batch_size=args.stage1_kure_score_batch_size,
+            show_progress_bar=args.progress_mode != "off",
+            progress_desc=f"KURE Stage1 semantic scoring ({args.split})",
+        )
+        stage1_kure_metadata["text_audit"] = stage1_text_audit
+        stage1_kure_metadata["resource_plan"] = stage1_embedding_plan
+        stage1_provider_cache_fingerprint = str(stage1_kure_metadata.get("fingerprint", ""))
 
     _write_status(
         args,
@@ -297,6 +500,8 @@ def main() -> None:
         candidate_k=candidate_k,
         normalization_method=normalization_method,
         label=args.split,
+        providers=stage1_provider_names,
+        provider_cache_fingerprint=stage1_provider_cache_fingerprint,
     )
     candidate_pool_cache_path = pool_cache_dir / "cache" / f"{candidate_pool_cache_key}.json"
     feature_cache_npz_path: Path | None = None
@@ -314,6 +519,9 @@ def main() -> None:
         cache_dir=pool_cache_dir,
         label=args.split,
         disable_progress=args.progress_mode == "off",
+        stage1_providers=stage1_provider_names,
+        semantic_scores_by_person=stage1_kure_semantic_scores,
+        provider_cache_fingerprint=stage1_provider_cache_fingerprint,
     )
 
     candidate_pool_policy = _candidate_pool_policy(
@@ -322,6 +530,15 @@ def main() -> None:
         normalization_method=normalization_method,
         cache_key=candidate_pool_cache_key,
         cache_path=candidate_pool_cache_path,
+    )
+    candidate_pool_person_count = len(pools_by_person)
+    candidate_pool_row_count = sum(len(candidates) for candidates in pools_by_person.values())
+    LOGGER.info(
+        "Candidate pool ready: persons=%s candidate_rows=%s candidate_k=%s cache_path=%s",
+        candidate_pool_person_count,
+        candidate_pool_row_count,
+        candidate_k,
+        candidate_pool_cache_path,
     )
 
     if args.feature_cache_dir is not None:
@@ -333,6 +550,7 @@ def main() -> None:
             config.paths.person_context_csv,
             config.paths.hobby_profile,
             config.paths.hobby_taxonomy,
+            config.paths.hobby_aliases,
         )
         feature_cache_npz_path, feature_cache_meta_path = _feature_cache_paths(
             args,
@@ -342,28 +560,86 @@ def main() -> None:
             config.paths.person_context_csv,
             config.paths.hobby_profile,
             config.paths.hobby_taxonomy,
+            config.paths.hobby_aliases,
         )
+        LOGGER.info(
+            "Feature cache lookup prepared: key=%s npz=%s metadata=%s",
+            feature_cache_key,
+            feature_cache_npz_path,
+            feature_cache_meta_path,
+        )
+    else:
+        LOGGER.info("Feature cache disabled; feature rows will be rebuilt.")
 
-    include_text_embedding_feature = _feature_policy(model_feature_columns)["include_text_embedding_feature"]
+    include_text_embedding_feature = model_feature_policy["include_text_embedding_feature"]
+    embedding_resource_plan = _resolve_embedding_resource_plan(args)
+    effective_embedding_batch_size = int(embedding_resource_plan["effective_batch_size"])
     text_similarity_fn: Any = None
+    text_similarity_lookup: dict[int, dict[int, float]] = {}
+    LOGGER.info(
+        "Checking feature cache before KURE preparation: split=%s include_text_embedding_feature=%s",
+        args.split,
+        include_text_embedding_feature,
+    )
+    cached_features = _load_feature_cache(
+        args,
+        truth_person_ids,
+        pools_by_person,
+        model_feature_columns,
+        config.paths.person_context_csv,
+        config.paths.hobby_profile,
+        config.paths.hobby_taxonomy,
+        config.paths.hobby_aliases,
+    )
+    feature_cache_hit = cached_features is not None
+    if feature_cache_hit:
+        LOGGER.info("Feature cache hit; skipping KURE text embedding prewarm and feature rebuild.")
     text_embedding_audit: dict[str, object] = {
         "enabled": include_text_embedding_feature,
         "cache_dir": "",
+        "resource_plan": embedding_resource_plan,
         "known_hobbies_masked": False,
         "audit_pass": True,
+        "skipped_due_to_feature_cache_hit": feature_cache_hit,
         "passed_person_count": 0,
         "failed_person_count": 0,
     }
 
-    if include_text_embedding_feature:
+    if include_text_embedding_feature and not feature_cache_hit:
+        text_prepare_start = time.perf_counter()
+        LOGGER.info(
+            "KURE embedding resource plan: device=%s, requested_batch_size=%s, "
+            "effective_batch_size=%s, gpu_total_vram_mb=%s, gpu_free_vram_mb=%s, "
+            "target_vram_mb=%s, estimated_vram_mb=%s",
+            embedding_resource_plan["device"],
+            embedding_resource_plan["requested_batch_size"],
+            embedding_resource_plan["effective_batch_size"],
+            embedding_resource_plan["gpu_total_vram_mb"],
+            embedding_resource_plan["gpu_free_vram_mb"],
+            embedding_resource_plan["target_vram_mb"],
+            embedding_resource_plan["estimated_vram_mb"],
+        )
+        LOGGER.info("Preparing KURE leakage-safe text context: persons=%s", len(truth_person_ids))
         hobby_aliases = _build_hobby_alias_map(config.paths.hobby_aliases, set(id_to_hobby.values())) if config.paths.hobby_aliases.exists() else {}
         text_cache_dir = args.embedding_cache_dir or (config.paths.artifact_dir / "text_embedding_cache")
-        person_embedding_cache = PersonEmbeddingCache(text_cache_dir)
+        text_device = "cuda" if torch.cuda.is_available() else "cpu"
+        LOGGER.info(
+            "KURE model source prepared: model=%s device=%s embedding_cache_dir=%s huggingface_cache=%s",
+            KURE_MODEL_NAME,
+            text_device,
+            text_cache_dir / _safe_model_cache_name(KURE_MODEL_NAME),
+            _huggingface_model_cache_status(KURE_MODEL_NAME),
+        )
+        person_embedding_cache = PersonEmbeddingCache(
+            text_cache_dir,
+            batch_size=effective_embedding_batch_size,
+            device=text_device,
+        )
         hobby_embedding_cache = HobbyEmbeddingCache(
             text_cache_dir,
             model_name=KURE_MODEL_NAME,
-            batch_size=max(1, int(args.embedding_batch_size)),
-            device="cuda" if torch.cuda.is_available() else "cpu",
+            batch_size=effective_embedding_batch_size,
+            device=text_device,
         )
         text_prepare_payload = _prepare_text_leakage_context(
             person_ids=truth_person_ids,
@@ -378,18 +654,117 @@ def main() -> None:
         text_embedding_audit.update(text_prepare_payload["summary"])
         text_embedding_audit["cache_dir"] = str(text_cache_dir)
         text_embedding_audit["known_hobbies_masked"] = bool(len(text_prepare_payload["person_text_by_id"]) > 0)
+        LOGGER.info(
+            "KURE leakage-safe text context ready: eligible=%s passed=%s failed=%s missing_context=%s seconds=%.3f cache_dir=%s",
+            text_embedding_audit.get("audit_eligible_person_count", 0),
+            text_embedding_audit.get("passed_person_count", 0),
+            text_embedding_audit.get("failed_person_count", 0),
+            text_embedding_audit.get("missing_context_person_count", 0),
+            time.perf_counter() - text_prepare_start,
+            text_cache_dir,
+        )
 
         if person_text_by_id:
-            text_similarity_fn = _make_text_similarity_fn(
+            LOGGER.info(
+                "Starting KURE embedding prewarm and similarity lookup: persons_with_text=%s candidate_rows=%s",
+                len(person_text_by_id),
+                candidate_pool_row_count,
+            )
+            _prewarm_text_embedding_caches(
+                person_text_by_id=person_text_by_id,
+                person_embedding_cache=person_embedding_cache,
+                hobby_embedding_cache=hobby_embedding_cache,
+                candidate_pools=pools_by_person,
+                show_progress_bar=args.progress_mode != "off",
+                split=args.split,
+            )
+            text_similarity_lookup = _build_text_similarity_lookup(
                 person_text_by_id=person_text_by_id,
                 person_audit_pass=person_audit_pass,
                 person_embedding_cache=person_embedding_cache,
                 hobby_embedding_cache=hobby_embedding_cache,
+                candidate_pools=pools_by_person,
+            )
+            text_embedding_audit["similarity_lookup_person_count"] = len(text_similarity_lookup)
+            text_embedding_audit["similarity_lookup_pair_count"] = sum(len(values) for values in text_similarity_lookup.values())
+            text_similarity_fn = None
+            LOGGER.info(
+                "KURE text similarity lookup ready: persons=%s pairs=%s dynamic_fallback=%s",
+                text_embedding_audit["similarity_lookup_person_count"],
+                text_embedding_audit["similarity_lookup_pair_count"],
+                False,
             )
         else:
             text_similarity_fn = None
             text_embedding_audit["audit_pass"] = False
+            text_embedding_audit["disable_reason"] = "no eligible non-empty masked person text"
+            LOGGER.warning("KURE text feature has no eligible non-empty masked person text; evaluation will be disabled.")
 
+    text_audit_failure_rate = _text_audit_failure_rate(text_embedding_audit)
+    text_has_eligible_persons = int(text_embedding_audit.get("audit_eligible_person_count", 0)) > 0
+    text_has_passed_persons = int(text_embedding_audit.get("passed_person_count", 0)) > 0
+    should_disable_text_eval = (
+        include_text_embedding_feature
+        and not feature_cache_hit
+        and (
+            text_audit_failure_rate > 0.05
+            or not text_has_eligible_persons
+            or not text_has_passed_persons
+        )
+    )
+    if should_disable_text_eval:
+        runtime_seconds = time.perf_counter() - start_time
+        disable_reason = str(text_embedding_audit.get("disable_reason", ""))
+        if not disable_reason:
+            if not text_has_eligible_persons:
+                disable_reason = "no audit-eligible person text after masking"
+            elif not text_has_passed_persons:
+                disable_reason = "no person text passed leakage audit after masking"
+            else:
+                disable_reason = "post-mask leakage audit failed above threshold"
+        disabled_summary = {
+            "reason": disable_reason,
+            "threshold": 0.05,
+            "failure_rate": text_audit_failure_rate,
+            "passed_person_count": int(text_embedding_audit.get("passed_person_count", 0)),
+            "failed_person_count": int(text_embedding_audit.get("failed_person_count", 0)),
+            "audit_eligible_person_count": int(text_embedding_audit.get("audit_eligible_person_count", 0)),
+            "cache_dir": str(text_embedding_audit.get("cache_dir", "")),
+        }
+        result = {
+            "split": args.split,
+            "experiment_id": args.experiment_id,
+            "status": "disabled",
+            "runtime_seconds": runtime_seconds,
+            "model_path": str(model_path),
+            "feature_policy": {
+                "feature_columns": model_feature_columns,
+                "include_source_features": model_feature_policy["include_source_features"],
+                "include_text_embedding_feature": True,
+            },
+            "text_embedding_audit": text_embedding_audit,
+            "disabled_summary": disabled_summary,
+        }
+        if args.output is not None:
+            save_json(args.output, result)
+        _write_status(
+            args,
+            "disabled",
+            runtime_seconds=runtime_seconds,
+            summary=disabled_summary,
+        )
+        print(
+            "Text embedding evaluation disabled: "
+            f"{disable_reason} (failure_rate={disabled_summary['failure_rate']:.4f})"
+        )
+        return
+
+    LOGGER.info(
+        "Starting Stage1/V1 ranking build: persons=%s skip_v1=%s",
+        len(truth_person_ids),
+        args.skip_v1,
+    )
+    candidate_rank_start = time.perf_counter()
     for person_id in _iter_with_progress(args, truth_person_ids, desc=f"rank candidates ({args.split})"):
         hobby_candidates = pools_by_person.get(person_id, [])
         candidate_rankings[person_id] = [c.hobby_id for c in hobby_candidates]
@@ -409,6 +784,11 @@ def main() -> None:
             hobby_taxonomy=hobby_taxonomy,
         )
         v1_rankings[person_id] = [c.hobby_id for c in reranked[:max_k]]
+    LOGGER.info(
+        "Stage1/V1 ranking build done: persons=%s seconds=%.3f",
+        len(candidate_rankings),
+        time.perf_counter() - candidate_rank_start,
+    )
 
     _write_status(
         args,
@@ -421,60 +801,110 @@ def main() -> None:
         },
     )
 
-    cached_features = _load_feature_cache(
-        args,
-        truth_person_ids,
-        pools_by_person,
-        model_feature_columns,
-        config.paths.person_context_csv,
-        config.paths.hobby_profile,
-        config.paths.hobby_taxonomy,
-    )
-    feature_cache_hit = False
     if cached_features is not None:
-        feature_cache_hit = True
-        X, person_to_feature_slice, hobby_ids_by_person, fallback_person_ids = cached_features
+        feature_matrix, person_to_feature_slice, hobby_ids_by_person, fallback_person_ids = cached_features
         v2_fallback_count = len(fallback_person_ids)
+        LOGGER.info(
+            "Using cached feature matrix: rows=%s columns=%s fallback_persons=%s",
+            int(feature_matrix.shape[0]) if hasattr(feature_matrix, "shape") else 0,
+            int(feature_matrix.shape[1]) if hasattr(feature_matrix, "shape") and len(feature_matrix.shape) > 1 else len(model_feature_columns),
+            v2_fallback_count,
+        )
     else:
         all_features: list[list[float]] = []
         person_to_feature_slice = {}
         hobby_ids_by_person = {}
         fallback_person_ids = []
 
-        for person_id in _iter_with_progress(args, truth_person_ids, desc=f"features ({args.split})"):
-            person_uuid = id_to_person.get(person_id, "")
-            person_context = contexts.get(person_uuid)
-            hobby_candidates = pools_by_person.get(person_id, [])
-            known_names = {id_to_hobby[hid] for hid in train_known.get(person_id, set()) if hid in id_to_hobby}
+        feature_worker_count = max(1, int(system_resource_plan["cpu_threads"]))
+        use_parallel_feature_build = feature_worker_count > 1 and text_similarity_fn is None
+        LOGGER.info(
+            "Starting feature row build: persons=%s candidate_rows=%s feature_columns=%s text_lookup_pairs=%s parallel=%s workers=%s",
+            len(truth_person_ids),
+            candidate_pool_row_count,
+            len(model_feature_columns),
+            sum(len(values) for values in text_similarity_lookup.values()),
+            use_parallel_feature_build,
+            feature_worker_count if use_parallel_feature_build else 1,
+        )
+        feature_build_start = time.perf_counter()
+        if use_parallel_feature_build:
+            feature_payloads = [
+                (
+                    person_id,
+                    contexts.get(id_to_person.get(person_id, "")) or empty_person_context(id_to_person.get(person_id, "")),
+                    pools_by_person.get(person_id, []),
+                    {id_to_hobby[hid] for hid in train_known.get(person_id, set()) if hid in id_to_hobby},
+                    text_similarity_lookup.get(person_id, {}),
+                )
+                for person_id in truth_person_ids
+            ]
+            chunksize = max(1, min(64, len(feature_payloads) // (feature_worker_count * 4) if feature_worker_count else 1))
+            with ProcessPoolExecutor(
+                max_workers=feature_worker_count,
+                initializer=_init_feature_worker,
+                initargs=(hobby_profile, reranker_config, model_feature_columns),
+            ) as executor:
+                results = executor.map(_build_feature_rows_for_person, feature_payloads, chunksize=chunksize)
+                for person_id, rows, hobby_ids_list, is_fallback in _iter_with_progress(
+                    args,
+                    results,
+                    desc=f"features ({args.split})",
+                    total_count=len(feature_payloads),
+                ):
+                    if is_fallback:
+                        fallback_person_ids.append(person_id)
+                        v2_fallback_count += 1
+                        continue
+                    start = len(all_features)
+                    all_features.extend(rows)
+                    person_to_feature_slice[person_id] = (start, len(all_features))
+                    hobby_ids_by_person[person_id] = hobby_ids_list
+        else:
+            for person_id in _iter_with_progress(args, truth_person_ids, desc=f"features ({args.split})"):
+                person_uuid = id_to_person.get(person_id, "")
+                person_context = contexts.get(person_uuid) or empty_person_context(person_uuid)
+                hobby_candidates = pools_by_person.get(person_id, [])
+                known_names = {id_to_hobby[hid] for hid in train_known.get(person_id, set()) if hid in id_to_hobby}
 
-            if person_context and hobby_candidates:
-                start = len(all_features)
-                hobby_ids_list: list[int] = []
-                for candidate in hobby_candidates:
-                    text_embedding_similarity = 0.0
-                    if text_similarity_fn is not None:
-                        try:
-                            text_embedding_similarity = float(text_similarity_fn(person_id, candidate))
-                        except Exception:
-                            text_embedding_similarity = 0.0
-                    features = build_rerank_features(
-                        person_context,
-                        candidate,
-                        hobby_profile,
-                        known_names,
-                        reranker_config,
-                        text_embedding_similarity=text_embedding_similarity,
-                    )
-                    features.pop("similar_person_score", None)
-                    features.pop("persona_text_fit", None)
-                    all_features.append([features.get(col, 0.0) for col in model_feature_columns])
-                    hobby_ids_list.append(candidate.hobby_id)
-                person_to_feature_slice[person_id] = (start, len(all_features))
-                hobby_ids_by_person[person_id] = hobby_ids_list
-            else:
-                fallback_person_ids.append(person_id)
-                v2_fallback_count += 1
-        X = np.array(all_features, dtype=np.float32) if all_features else np.empty((0, len(model_feature_columns)), dtype=np.float32)
+                if hobby_candidates:
+                    start = len(all_features)
+                    hobby_ids_list: list[int] = []
+                    for candidate in hobby_candidates:
+                        text_embedding_similarity = 0.0
+                        if text_similarity_lookup:
+                            text_embedding_similarity = text_similarity_lookup.get(person_id, {}).get(candidate.hobby_id, 0.0)
+                        elif text_similarity_fn is not None:
+                            try:
+                                text_embedding_similarity = float(text_similarity_fn(person_id, candidate))
+                            except Exception:
+                                text_embedding_similarity = 0.0
+                        features = build_rerank_features(
+                            person_context,
+                            candidate,
+                            hobby_profile,
+                            known_names,
+                            reranker_config,
+                            text_embedding_similarity=text_embedding_similarity,
+                        )
+                        features.pop("similar_person_score", None)
+                        features.pop("persona_text_fit", None)
+                        all_features.append([features.get(col, 0.0) for col in model_feature_columns])
+                        hobby_ids_list.append(candidate.hobby_id)
+                    person_to_feature_slice[person_id] = (start, len(all_features))
+                    hobby_ids_by_person[person_id] = hobby_ids_list
+                else:
+                    fallback_person_ids.append(person_id)
+                    v2_fallback_count += 1
+        feature_matrix = np.array(all_features, dtype=np.float32) if all_features else np.empty((0, len(model_feature_columns)), dtype=np.float32)
+        LOGGER.info(
+            "Feature row build done: rows=%s persons_with_features=%s fallback_persons=%s seconds=%.3f",
+            int(feature_matrix.shape[0]),
+            len(person_to_feature_slice),
+            len(fallback_person_ids),
+            time.perf_counter() - feature_build_start,
+        )
+        LOGGER.info("Saving feature cache if enabled.")
         _save_feature_cache(
             args,
             truth_person_ids,
@@ -483,13 +913,14 @@ def main() -> None:
             config.paths.person_context_csv,
             config.paths.hobby_profile,
             config.paths.hobby_taxonomy,
-            X,
+            config.paths.hobby_aliases,
+            feature_matrix,
             person_to_feature_slice,
             hobby_ids_by_person,
             fallback_person_ids,
         )
 
-    feature_rows = int(X.shape[0]) if hasattr(X, "shape") else 0
+    feature_rows = int(feature_matrix.shape[0]) if hasattr(feature_matrix, "shape") else 0
     _write_status(
         args,
         "features_done",
@@ -502,9 +933,14 @@ def main() -> None:
         },
     )
 
-    if len(X) > 0:
-        all_scores = ranker.predict(X)
+    if len(feature_matrix) > 0:
+        LOGGER.info("Starting LightGBM prediction: rows=%s columns=%s", int(feature_matrix.shape[0]), int(feature_matrix.shape[1]))
+        predict_start = time.perf_counter()
+        all_scores = ranker.predict(feature_matrix)
+        LOGGER.info("LightGBM prediction done: scores=%s seconds=%.3f", len(all_scores), time.perf_counter() - predict_start)
 
+        LOGGER.info("Starting v2 ranking assembly: persons=%s", len(truth))
+        ranking_start = time.perf_counter()
         for person_id in _iter_with_progress(args, truth, desc=f"ranking ({args.split})"):
             if person_id in fallback_person_ids:
                 v2_rankings[person_id] = stage1_rankings.get(person_id, [])
@@ -553,6 +989,9 @@ def main() -> None:
                 lambda_param=args.mmr_lambda,
                 top_k=max_k,
             )
+        LOGGER.info("V2 ranking assembly done: persons=%s seconds=%.3f", len(v2_rankings), time.perf_counter() - ranking_start)
+    else:
+        LOGGER.info("No feature rows available; v2 rankings will fall back to Stage1 rankings.")
 
     _write_status(
         args,
@@ -725,8 +1164,8 @@ def main() -> None:
         "model_path": str(model_path),
         "feature_policy": {
             "feature_columns": model_feature_columns,
-            "include_source_features": _feature_policy(model_feature_columns)["include_source_features"],
-            "include_text_embedding_feature": _feature_policy(model_feature_columns)["include_text_embedding_feature"],
+            "include_source_features": model_feature_policy["include_source_features"],
+            "include_text_embedding_feature": model_feature_policy["include_text_embedding_feature"],
         },
         "input_config_summary": input_config_summary,
         "candidate_pool_policy": candidate_pool_policy,
@@ -736,10 +1175,12 @@ def main() -> None:
             "metadata_path": str(feature_cache_meta_path) if feature_cache_meta_path is not None else "",
             "cache_hit": feature_cache_hit,
         },
+        "resource_policy": system_resource_plan,
         "v2_fallback_count": v2_fallback_count,
         "stage1_baseline": {
-            "providers": ["popularity", "cooccurrence"],
+            "providers": list(stage1_provider_names),
             "metrics": stage1_metrics,
+            "kure_semantic_provider": stage1_kure_metadata,
         },
         "v2_lightgbm_ranker": {
             "metrics": v2_metrics,
@@ -756,6 +1197,7 @@ def main() -> None:
             "mmr_embedding_batch_size": args.embedding_batch_size if (args.use_mmr or args.use_dpp) else None,
             "text_embedding_feature": {
                 "enabled": include_text_embedding_feature,
+                "effective_embedding_batch_size": effective_embedding_batch_size,
                 "audit": text_embedding_audit,
             },
             "cold_start_subset": {
@@ -841,7 +1283,7 @@ def main() -> None:
     print(f"  LightGBM Ranker Evaluation ({args.split})")
     print(f"  Mode: {mode_label}")
     print(f"{'='*60}")
-    _print_section("Stage1 (pop+cooc)", stage1_metrics)
+    _print_section(f"Stage1 ({'+'.join(stage1_provider_names)})", stage1_metrics)
     if not args.skip_v1 and v1_metrics is not None:
         _print_section("v1 Deterministic Reranker", v1_metrics)
     _print_section("v2 LightGBM Ranker", v2_metrics)
@@ -882,8 +1324,10 @@ def _load_feature_cache(
     person_context_path: Path,
     hobby_profile_path: Path,
     hobby_taxonomy_path: Path,
+    hobby_aliases_path: Path,
 ) -> tuple[np.ndarray, dict[int, tuple[int, int]], dict[int, list[int]], list[int]] | None:
     if args.feature_cache_dir is None:
+        LOGGER.info("Feature cache lookup skipped: cache_dir is not set.")
         return None
     npz_path, meta_path = _feature_cache_paths(
         args,
@@ -893,12 +1337,21 @@ def _load_feature_cache(
         person_context_path,
         hobby_profile_path,
         hobby_taxonomy_path,
+        hobby_aliases_path,
     )
     if not npz_path.exists() or not meta_path.exists():
+        LOGGER.info(
+            "Feature cache miss: cache files not found npz_exists=%s metadata_exists=%s npz=%s metadata=%s",
+            npz_path.exists(),
+            meta_path.exists(),
+            npz_path,
+            meta_path,
+        )
         return None
 
     metadata = _read_feature_cache_metadata(meta_path)
     if metadata is None or not _feature_cache_metadata_matches(metadata, args.split, feature_columns):
+        LOGGER.info("Feature cache miss: metadata missing or incompatible metadata=%s", meta_path)
         return None
 
     data = np.load(npz_path)
@@ -916,7 +1369,13 @@ def _load_feature_cache(
             person_to_feature_slice[person_id] = (start, end)
             hobby_ids_by_person[person_id] = flat_hobbies[start:end]
 
-    print(f"Loaded feature matrix from cache: {npz_path}")
+    LOGGER.info(
+        "Feature cache hit: rows=%s persons=%s fallback_persons=%s npz=%s",
+        int(data["X"].shape[0]),
+        len(persons),
+        len(fallback_person_ids),
+        npz_path,
+    )
     return data["X"].astype(np.float32), person_to_feature_slice, hobby_ids_by_person, fallback_person_ids
 
 
@@ -928,6 +1387,7 @@ def _save_feature_cache(
     person_context_path: Path,
     hobby_profile_path: Path,
     hobby_taxonomy_path: Path,
+    hobby_aliases_path: Path,
     X: np.ndarray,
     person_to_feature_slice: dict[int, tuple[int, int]],
     hobby_ids_by_person: dict[int, list[int]],
@@ -943,6 +1403,7 @@ def _save_feature_cache(
         person_context_path,
         hobby_profile_path,
         hobby_taxonomy_path,
+        hobby_aliases_path,
     )
     npz_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -964,6 +1425,7 @@ def _save_feature_cache(
     meta_path.write_text(
         json.dumps(
             {
+                "cache_version": FEATURE_CACHE_VERSION,
                 "split": args.split,
                 "experiment_id": args.experiment_id,
                 "feature_columns": feature_columns,
@@ -971,6 +1433,12 @@ def _save_feature_cache(
                 "num_rows": int(X.shape[0]),
                 "num_persons": len(person_ids),
                 "fallback_count": len(fallback_person_ids),
+                "files": {
+                    "person_context": _file_fingerprint(person_context_path),
+                    "hobby_profile": _file_fingerprint(hobby_profile_path),
+                    "hobby_taxonomy": _file_fingerprint(hobby_taxonomy_path),
+                    "hobby_aliases": _file_fingerprint(hobby_aliases_path),
+                },
             },
             ensure_ascii=False,
             indent=2,
@@ -988,6 +1456,7 @@ def _feature_cache_paths(
     person_context_path: Path,
     hobby_profile_path: Path,
     hobby_taxonomy_path: Path,
+    hobby_aliases_path: Path,
 ) -> tuple[Path, Path]:
     if args.feature_cache_dir is None:
         raise ValueError("feature_cache_dir is required")
@@ -999,6 +1468,7 @@ def _feature_cache_paths(
         person_context_path,
         hobby_profile_path,
         hobby_taxonomy_path,
+        hobby_aliases_path,
     )
     cache_dir = args.feature_cache_dir / "cache"
     return cache_dir / f"features_{key}.npz", cache_dir / f"features_{key}.json"
@@ -1012,8 +1482,10 @@ def _feature_cache_key(
     person_context_path: Path,
     hobby_profile_path: Path,
     hobby_taxonomy_path: Path,
+    hobby_aliases_path: Path,
 ) -> str:
     payload = {
+        "cache_version": FEATURE_CACHE_VERSION,
         "split": args.split,
         "person_ids": sorted(person_ids),
         "feature_columns": feature_columns,
@@ -1023,6 +1495,12 @@ def _feature_cache_key(
             "person_context": _file_fingerprint(person_context_path),
             "hobby_profile": _file_fingerprint(hobby_profile_path),
             "hobby_taxonomy": _file_fingerprint(hobby_taxonomy_path),
+            "hobby_aliases": _file_fingerprint(hobby_aliases_path),
+        },
+        "text_embedding": {
+            "model_name": KURE_MODEL_NAME if "text_embedding_similarity" in feature_columns else "",
+            "masking": "mask_holdout_hobbies",
+            "similarity": "precomputed_lookup",
         },
     }
     raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
@@ -1060,6 +1538,99 @@ def _feature_policy(feature_columns: list[str]) -> dict[str, bool]:
     }
 
 
+def _resolve_embedding_resource_plan(args: argparse.Namespace) -> dict[str, object]:
+    requested = int(args.embedding_batch_size)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    total_mb, used_mb, free_mb = _query_gpu_memory_mb()
+    if requested > 0:
+        estimated_mb = _estimate_embedding_vram_mb(requested)
+        return {
+            "device": device,
+            "requested_batch_size": requested,
+            "effective_batch_size": requested,
+            "gpu_total_vram_mb": total_mb,
+            "gpu_used_vram_mb": used_mb,
+            "gpu_free_vram_mb": free_mb,
+            "vram_utilization_target": float(args.embedding_vram_utilization),
+            "target_vram_mb": 0,
+            "estimated_mb_per_text": _estimated_mb_per_text(),
+            "estimated_vram_mb": estimated_mb,
+            "mode": "manual",
+        }
+    if device != "cuda":
+        batch_size = 32
+        return {
+            "device": device,
+            "requested_batch_size": requested,
+            "effective_batch_size": batch_size,
+            "gpu_total_vram_mb": total_mb,
+            "gpu_used_vram_mb": used_mb,
+            "gpu_free_vram_mb": free_mb,
+            "vram_utilization_target": float(args.embedding_vram_utilization),
+            "target_vram_mb": 0,
+            "estimated_mb_per_text": _estimated_mb_per_text(),
+            "estimated_vram_mb": _estimate_embedding_vram_mb(batch_size),
+            "mode": "cpu_default",
+        }
+
+    requested_target_mb = max(0, int(args.embedding_target_vram_mb))
+    if requested_target_mb > 0:
+        usable_mb = min(requested_target_mb, max(512, int(total_mb * 0.95)))
+        mode = "auto_target_vram"
+    else:
+        usable_mb = max(512, int(free_mb * max(0.1, min(float(args.embedding_vram_utilization), 0.95))))
+        mode = "auto_vram"
+    batch_size = max(64, min(1024, usable_mb // _estimated_mb_per_text()))
+    estimated_mb = _estimate_embedding_vram_mb(batch_size)
+    return {
+        "device": device,
+        "requested_batch_size": requested,
+        "effective_batch_size": int(batch_size),
+        "gpu_total_vram_mb": total_mb,
+        "gpu_used_vram_mb": used_mb,
+        "gpu_free_vram_mb": free_mb,
+        "vram_utilization_target": float(args.embedding_vram_utilization),
+        "requested_target_vram_mb": requested_target_mb,
+        "target_vram_mb": usable_mb,
+        "estimated_mb_per_text": _estimated_mb_per_text(),
+        "estimated_vram_mb": estimated_mb,
+        "mode": mode,
+    }
+
+
+def _estimated_mb_per_text() -> int:
+    return 18
+
+
+def _estimate_embedding_vram_mb(batch_size: int) -> int:
+    return int(max(1, batch_size) * _estimated_mb_per_text())
+
+
+def _query_gpu_memory_mb() -> tuple[int, int, int]:
+    try:
+        result = subprocess.run(
+            [
+                "nvidia-smi",
+                "--query-gpu=memory.total,memory.used,memory.free",
+                "--format=csv,noheader,nounits",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return 0, 0, 0
+    first_line = result.stdout.strip().splitlines()[0] if result.stdout.strip() else ""
+    parts = [part.strip() for part in first_line.split(",")]
+    if len(parts) < 3:
+        return 0, 0, 0
+    try:
+        return int(parts[0]), int(parts[1]), int(parts[2])
+    except ValueError:
+        return 0, 0, 0
+
+
 def _read_feature_cache_metadata(path: Path) -> dict[str, object] | None:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
@@ -1074,7 +1645,8 @@ def _feature_cache_metadata_matches(
     feature_columns: list[str],
 ) -> bool:
     return (
-        metadata.get("split") == split
+        metadata.get("cache_version") == FEATURE_CACHE_VERSION
+        and metadata.get("split") == split
         and metadata.get("feature_columns") == feature_columns
         and metadata.get("feature_policy") == _feature_policy(feature_columns)
     )
@@ -1233,6 +1805,15 @@ def _safe_cosine_similarity(vector_a: Any, vector_b: Any) -> float:
     return min(1.0, value)
 
 
+def _text_audit_failure_rate(text_embedding_audit: dict[str, object]) -> float:
+    failed = int(text_embedding_audit.get("failed_person_count", 0) or 0)
+    passed = int(text_embedding_audit.get("passed_person_count", 0) or 0)
+    total = failed + passed
+    if total <= 0:
+        return 0.0
+    return failed / total
+
+
 def _build_hobby_alias_map(alias_map_path: Path, valid_hobby_names: set[str]) -> dict[str, list[str]]:
     normalized_valid = {normalize_hobby_name(value) for value in valid_hobby_names}
     raw_alias_map = load_alias_map(alias_map_path)
@@ -1262,13 +1843,14 @@ def _prepare_text_leakage_context(
     person_audit_pass: dict[int, bool] = {}
     passed_person_ids: list[int] = []
     failed_person_ids: list[int] = []
+    missing_context_person_ids: list[int] = []
 
     for person_id in person_ids:
         person_uuid = id_to_person.get(person_id, "")
         context = contexts.get(person_uuid)
         if not context:
-            person_audit_pass[person_id] = False
-            failed_person_ids.append(person_id)
+            person_audit_pass[person_id] = True
+            missing_context_person_ids.append(person_id)
             continue
 
         holdout_hobby_names = {
@@ -1305,6 +1887,11 @@ def _prepare_text_leakage_context(
             "audit_pass": not failed_person_ids,
             "passed_person_count": len(passed_person_ids),
             "failed_person_count": len(failed_person_ids),
+            "missing_context_person_count": len(missing_context_person_ids),
+            "audit_eligible_person_count": len(passed_person_ids) + len(failed_person_ids),
+            "passed_person_id_sample": passed_person_ids[:100],
+            "failed_person_id_sample": failed_person_ids[:100],
+            "missing_context_person_id_sample": missing_context_person_ids[:100],
         },
     }
 
@@ -1329,6 +1916,108 @@ def _make_text_similarity_fn(
         return _safe_cosine_similarity(person_embedding, hobby_embedding)
 
     return _score
+
+
+def _prewarm_text_embedding_caches(
+    *,
+    person_text_by_id: dict[int, str],
+    person_embedding_cache: PersonEmbeddingCache,
+    hobby_embedding_cache: HobbyEmbeddingCache,
+    candidate_pools: dict[int, list[Any]],
+    show_progress_bar: bool = False,
+    split: str = "",
+) -> None:
+    prewarm_start = time.perf_counter()
+    person_texts = list(person_text_by_id.values())
+    if person_texts:
+        person_start = time.perf_counter()
+        LOGGER.info("Prewarming KURE persona embeddings for evaluation: %s unique texts", len(set(person_texts)))
+        person_embedding_cache.encode_batch(
+            person_texts,
+            show_progress_bar=show_progress_bar,
+            progress_desc=f"KURE persona embeddings ({split})" if split else "KURE persona embeddings",
+        )
+        LOGGER.info("KURE persona embedding prewarm done: seconds=%.3f", time.perf_counter() - person_start)
+
+    hobby_names: set[str] = set()
+    for candidates in candidate_pools.values():
+        for candidate in candidates:
+            candidate_name = str(getattr(candidate, "hobby_name", "") or "").strip()
+            if candidate_name:
+                hobby_names.add(candidate_name)
+    if hobby_names:
+        hobby_start = time.perf_counter()
+        LOGGER.info("Prewarming KURE hobby embeddings for evaluation: %s unique candidate hobbies", len(hobby_names))
+        hobby_embedding_cache.encode_batch(
+            sorted(hobby_names),
+            show_progress_bar=show_progress_bar,
+            progress_desc=f"KURE hobby embeddings ({split})" if split else "KURE hobby embeddings",
+        )
+        LOGGER.info("KURE hobby embedding prewarm done: seconds=%.3f", time.perf_counter() - hobby_start)
+    LOGGER.info("KURE embedding prewarm done: seconds=%.3f", time.perf_counter() - prewarm_start)
+
+
+def _build_text_similarity_lookup(
+    *,
+    person_text_by_id: dict[int, str],
+    person_audit_pass: dict[int, bool],
+    person_embedding_cache: PersonEmbeddingCache,
+    hobby_embedding_cache: HobbyEmbeddingCache,
+    candidate_pools: dict[int, list[Any]],
+) -> dict[int, dict[int, float]]:
+    start_time = time.perf_counter()
+    lookup: dict[int, dict[int, float]] = {}
+    person_vectors: dict[int, np.ndarray] = {}
+    hobby_vectors: dict[int, np.ndarray] = {}
+
+    for person_id, person_text in person_text_by_id.items():
+        if person_audit_pass.get(person_id, False) and person_text:
+            vector = person_embedding_cache.get(person_text)
+            if vector is not None:
+                person_vectors[person_id] = _normalize_vector_np(vector)
+
+    for candidates in candidate_pools.values():
+        for candidate in candidates:
+            candidate_name = str(getattr(candidate, "hobby_name", "") or "").strip()
+            candidate_id = int(getattr(candidate, "hobby_id", -1))
+            if candidate_id < 0 or candidate_id in hobby_vectors or not candidate_name:
+                continue
+            vector = hobby_embedding_cache.get(candidate_name)
+            if vector is not None:
+                hobby_vectors[candidate_id] = _normalize_vector_np(vector)
+
+    pair_count = 0
+    for person_id, candidates in candidate_pools.items():
+        person_vector = person_vectors.get(person_id)
+        if person_vector is None:
+            continue
+        person_lookup: dict[int, float] = {}
+        for candidate in candidates:
+            candidate_id = int(getattr(candidate, "hobby_id", -1))
+            hobby_vector = hobby_vectors.get(candidate_id)
+            if hobby_vector is None:
+                continue
+            person_lookup[candidate_id] = max(0.0, min(1.0, float(np.dot(person_vector, hobby_vector))))
+        if person_lookup:
+            pair_count += len(person_lookup)
+            lookup[person_id] = person_lookup
+
+    LOGGER.info(
+        "Built KURE similarity lookup: persons=%s, hobbies=%s, pairs=%s, seconds=%.3f",
+        len(lookup),
+        len(hobby_vectors),
+        pair_count,
+        time.perf_counter() - start_time,
+    )
+    return lookup
+
+
+def _normalize_vector_np(vector: Any) -> np.ndarray:
+    array = np.asarray(vector, dtype=np.float32).reshape(-1)
+    norm = float(np.linalg.norm(array))
+    if norm <= 0.0:
+        return array
+    return array / norm
 
 
 def _load_phase5_kure_baseline(split: str) -> dict[str, object] | None:
@@ -1742,6 +2431,36 @@ def _normalization_method(path: Path) -> str:
     if not isinstance(value, dict):
         return "rank_percentile"
     return str(value.get("method", "rank_percentile"))
+
+
+def _configure_third_party_logging() -> None:
+    for logger_name in (
+        "httpx",
+        "httpcore",
+        "huggingface_hub",
+        "sentence_transformers",
+        "sentence_transformers.base",
+        "sentence_transformers.base.model",
+        "transformers",
+        "urllib3",
+    ):
+        logging.getLogger(logger_name).setLevel(logging.WARNING)
+
+
+def _safe_model_cache_name(model_name: str) -> str:
+    return model_name.replace("\\", "__").replace("/", "__").replace(":", "__")
+
+
+def _huggingface_model_cache_status(model_name: str) -> str:
+    model_dir = Path.home() / ".cache" / "huggingface" / "hub" / f"models--{model_name.replace('/', '--')}"
+    snapshots_dir = model_dir / "snapshots"
+    if not snapshots_dir.exists():
+        return "not_found_download_if_needed"
+    try:
+        snapshots = [path for path in snapshots_dir.iterdir() if path.is_dir()]
+    except OSError:
+        return "unknown"
+    return "local_snapshot_available" if snapshots else "not_found_download_if_needed"
 
 
 if __name__ == "__main__":

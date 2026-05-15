@@ -9,6 +9,7 @@ import numpy as np
 
 KURE_MODEL_NAME = "nlpai-lab/KURE-v1"
 CACHE_DIR = "GNN_Neural_Network/artifacts/embeddings_cache"
+_KURE_MODEL_CACHE: dict[str, Any] = {}
 
 
 class HobbyEmbeddingCache:
@@ -65,16 +66,50 @@ def _compile_alias_patterns(alias_map: dict[str, list[str]]) -> dict[str, list[r
     return patterns
 
 
+_KOREAN_BOUNDARY_SUFFIXES = (
+    "을",
+    "를",
+    "으로",
+    "은",
+    "는",
+    "이",
+    "가",
+    "과",
+    "와",
+    "도",
+    "에",
+    "에서",
+    "만",
+    "부터",
+    "까지",
+    "의",
+    "처럼",
+    "하고",
+    "하며",
+    "하면서",
+    "한다",
+    "하기",
+    "하는",
+    "한",
+    "할",
+    "해",
+)
+
+
 def _compile_hobby_pattern(hobby: str) -> re.Pattern[str]:
     escaped = re.escape(hobby)
-    return re.compile(rf"(?<![\w가-힣]){escaped}(?![\w가-힣])", flags=re.IGNORECASE)
+    suffixes = "|".join(re.escape(suffix) for suffix in sorted(_KOREAN_BOUNDARY_SUFFIXES, key=len, reverse=True))
+    return re.compile(
+        rf"(?<![\w가-힣]){escaped}(?=(?:{suffixes})|[^\w가-힣]|$)",
+        flags=re.IGNORECASE,
+    )
 
 
 def mask_holdout_hobbies(
     text: str,
     holdout_hobbies: set[str] | list[str] | tuple[str, ...],
     alias_map: dict[str, list[str]] | None = None,
-    mask_token: str = "[MASK]",
+    mask_token: str = "[ACT]",
 ) -> str:
     if not text or not holdout_hobbies:
         return text
@@ -97,12 +132,14 @@ def post_mask_leakage_audit(
         return True
 
     normalized = _normalize_for_audit(masked_text)
+    alias_patterns = _compile_alias_patterns(alias_map) if alias_map else {}
     for hobby in holdout_hobbies:
-        if _normalize_for_audit(hobby) in normalized:
+        normalized_hobby = _normalize_for_audit(hobby)
+        if normalized_hobby and _compile_hobby_pattern(normalized_hobby).search(normalized):
             return False
         if alias_map:
-            for alias in alias_map.get(hobby, []):
-                if _normalize_for_audit(alias) in normalized:
+            for pattern in alias_patterns.get(hobby, []):
+                if pattern.search(normalized):
                     return False
     return True
 
@@ -111,7 +148,12 @@ def _normalize_for_audit(text: str) -> str:
     return " ".join(text.lower().split())
 
 
-def _load_kure_model(device: str | None = None) -> Any:
+def _load_kure_model(device: str | None = None, *, model_name: str = KURE_MODEL_NAME) -> Any:
+    cache_key = f"{model_name}|{device or 'default'}"
+    cached = _KURE_MODEL_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
     try:
         from sentence_transformers import SentenceTransformer
     except ImportError as exc:
@@ -120,9 +162,10 @@ def _load_kure_model(device: str | None = None) -> Any:
     kwargs: dict[str, Any] = {}
     if device:
         kwargs["device"] = device
-    model = SentenceTransformer(KURE_MODEL_NAME, **kwargs)
+    model = SentenceTransformer(model_name, **kwargs)
     if hasattr(model, "max_seq_length"):
         model.max_seq_length = 512
+    _KURE_MODEL_CACHE[cache_key] = model
     return model
 
 

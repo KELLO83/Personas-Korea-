@@ -1,0 +1,16 @@
+{
+  "experiment_id": "phase5_b2_feature_balance_feature_fraction_0_8",
+  "status": "trained",
+  "data_split": "validation_internal_ranker_split",
+  "input_config_summary": {
+    "config_path": "GNN_Neural_Network\\configs\\lightgcn_hobby.yaml",
+    "candidate_pool_size": 50,
+    "score_normalization": "rank_percentile"
+  },
+  "summary": {
+    "text_embedding_enabled": false,
+    "text_embedding_audit_path": "GNN_Neural_Network\\artifacts\\experiments\\phase5_b2_feature_balance\\feature_fraction_0_8\\text_leakage_audit.json",
+    "text_embedding_audit_pass": true
+  },
+  "runtime_seconds": 6.007645699981367
+}

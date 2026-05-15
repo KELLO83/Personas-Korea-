@@ -81,6 +81,42 @@
   - [x] 복합 질의 (Cypher + Vector 결합) 노드
 - [~] 라우터 엔드투엔드 테스트 (코드 완료, 실제 LLM/Neo4j 연동 시 검증)
 
+## Phase 5-A: 향후 LeanRAG-style Graph RAG 확장 계획
+
+> PRD §11.8 — 현재는 GNN 추천시스템 개발이 우선이다. 이 Phase는 코드 작성 전 계획이며, `GNN_Neural_Network/` 추천 모델 실험과 분리해서 root Graph RAG/챗봇/insight API 향후 개선 과제로 관리한다.
+
+- [ ] LeanRAG-style 적용 범위 확정
+  - [ ] 기존 `cypher`, `vector`, `composite` route는 유지
+  - [ ] 신규 route 이름 결정: `graph_evidence` 또는 `hierarchical_graph`
+  - [ ] default route 승격 전 A/B 평가 원칙 확정
+- [ ] P1 LeanRAG-lite `GraphEvidenceRetriever` 설계
+  - [ ] query에서 seed persona/hobby/skill/entity를 찾는 전략 정의
+  - [ ] Neo4j 1~2 hop expansion 쿼리 범위 정의
+  - [ ] PageRank, degree, community_id, relation type 기반 evidence ranking 규칙 정의
+  - [ ] source schema 정의: entity, relationship, path, score, community_id
+- [ ] P2 Semantic Aggregation Layer 설계
+  - [ ] persona community summary 생성 단위 정의
+  - [ ] hobby cluster summary 생성 단위 정의
+  - [ ] skill cluster summary 생성 단위 정의
+  - [ ] summary cache metadata 정의: build timestamp, graph snapshot id, embedding model, source entity count
+- [ ] P3 Hierarchical Retrieval 설계
+  - [ ] `query -> seed entity -> community/cluster summary -> original evidence` 검색 흐름 정의
+  - [ ] summary node 간 semantic relation 생성/캐시 정책 정의
+  - [ ] high-level summary와 low-level evidence를 함께 LLM에 전달하는 prompt contract 정의
+- [ ] P4 Structure-guided Evidence Selection 설계
+  - [ ] graph path, centrality, community relation, source diversity 기반 selection score 정의
+  - [ ] 중복 entity/summary 제거 규칙 정의
+  - [ ] token budget 내 evidence packing 규칙 정의
+- [ ] 평가 계획 수립
+  - [ ] Graph RAG QA golden set 작성
+  - [ ] 기존 `composite` vs LeanRAG-style route 비교 기준 정의
+  - [ ] metrics: correctness, groundedness, evidence precision, redundancy, latency, token usage
+  - [ ] default 승격/보류/폐기 decision log 형식 정의
+- [ ] 문서화
+  - [ ] 구현 시작 전 ADR 작성 여부 결정
+  - [ ] LeanRAG-style route가 default 후보가 될 경우 PRD/TASKS 갱신
+  - [ ] GNN 추천시스템 문서와 scope 충돌이 없도록 확인
+
 ## Phase 6: FastAPI 엔드포인트
 
 - [x] `src/api/main.py` — FastAPI 앱 초기화 (CORS, 라우터 마운트)

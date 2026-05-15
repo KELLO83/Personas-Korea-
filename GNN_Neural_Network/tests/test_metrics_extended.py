@@ -10,6 +10,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from GNN_Neural_Network.gnn_recommender.metrics import (
+    cold_start_subset_metrics,
     intra_list_diversity_at_k,
     oracle_recall_at_k,
     per_segment_metrics,
@@ -95,8 +96,10 @@ class TestPerSegmentMetrics:
         assert "age_group" in result
         assert "sex" in result
         assert "recall_gap" in result
-        assert result["recall_gap"]["age_group"] >= 0.0
-        assert result["recall_gap"]["sex"] >= 0.0
+        recall_gap = result["recall_gap"]
+        assert isinstance(recall_gap, dict)
+        assert recall_gap["age_group"] >= 0.0
+        assert recall_gap["sex"] >= 0.0
 
     def test_single_group(self) -> None:
         truth = {1: {10}, 2: {11}}
@@ -106,16 +109,37 @@ class TestPerSegmentMetrics:
             2: {"age_group": "20대", "sex": "남성"},
         }
         result = per_segment_metrics(truth, recs, segments, 1)
-        assert result["recall_gap"]["age_group"] == pytest.approx(0.0)
-        assert result["recall_gap"]["sex"] == pytest.approx(0.0)
+        recall_gap = result["recall_gap"]
+        assert isinstance(recall_gap, dict)
+        assert recall_gap["age_group"] == pytest.approx(0.0)
+        assert recall_gap["sex"] == pytest.approx(0.0)
 
     def test_empty_segments(self) -> None:
         result = per_segment_metrics({}, {}, {}, 5)
         assert "recall_gap" in result
 
 
+class TestColdStartMetrics:
+    def test_subset_uses_people_with_one_or_zero_known_hobbies(self) -> None:
+        truth = {1: {10}, 2: {11}, 3: {12}}
+        recs = {1: [10, 20], 2: [20, 11], 3: [12, 20]}
+        known: dict[int, set[int]] = {1: set(), 2: {99}, 3: {98, 99}}
+        result = cold_start_subset_metrics(truth, recs, known, (2,))
+        assert result["person_count"] == 2
+        assert result["recall@2"] == pytest.approx(1.0)
+        assert result["hit_rate@2"] == pytest.approx(1.0)
+
+    def test_empty_subset_returns_zero_metrics(self) -> None:
+        truth = {1: {10}}
+        recs = {1: [10]}
+        known = {1: {98, 99}}
+        result = cold_start_subset_metrics(truth, recs, known, (1,))
+        assert result["person_count"] == 0
+        assert result["recall@1"] == pytest.approx(0.0)
+
+
 class TestSummarizeIntegration:
-    def _base_data(self) -> tuple:
+    def _base_data(self) -> tuple[dict[int, set[int]], dict[int, list[int]]]:
         truth = {1: {10, 11}, 2: {12}}
         recs = {1: [10, 20, 11], 2: [12, 30, 40]}
         return truth, recs
@@ -141,8 +165,13 @@ class TestSummarizeIntegration:
             hobby_categories=cats,
             candidate_pool_by_person=pool,
             person_segments=segments,
+            known_by_person={1: {99}, 2: {98, 99}},
         )
         assert "recall@5" in result
         assert "intra_list_diversity@5" in result
         assert "oracle_recall@5" in result
         assert "per_segment" in result
+        assert "cold_start" in result
+        cold_start = result["cold_start"]
+        assert isinstance(cold_start, dict)
+        assert cold_start["person_count"] == 1

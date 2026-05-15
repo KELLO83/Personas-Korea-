@@ -21,13 +21,13 @@ def get_neo4j_driver():  # noqa: ANN201
     )
 
 
-def _node_id(labels: list[str], record: dict) -> str:  # type: ignore[type-arg]
+def _node_id(labels: list[str], record: dict[str, object]) -> str:
     label = labels[0] if labels else "Unknown"
     if label == "Person":
         return f"person_{record.get('n_uuid') or record.get('other_uuid', '')}"
     if label == "District":
         return f"district_{record.get('n_key', '')}"
-    name = record.get("n_name") or record.get("entity_name", "")
+    name = str(record.get("n_name") or record.get("entity_name") or "")
     prefix = label.lower().replace(" ", "")
     return f"{prefix}_{name}"
 
@@ -67,6 +67,7 @@ def subgraph(
                         SUBGRAPH_DEPTH2_QUERY,
                         uuid=uuid,
                         max_secondary=max_secondary,
+                        max_per_entity=min(4, max(max_secondary, 1)),
                     )
                 ]
             if depth >= 3:
@@ -97,7 +98,8 @@ def subgraph(
     )
 
     for rec in depth1_records:
-        node_labels = rec.get("node_labels", [])
+        raw_node_labels = rec.get("node_labels", [])
+        node_labels = [str(label) for label in raw_node_labels] if isinstance(raw_node_labels, list) else []
         nid = _node_id(node_labels, rec)
         label_type = node_labels[0] if node_labels else "Unknown"
 
@@ -127,15 +129,21 @@ def subgraph(
 
     if depth >= 2:
         for rec in depth2_records:
-            entity_labels = rec.get("entity_labels", [])
-            entity_name = str(rec.get("entity_name", ""))
+            raw_entity_labels = rec.get("entity_labels", [])
+            entity_labels = [str(label) for label in raw_entity_labels] if isinstance(raw_entity_labels, list) else []
+            entity_name = str(rec.get("entity_name") or "")
+            entity_key = str(rec.get("entity_key") or "")
             entity_label_type = entity_labels[0] if entity_labels else "Unknown"
-            entity_id = _node_id(entity_labels, {"n_name": entity_name})
+            entity_id = _node_id(entity_labels, {"n_name": entity_name, "n_key": entity_key})
+            entity_label = entity_name or entity_key
+
+            if not entity_label:
+                continue
 
             if entity_id not in nodes:
                 nodes[entity_id] = GraphNode(
                     id=entity_id,
-                    label=entity_name,
+                    label=entity_label,
                     type=entity_label_type,
                     properties={},
                 )
@@ -173,7 +181,8 @@ def subgraph(
                     properties={},
                 )
 
-            next_labels = rec.get("next_entity_labels", [])
+            raw_next_labels = rec.get("next_entity_labels", [])
+            next_labels = [str(label) for label in raw_next_labels] if isinstance(raw_next_labels, list) else []
             next_name = str(rec.get("next_entity_name") or rec.get("next_entity_key") or "")
             if not next_name:
                 continue

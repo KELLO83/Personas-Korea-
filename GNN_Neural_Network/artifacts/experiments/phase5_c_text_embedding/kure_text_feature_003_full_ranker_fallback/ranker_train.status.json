@@ -1,0 +1,16 @@
+{
+  "experiment_id": "phase5_c_text_embedding_kure_text_feature_003_full_ranker_fallback",
+  "status": "trained",
+  "data_split": "validation_internal_ranker_split",
+  "input_config_summary": {
+    "config_path": "GNN_Neural_Network\\configs\\lightgcn_hobby.yaml",
+    "candidate_pool_size": 50,
+    "score_normalization": "rank_percentile"
+  },
+  "summary": {
+    "text_embedding_enabled": true,
+    "text_embedding_audit_path": "GNN_Neural_Network\\artifacts\\experiments\\phase5_c_text_embedding\\kure_text_feature_003_full_ranker_fallback\\text_leakage_audit.json",
+    "text_embedding_audit_pass": true
+  },
+  "runtime_seconds": 168.6238310999761
+}

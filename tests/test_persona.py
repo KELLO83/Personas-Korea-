@@ -5,6 +5,8 @@ from fastapi.testclient import TestClient
 
 from src.api.main import create_app
 from src.api.routes import persona
+from src.gds.similarity import SHARED_HOBBIES_QUERY
+from src.graph.persona_queries import GRAPH_STATS_QUERY, PROFILE_QUERY, SIMILAR_PREVIEW_QUERY
 
 
 def _create_test_app() -> FastAPI:
@@ -229,3 +231,11 @@ def test_persona_profile_no_similar(monkeypatch) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["similar_preview"] == []
+
+
+def test_persona_queries_support_legacy_likes_hobbies() -> None:
+    assert "[:ENJOYS_HOBBY|LIKES]" in PROFILE_QUERY
+    assert "[:ENJOYS_HOBBY|LIKES]" in SIMILAR_PREVIEW_QUERY
+    assert "[:ENJOYS_HOBBY|LIKES]" in GRAPH_STATS_QUERY
+    assert "[:ENJOYS_HOBBY|LIKES]" in SHARED_HOBBIES_QUERY
+    assert "RETURN DISTINCT hobby.name AS name" in SHARED_HOBBIES_QUERY

@@ -99,12 +99,12 @@ def _load_to_neo4j(df: pl.DataFrame, reset: bool, batch_size: int) -> None:
     loader = GraphLoader()
     try:
         loader.create_schema()
-        
+
         if reset:
             logger.info("🗑️  기존 그래프 데이터를 삭제합니다 (적재 직전 초기화)...")
             deleted = loader.clear_graph()
             logger.info(f"삭제 완료: {deleted:,}개의 노드가 제거되었습니다.")
-        
+
         logger.info("Neo4j 신규 데이터 적재를 시작합니다 (Batch Size: %d)...", batch_size)
         loaded_count = loader.load_personas(df, batch_size=batch_size)
         logger.info(f"✅ Neo4j 적재 완료! 총 {loaded_count:,}개의 페르소나가 저장되었습니다.")
@@ -122,9 +122,9 @@ def _batch_create_hobby_relationships(loader, reset: bool, batch_size: int = 500
     """
     # Step 1: reset=True인 경우 기존 데이터 초기화
     if reset:
-        logger.info("🗑️  기존 취미(Hobby) 노드와 LIKES 관계를 초기화합니다...")
+        logger.info("🗑️  기존 취미(Hobby) 노드와 취미 관계(LIKES, ENJOYS_HOBBY)를 초기화합니다...")
         with loader.driver.session(database=loader.database) as session:
-            session.run("MATCH ()-[r:LIKES]->() DELETE r")
+            session.run("MATCH ()-[r:LIKES|ENJOYS_HOBBY]->() DELETE r")
             session.run("MATCH (h:Hobby) DETACH DELETE h")
         logger.info("기존 취미 데이터 초기화 완료")
 
@@ -134,38 +134,38 @@ def _batch_create_hobby_relationships(loader, reset: bool, batch_size: int = 500
     WHERE p.hobbies_and_interests IS NOT NULL AND trim(p.hobbies_and_interests) <> ""
     RETURN p.uuid AS uuid, p.hobbies_and_interests AS hobbies
     """
-    
+
     total_processed = 0
     with loader.driver.session(database=loader.database) as session:
         result = session.run(extract_query)
-        
+
         batch_rows = []
         for record in result:
             uuid = record["uuid"]
             hobbies_text = record["hobbies"]
-            
+
             # Python 정규식으로 다중 구분자([;,.]) 처리 및 토큰화
             # ex) "독서, 게임; 배드민턴. 낚시" -> ['독서', '게임', '배드민턴', '낚시']
             hobbies = [
-                h.strip() 
-                for h in re.split(r'[;,.,]\s*', hobbies_text) 
+                h.strip()
+                for h in re.split(r'[;,.,]\s*', hobbies_text)
                 if h.strip() and len(h.strip()) > 1
             ]
-            
+
             for hobby_name in hobbies:
                 batch_rows.append({"uuid": uuid, "hobby_name": hobby_name})
-            
+
             # 배치 사이즈 도달 시 UNWIND 쿼리 실행
             if len(batch_rows) >= batch_size:
                 _execute_hobby_batch(session, batch_rows)
                 total_processed += len(batch_rows)
                 batch_rows = []
-        
+
         # 남은 데이터 처리
         if batch_rows:
             _execute_hobby_batch(session, batch_rows)
             total_processed += len(batch_rows)
-    
+
     logger.info(f"✅ 총 {total_processed}개의 Person-Hobby 관계 생성 완료")
 
 def _execute_hobby_batch(session, batch_rows):
@@ -174,7 +174,7 @@ def _execute_hobby_batch(session, batch_rows):
     UNWIND $batch AS row
     MATCH (p:Person {uuid: row.uuid})
     MERGE (h:Hobby {name: row.hobby_name})
-    MERGE (p)-[:LIKES]->(h)
+    MERGE (p)-[:ENJOYS_HOBBY]->(h)
     """
     session.run(batch_query, batch=batch_rows)
 
@@ -227,12 +227,12 @@ def main() -> None:
         loader.close()
 
     sample_size = args.sample_size if args.sample_size is not None else None
-    
+
     # 2. LazyFrame으로 변경하여 데이터 로딩 최적화 (빠른 필터링을 위해 scan 사용)
     #    -> loader.load_dataset는 Eager이므로, 여기서 Lazy 전환을 위한 별도 로직 필요
     #    -> 현재는 loader를 그대로 두되, chunk processing을 통해 메모리 문제를 해결함.
     raw_df = load_dataset(sample_size=sample_size)
-    
+
     # 3. 빠른 전처리 (Fast Preprocess)
     logger.info("모수(Population)에 대한 고속 전처리를 시작합니다...")
     df = preprocess(raw_df, fast_mode=True)
@@ -263,7 +263,7 @@ def main() -> None:
             return
 
     # ===== 🚀 [핵심 변경] 병렬 전처리 및 GPU 배치 파이프라인 =====
-    
+
     # 5. 데이터프레임을 청크로 분할 (전처리 병렬화를 위해)
     #    GPU 병렬 처리를 고려하여, 배치 사이즈와 비슷한 크기(예: 2048)로 조각냄
     chunk_size_for_processing = 2048  # GPU 메모리 오버플로우 방지를 위한 적절한 청크 크기
@@ -274,7 +274,7 @@ def main() -> None:
     #    참고: 각 프로세스는 KURE 모델을 독립적으로 로드하므로 메모리가 꽤 소모됩니다.
     from functools import partial
     preprocess_func = partial(_preprocess_single_chunk, fast_mode=False)
-    
+
     processed_chunks = execute_parallel(
         func=preprocess_func,
         data_chunks=chunks,
@@ -288,7 +288,7 @@ def main() -> None:
 
     # 8. Neo4j 최종 적재
     _load_to_neo4j(df=final_df, reset=args.reset, batch_size=args.batch_size)
-    
+
     # 9. Person-Hobby 관계(Edge) 생성 (그래프 구조 복구)
     _create_hobby_relationships(reset=args.reset)
 

@@ -10,8 +10,8 @@ Run every command from the repository root with the project venv:
 
 - `export_person_hobby_edges.py`: export Neo4j `Person-Hobby` edges and persona context.
 - `train_lightgcn.py`: prepare splits and optionally train LightGCN.
-- `train_ranker.py`: train the current LightGBM Stage 2 ranker.
-- `evaluate_ranker.py`: evaluate the current default Stage 1 + Stage 2 path.
+- `train_ranker.py`: train the current LightGBM Stage 2 ranker with `configs/lightgbm_ranker.yaml` by default.
+- `evaluate_ranker.py`: evaluate the current default Stage 1 + Stage 2 path with `configs/lightgbm_ranker.yaml` by default.
 - `recommend_for_persona.py`: inspect one persona recommendation path.
 
 ## Evaluation And Ablation Scripts

@@ -13,7 +13,7 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-from .data import PersonContext
+from .data import PersonContext, empty_person_context
 from .rerank import (
     HobbyCandidate, RerankerConfig, build_rerank_features, merge_stage1_candidates,
 )
@@ -70,6 +70,7 @@ def get_ranker_feature_columns(
     if include_text_embedding_feature:
         return list(RANKER_FEATURE_COLUMNS_WITH_TEXT)
     return list(RANKER_FEATURE_COLUMNS)
+
 
 
 def get_ranker_categorical_features(feature_columns: list[str] | None = None) -> list[str]:
@@ -285,9 +286,7 @@ def build_ranker_dataset(
         person_uuid = id_to_person.get(person_id)
         if not person_uuid:
             continue
-        context = contexts.get(person_uuid)
-        if not context:
-            continue
+        context = contexts.get(person_uuid) or empty_person_context(person_uuid)
 
         known_hobby_ids = known_by_person.get(person_id, set())
         known_hobby_names = {id_to_hobby[h] for h in known_hobby_ids if h in id_to_hobby}
@@ -459,12 +458,15 @@ def _pool_cache_key(
     candidate_k: int,
     normalization_method: str,
     label: str,
+    providers: tuple[str, ...] = ("popularity", "cooccurrence"),
+    provider_cache_fingerprint: str = "",
 ) -> str:
     pid_hash = hashlib.md5(str(sorted(person_ids)).encode()).hexdigest()[:8]
     edge_hash = _hash_indexed_edges(train_edges)
     hobby_hash = _hash_id_mapping(id_to_hobby)
-    providers = "popularity-cooccurrence"
-    return f"pool_{label}_{providers}_k{candidate_k}_{normalization_method}_e{edge_hash}_h{hobby_hash}_p{pid_hash}"
+    providers_key = "-".join(providers)
+    provider_suffix = f"_s{provider_cache_fingerprint}" if provider_cache_fingerprint else ""
+    return f"pool_{label}_{providers_key}_k{candidate_k}_{normalization_method}_e{edge_hash}_h{hobby_hash}_p{pid_hash}{provider_suffix}"
 
 
 def get_candidate_pool_cache_key(
@@ -474,6 +476,8 @@ def get_candidate_pool_cache_key(
     candidate_k: int,
     normalization_method: str,
     label: str,
+    providers: tuple[str, ...] = ("popularity", "cooccurrence"),
+    provider_cache_fingerprint: str = "",
 ) -> str:
     return _pool_cache_key(
         person_ids=person_ids,
@@ -482,7 +486,140 @@ def get_candidate_pool_cache_key(
         candidate_k=candidate_k,
         normalization_method=normalization_method,
         label=label,
+        providers=providers,
+        provider_cache_fingerprint=provider_cache_fingerprint,
     )
+
+
+def _l2_normalize_matrix(matrix: np.ndarray) -> np.ndarray:
+    if matrix.size == 0:
+        return matrix.astype(np.float32)
+    norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+    norms[norms == 0.0] = 1.0
+    return (matrix / norms).astype(np.float32)
+
+
+def build_kure_semantic_candidate_scores(
+    person_text_by_id: dict[int, str],
+    person_embedding_cache: Any,
+    hobby_embedding_cache: Any,
+    id_to_hobby: dict[int, str],
+    train_known: dict[int, set[int]],
+    top_k: int,
+    *,
+    score_batch_size: int = 128,
+    show_progress_bar: bool = False,
+    progress_desc: str = "KURE Stage1 semantic scoring",
+) -> tuple[dict[int, dict[int, float]], dict[str, object]]:
+    if top_k <= 0:
+        raise ValueError("top_k must be positive")
+    person_ids = [person_id for person_id, text in person_text_by_id.items() if text]
+    if not person_ids:
+        return {}, {
+            "provider": "kure_semantic",
+            "person_count": 0,
+            "hobby_count": len(id_to_hobby),
+            "top_k": top_k,
+            "score_batch_size": max(1, score_batch_size),
+            "enabled": False,
+            "reason": "no eligible person text",
+        }
+
+    person_texts = [person_text_by_id[person_id] for person_id in person_ids]
+    person_embeddings_by_text = person_embedding_cache.encode_batch(
+        person_texts,
+        show_progress_bar=show_progress_bar,
+        progress_desc=f"{progress_desc} personas",
+    )
+    hobby_ids = sorted(id_to_hobby)
+    hobby_names = [id_to_hobby[hobby_id] for hobby_id in hobby_ids]
+    hobby_embeddings_by_name = hobby_embedding_cache.encode_batch(
+        hobby_names,
+        show_progress_bar=show_progress_bar,
+        progress_desc=f"{progress_desc} hobbies",
+    )
+
+    hobby_vectors: list[np.ndarray] = []
+    retained_hobby_ids: list[int] = []
+    for hobby_id, hobby_name in zip(hobby_ids, hobby_names, strict=False):
+        vector = hobby_embeddings_by_name.get(hobby_name)
+        if vector is None:
+            continue
+        hobby_vectors.append(np.asarray(vector, dtype=np.float32))
+        retained_hobby_ids.append(hobby_id)
+    if not hobby_vectors:
+        return {}, {
+            "provider": "kure_semantic",
+            "person_count": len(person_ids),
+            "hobby_count": 0,
+            "top_k": top_k,
+            "score_batch_size": max(1, score_batch_size),
+            "enabled": False,
+            "reason": "no hobby embeddings",
+        }
+
+    hobby_matrix = _l2_normalize_matrix(np.vstack([vector.reshape(1, -1) for vector in hobby_vectors]))
+    batch_size = max(1, int(score_batch_size))
+    scores_by_person: dict[int, dict[int, float]] = {}
+    iterator = range(0, len(person_ids), batch_size)
+    if show_progress_bar:
+        iterator = tqdm(iterator, desc=progress_desc, unit="batch", dynamic_ncols=False, leave=False)
+
+    for start in iterator:
+        batch_person_ids = person_ids[start:start + batch_size]
+        batch_vectors: list[np.ndarray] = []
+        retained_person_ids: list[int] = []
+        for person_id in batch_person_ids:
+            vector = person_embeddings_by_text.get(person_text_by_id[person_id])
+            if vector is None:
+                continue
+            batch_vectors.append(np.asarray(vector, dtype=np.float32))
+            retained_person_ids.append(person_id)
+        if not batch_vectors:
+            continue
+        person_matrix = _l2_normalize_matrix(np.vstack([vector.reshape(1, -1) for vector in batch_vectors]))
+        score_matrix = person_matrix @ hobby_matrix.T
+        for row_index, person_id in enumerate(retained_person_ids):
+            row = score_matrix[row_index].astype(np.float32, copy=True)
+            for known_hobby_id in train_known.get(person_id, set()):
+                try:
+                    known_index = retained_hobby_ids.index(known_hobby_id)
+                except ValueError:
+                    continue
+                row[known_index] = -np.inf
+            finite_count = int(np.isfinite(row).sum())
+            if finite_count <= 0:
+                continue
+            k = min(top_k, finite_count)
+            if k >= len(row):
+                candidate_indices = np.argsort(-row)
+            else:
+                candidate_indices = np.argpartition(-row, k - 1)[:k]
+                candidate_indices = candidate_indices[np.argsort(-row[candidate_indices])]
+            person_scores: dict[int, float] = {}
+            for idx in candidate_indices[:k]:
+                score = float(row[int(idx)])
+                if np.isfinite(score):
+                    person_scores[retained_hobby_ids[int(idx)]] = score
+            scores_by_person[person_id] = person_scores
+
+    fingerprint_payload = {
+        "provider": "kure_semantic",
+        "model_name": getattr(hobby_embedding_cache, "model_name", ""),
+        "model_revision": getattr(hobby_embedding_cache, "model_revision", ""),
+        "preprocessing_version": getattr(hobby_embedding_cache, "preprocessing_version", ""),
+        "top_k": top_k,
+        "person_count": len(scores_by_person),
+        "hobby_count": len(retained_hobby_ids),
+    }
+    fingerprint = hashlib.md5(json.dumps(fingerprint_payload, sort_keys=True).encode()).hexdigest()[:12]
+    return scores_by_person, {
+        **fingerprint_payload,
+        "enabled": True,
+        "score_batch_size": batch_size,
+        "fingerprint": fingerprint,
+        "candidate_pair_count": sum(len(values) for values in scores_by_person.values()),
+    }
 
 
 def _hash_indexed_edges(edges: list[tuple[int, int]]) -> str:
@@ -521,14 +658,35 @@ def load_or_build_candidate_pool(
     cache_dir: Path | None = None,
     label: str = "validation",
     disable_progress: bool = False,
+    stage1_providers: tuple[str, ...] = ("popularity", "cooccurrence"),
+    semantic_scores_by_person: dict[int, dict[int, float]] | None = None,
+    provider_cache_fingerprint: str = "",
 ) -> dict[int, list[HobbyCandidate]]:
     from .baseline import (
         cooccurrence_candidate_provider,
+        kure_semantic_candidate_provider,
         popularity_candidate_provider,
     )
     from .recommend import merge_candidates_by_hobby, normalize_candidate_scores
 
-    cache_key = _pool_cache_key(person_ids, train_edges, id_to_hobby, candidate_k, normalization_method, label)
+    provider_set = set(stage1_providers)
+    unknown_providers = provider_set - {"popularity", "cooccurrence", "kure_semantic"}
+    if unknown_providers:
+        unknown = ", ".join(sorted(unknown_providers))
+        raise ValueError(f"Unsupported Stage1 providers: {unknown}")
+    if "kure_semantic" in provider_set and semantic_scores_by_person is None:
+        raise ValueError("semantic_scores_by_person is required when kure_semantic Stage1 provider is enabled")
+
+    cache_key = _pool_cache_key(
+        person_ids,
+        train_edges,
+        id_to_hobby,
+        candidate_k,
+        normalization_method,
+        label,
+        providers=stage1_providers,
+        provider_cache_fingerprint=provider_cache_fingerprint,
+    )
 
     if cache_dir is not None:
         cache_path = cache_dir / "cache" / f"{cache_key}.json"
@@ -567,27 +725,45 @@ def load_or_build_candidate_pool(
     pools: dict[int, list[HobbyCandidate]] = {}
     for person_id in tqdm(person_ids, desc=f"candidate pools ({label})", disable=disable_progress):
         known = train_known.get(person_id, set())
-        pop = normalize_candidate_scores(
-            popularity_candidate_provider(
-                train_edges,
-                person_id,
-                known,
-                candidate_k,
-                popularity_counts=popularity_counts,
-            ),
-            normalization_method,
-        )
-        cooc = normalize_candidate_scores(
-            cooccurrence_candidate_provider(
-                train_edges,
-                person_id,
-                known,
-                candidate_k,
-                cooccurrence_counts=cooccurrence_counts,
-            ),
-            normalization_method,
-        )
-        merged = merge_candidates_by_hobby({"popularity": pop, "cooccurrence": cooc}, candidate_k)
+        provider_candidates: dict[str, list[Any]] = {}
+        if "popularity" in provider_set:
+            provider_candidates["popularity"] = normalize_candidate_scores(
+                popularity_candidate_provider(
+                    train_edges,
+                    person_id,
+                    known,
+                    candidate_k,
+                    popularity_counts=popularity_counts,
+                ),
+                normalization_method,
+            )
+        if "cooccurrence" in provider_set:
+            provider_candidates["cooccurrence"] = normalize_candidate_scores(
+                cooccurrence_candidate_provider(
+                    train_edges,
+                    person_id,
+                    known,
+                    candidate_k,
+                    cooccurrence_counts=cooccurrence_counts,
+                ),
+                normalization_method,
+            )
+        if "kure_semantic" in provider_set:
+            provider_candidates["kure_semantic"] = normalize_candidate_scores(
+                kure_semantic_candidate_provider(
+                    person_id,
+                    known,
+                    candidate_k,
+                    semantic_scores_by_person or {},
+                ),
+                normalization_method,
+            )
+        ordered_provider_candidates = {
+            provider: provider_candidates[provider]
+            for provider in stage1_providers
+            if provider in provider_candidates
+        }
+        merged = merge_candidates_by_hobby(ordered_provider_candidates, candidate_k)
         pools[person_id] = merge_stage1_candidates(merged, id_to_hobby)
 
     if cache_dir is not None:

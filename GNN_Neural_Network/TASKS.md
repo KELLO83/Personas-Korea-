@@ -2,6 +2,84 @@
 
 This file tracks executable tasks for `GNN_Neural_Network/` experiments. For requirements and design decisions, use `PRD.md`. For historical v2 reranker checklist details, use `CHECKLIST_GNN_Reranker_v2.md`.
 
+## Current Data And KURE Preconditions (2026-05-05)
+
+This section is the executable blocker list before any `include_text_embedding_feature=true` KURE-v1 feature experiment. Use `KURE-v1` as the canonical model name; older `KRUE` wording in historical artifacts means KURE-v1.
+
+### Local Data Reality Lock
+
+- [x] Local edge file inspected: `GNN_Neural_Network/data/person_hobby_edges.csv`
+- [x] Local context file inspected: `GNN_Neural_Network/data/person_context.csv`
+- [x] Current local edge rows recorded: `50,000`
+- [x] Current local context rows recorded: `50,000`
+- [x] Current local persons with hobby edges recorded: `17,907`
+- [x] Current local unique raw hobby strings recorded: `49,558`
+- [x] Current local average hobbies per person recorded: `2.79`
+- [x] Decision recorded: raw hobby phrases are not stable item IDs and must not be used directly for promotion-grade GNN/LightGCN item training.
+- [x] Decision recorded: GNN/LightGCN is auxiliary/analysis provider under this data shape; current default remains `popularity + cooccurrence -> LightGBM`.
+
+### Mandatory Blockers Before KURE Text Feature Ablation
+
+- [x] **50K canonical/fallback baseline closure**
+  - [x] rebuild or verify `raw_hobby_phrase -> canonical/fallback item` mapping for local 50K data
+  - [x] verify `rare_item_policy=keep_with_fallback` candidate_recall@50 drift is within `-0.01` (closed by prepare-only artifact refresh; no dropped edges, fallback preserved)
+  - [x] run closed Phase 2.5 config on the local 50K baseline
+  - [x] record validation metrics and status artifact
+  - [x] update `artifacts/experiment_decisions.json`
+  - [x] update `artifacts/experiment_run_summary.md`
+
+- [x] **Phase 5-B2 feature-balance closure**
+  - [x] complete `phase5_b2_feature_balance/feature_fraction_0_7/validation_metrics.json`
+  - [x] replace any `candidates_done`-only status with final gated validation status
+  - [x] run `feature_fraction=0.8` probe only if still required under the same baseline
+  - [x] compare against the closed Phase 2.5 default
+  - [x] record accept/reject/blocked decision in experiment decision artifacts
+
+- [x] **Taxonomy over-merge risk closure**
+  - [x] inspect whether over-merged canonical/category mappings concentrate top-k recommendations
+  - [x] record data-quality decision in artifacts even if no default changes
+  - [x] document whether taxonomy work is a blocker or follow-up for KURE text feature experiments
+
+- [x] **Cold-start baseline closure**
+  - [x] define cold-start subset as `known_hobbies <= 1`
+  - [x] compute closed Phase 2.5 default cold-start Recall@10 and NDCG@10
+  - [x] compute closed Phase 2.5 default cold-start Coverage@10, Novelty@10, and ILD@10
+  - [x] persist cold-start metrics in validation/test artifacts or a dedicated baseline artifact
+  - [x] use these metrics as comparison baseline for KURE text feature ablation
+
+### KURE Text Feature Ablation Scope
+
+Do not confuse this with the completed KURE dense MMR sweep.
+
+- [x] KURE dense MMR sweep status: completed, NO-GO, default `MMR=false` unchanged
+- [x] KURE text embedding feature ablation status: completed as `rejected_needs_followup` after corrected audit/fallback reruns (`kure_text_feature_002`, `kure_text_feature_003`)
+- [x] KURE text feature run must set `include_text_embedding_feature=true`
+- [x] KURE text feature run must record `persona_hobby_semantic_sim` or `text_embedding_similarity` in the ranker feature policy
+- [x] `mask_holdout_hobbies()` must run before encoding persona text
+- [x] `post_mask_leakage_audit()` must be persisted
+- [x] leakage-audit failure must mark the run `disabled` and exclude it from metric comparison
+- [x] train/eval feature construction must be identical
+- [x] missing persona context counted as coverage miss, not leakage failure
+- [x] missing-context Stage 2 fallback design evaluated
+- [x] test split may run only for a validation-selected winner
+
+### KURE Semantic Stage1 Candidate Provider Scope
+
+> Goal: test the user's proposed next path, `popularity + cooccurrence + KURE semantic candidates -> LightGBM`, as a gated opt-in Stage1 candidate-generation experiment.
+
+- [x] Scope approved as a new gated experiment; it is not part of the current default path.
+- [x] Default remains `popularity + cooccurrence -> LightGBM`, `MMR=false`, `include_text_embedding_feature=false`.
+- [ ] Add explicit guardrail config/CLI opt-in for `allow_stage1_kure_provider=true`.
+- [ ] Implement Stage1 `kure_semantic` provider without changing existing provider defaults.
+- [ ] Ensure candidate-pool cache keys include provider list and KURE model/revision/fingerprint metadata.
+- [ ] Use leakage-safe masked persona text before semantic candidate scoring.
+- [ ] Use CUDA automatically when available and CPU fallback otherwise.
+- [ ] Keep evaluation CPU default at `max(1, os.cpu_count() - 2)` and show progress during embedding/scoring/features/ranking.
+- [ ] Train a separate opt-in LightGBM artifact for the KURE Stage1 candidate pool.
+- [ ] Run validation first and compare against closed Phase 2.5 SOTA.
+- [ ] Run test only if validation passes the documented promotion gate.
+- [ ] Record final decision in `experiment_decisions.json` and `experiment_run_summary.md`.
+
 ## Global Execution Policy
 
 - [x] All post-`Phase2.5` default promotion candidates use an accuracy-first hard gate.
@@ -200,158 +278,77 @@ MMR=false
   - `smoke_lambdarank_f07`: completed, blocked
   - **결과:** Listwise objective(LambdaRank) 적용 시 ranking collapse(coverage@10 미달) 완화에 실패. 정형 feature 한계 확인.
 
-### Step 2: Text-Embedding Feature Integration (Phase 5-B Execution)
-   - [ ] **Feature Toggle:** `include_text_embedding_feature` ablation 실행. (기본값 `false` 유지 보장). 추론(Inference) 시 이 플래그가 `false`이면 KURE feature 계산 로직 자체를 스킵하여 Shape 불일치 오류를 방지한다.
-   - [ ] **Prerequisite:** 실험 전용 `mask_holdout_hobbies()` + `post_mask_leakage_audit()` 파이프라인 가동. 누수율(Leakage rate) 5% 초과 시 실험 즉시 `disabled`.
-   - [ ] **[ACT] 플레이스홀더 강화:** `mask_holdout_hobbies()` 함수 내부 로직 수정. 단순 삭제가 아닌 문법 유지(예: "~한다" -> "[ACT]를 한다")를 위한 정규식/치환 룰셋 적용 후 임베딩 계산.
-   - [ ] **Model:** `gnn_recommender/text_embedding.py` 내 `_load_kure_model()` 활용 (KRUE/KURE-v1). CUDA 우선 / CPU Fallback 및 입력 max_length=512 제한 적용.
-   - [ ] **도메인 태깅:** 임베딩 전, 7개 도메인 프리픽스(`[PROF]...[FAM]`)를 결합하여 Context 강화된 단일 문장 생성.
-   - [ ] **Feature 주입:** `persona_hobby_semantic_sim` (Cosine Similarity) Feature를 LightGBM 학습/추론에 추가.
-   - [ ] **CLI 가이드:** `train_ranker.py` 실행 시, KURE 캐싱을 활성화하기 위해 `--use-kure-cache` 플래그를 추가할 수 있도록 인자 확장.
-- [ ] **Validation Gate (diversity_probe 전용):**
-  - delta_recall@10 >= -0.010 (단, -0.005 이하일 경우 qualitative review 필수)
-  - delta_ndcg@10 >= -0.010
-  - delta_coverage@10 >= +0.030 (Primary Target - 핵심 정복 지표)
-- [ ] **Success Condition:** Recall 하락 최소화(-0.005 이내) 유지하되, Coverage@10 또는 Novelty@10이 +0.03 이상 개선 시 `diversity_probe` 승격 검토.
-- [ ] **Failure Condition:** Recall@10 감소 폭 -0.010 초과 또는 누수 audit 실패 시 즉시 Roll-back (기존 운영 모델 유지).
+### Step 2: Text-Embedding Feature Integration Status
 
-### Step 3: Post-Hoc Analysis & Reporting
-- [ ] 최종 실험 결과 `artifacts/experiments/phase5_text_embedding/` 경로에 저장.
-- [ ] `validation_metrics.status.json`, `experiment_decisions.json` 업데이트 (상태: `promoted`, `experimental`, `disabled` 중 택 1).
-- [ ] `PRD.md` 최종 Feature Policy 갱신 (승인된 설정만 상위 문서 반영).
+The KURE-v1 text embedding feature path is implemented enough for gated ablation, but the completed Phase 5-C experiment did **not** produce a default-promotion winner.
 
----
+Implementation status:
 
-## Overall Summary & Default Path
+- [x] `include_text_embedding_feature=true` can be passed through the ranker train/eval path.
+- [x] `text_embedding_similarity` can be computed during ranker dataset construction.
+- [x] `mask_holdout_hobbies()` runs before encoding persona text.
+- [x] `post_mask_leakage_audit()` is persisted and failed runs are excluded from metric comparison.
+- [x] Training/evaluation feature construction is aligned.
+- [x] Missing persona context is counted as coverage miss, not leakage failure.
+- [x] `[ACT]` masking and domain-tagged persona text scaffolding exist in code.
 
-### 현재 운영 중인 Default 승인 경로 (Locked)
-- **Stage 1:** `popularity + cooccurrence` (LightGCN XSimGCL 후보 생성)
-- **Stage 2:** `LightGBM learned ranker` (정형 데이터 Feature 기반)
-- **Feature Policy:**
-  - `include_source_features=false` (권장, 안정성 우선)
-  - **`include_text_embedding_feature=false` (기본값, Leakage 방지)**
-- **MMR:** `false` (필요 시 `--use-mmr` flag에 의한 개별 실험용)
-- **최종 모델:** `artifacts/experiments/phase2_5_num_leaves_31/ranker_model.txt`
+Closed experiment status:
 
-### 변경 관리 규정
-- Text Embedding(KURE) Feature는 `diversity_probe` 또는 `ablation` 목적의 특정 Run에서만 `true`로 일시 허용됨.
-- 어떠한 변경이든 기본 하드 게이트(`recall@10` 손실 -0.002, `ndcg@10` 손실 -0.002)를 깨뜨릴 경우 승인 불가.
-- 모든 텍스트 기반 실험은 `DATASET_EXPLAIN.md`의 29.3% 누수 사례를 반드시 `masking`으로 제거한 후 진행.
-  - `smoke_lambdarank_f08`: completed, blocked
-- [x] no winner passed gates → test pass skipped
+- [x] `kure_text_feature_001`: disabled by leakage gate.
+- [x] `kure_text_feature_002_context_coverage_gate`: not promoted due low mapped context coverage.
+- [x] `kure_text_feature_003_full_ranker_fallback`: rejected because validation Recall@10 regressed and stayed below the closed Phase 2.5 default.
+- [x] No validation winner selected; test artifacts are intentionally absent for KURE text feature runs.
+- [x] Default remains `include_text_embedding_feature=false`.
 
-### [PRE-REQUISITE] 50K Dataset & Fallback Policy Validation
-> **Notice**: Before running Phase 5-B (KURE) experiments, the 2-Stage baseline MUST be stabilized on 50K dataset.
-> 1. Re-run Phase 2.5 config (`num_leaves=31`, `neg_ratio=4`, `hard_ratio=0.8`) on **50K validation set** to confirm new base-line metrics.
-> 2. Confirm `rare_item_policy=keep_with_fallback` does NOT break `candidate_recall@50` (> -0.01 delta).
-> 3. If `coverage@10` of baseline is still < 0.20 after regularization, it justifies the need for KRUE embedding injection.
+Remaining implementation work before any future text embedding ablation:
 
-### Step 2: feature balance probe
+- [ ] Repair or regenerate split-aligned `person_context.csv` coverage for the current person mapping.
+- [ ] Add/verify embedding model selection in train/eval config or CLI without changing the default KURE-v1 path.
+- [ ] Ensure text embedding cache and feature cache keys include embedding model name and revision, not just model family.
+- [ ] Persist `embedding_model_metadata.json` per run.
+- [ ] Verify KURE-v1, `dragonkue/snowflake-arctic-embed-l-v2.0-ko`, and `dragonkue/multilingual-e5-small-ko-v2` caches cannot collide.
+- [x] Add cold-start metrics to the ranker evaluation artifacts before using text embedding results for follow-up decisions.
+  - [x] closed Phase 2.5 validation/test artifacts recorded under `artifacts/experiments/phase2_5_cold_start_baseline/`
 
-- [ ] run `feature_fraction` probe #1 (`0.7`) under closed baseline config
-  - training completed
-  - validation run was started but not completed before handoff
-- [ ] run `feature_fraction` probe #2 (`0.8`) under closed baseline config
-  - planned next
-- [ ] compare against closure gates; only qualifying winner enters test
+Follow-up-only backbone probes:
 
-### Step 3: constrained diversification rerank probe
+- [ ] Run `dragonkue/snowflake-arctic-embed-l-v2.0-ko` only after context coverage and cache provenance blockers are closed.
+- [ ] Run `dragonkue/multilingual-e5-small-ko-v2` only after the same blockers are closed.
+- [ ] Compare any future backbone against KURE-v1 and the closed Phase 2.5 default on overall and cold-start metrics.
+- [ ] Record each future result as `rejected`, `experimental`, `needs_followup`, or selected for winner-only test.
 
-- [x] define one constrained rerank experiment (DPP / greedy ILD variant)
-- [x] keep input set as full `candidate_k=50` pool before rerank
-- [x] single validation run
-- [x] DPP rerank validation completed (`phase5_b3_diversity_rerank/dpp_candidate_k50`), blocked on primary/secondary gates
+### Step 3: Remaining Ranking-Collapse Implementation Plan
 
-### Step 4: taxonomy over-merge tracking (continuous)
+Do not run experiments as part of this planning step. Implement or verify the following code paths first:
 
-- [x] track `canonical singleton ratio`, `raw singleton ratio`, and candidate set drift in artifacts (ongoing)
-- [ ] record whether over-merge risk contributes to ranking collapse
-
-### Promotion Gates
-
-- [ ] default promotion accuracy gate
-  - [ ] `delta_recall@10 >= -0.002` (closed Phase 2.5 baseline 대비)
-  - [ ] `delta_ndcg@10 >= -0.002` (closed Phase 2.5 baseline 대비)
-- [ ] diversity probe gate (non-promoting)
-  - [ ] `delta_recall@10 >= -0.010` (closed Phase 2.5 baseline 대비)
-  - [ ] `delta_ndcg@10 >= -0.010` (closed Phase 2.5 baseline 대비)
-  - [ ] probe result is recorded as `diversity_probe`, not `promoted`
-- [ ] diversity gate
-  - [ ] at least 2/3 metrics improve by thresholds: `coverage@10`, `novelty@10`, `intra_list_diversity@10`
-- [ ] stability gate
-  - [ ] `v2_fallback_count=0`
-  - [ ] `candidate_recall@50` 유지 또는 허용 오차 이내
-  - [ ] rerank cache/KURE embedding cache 정책 일관성 유지
-- [ ] cold-start subset metrics recorded
-  - [ ] recall@10 / ndcg@10
-  - [ ] coverage@10 / novelty@10 / intra_list_diversity@10
+- [x] Dedicated cold-start metric reporting for `known_hobbies <= 1` in `evaluate_ranker.py` artifacts.
+- [x] Phase 5-B2 feature-balance artifact completion path so `candidates_done` cannot be mistaken for final validation status.
+- [x] Taxonomy over-merge decision artifact that records whether canonical/category mappings contribute to top-k concentration.
+- [ ] XSimGCL train/eval wiring only as a non-default Stage 1 provider experiment path; the existing `XSimGCL` class alone is not a completed experiment.
+- [x] Guardrails ensuring KURE, MMR, XSimGCL, and text embedding features are opt-in only and cannot become default without decision artifacts.
 
 ### Artifacts
 
 - [x] `artifacts/experiments/phase5_b1_listwise/*/validation_metrics.json`
 - [x] `artifacts/experiments/phase5_b1_listwise/*/validation_metrics.status.json`
-- [ ] `artifacts/experiments/phase5_b1_listwise/*/test_metrics.json` (winner only)
-- [ ] `artifacts/experiments/phase5_b1_listwise/*/test_metrics.status.json` (winner only)
-- [ ] `artifacts/experiments/phase5_b2_feature_balance/*/validation_metrics.json`
-- [ ] `artifacts/experiments/phase5_b2_feature_balance/*/validation_metrics.status.json`
-- [ ] `artifacts/experiments/phase5_b2_feature_balance/*/test_metrics.json` (winner only)
-- [ ] `artifacts/experiments/phase5_b2_feature_balance/*/test_metrics.status.json` (winner only)
+- [ ] `artifacts/experiments/phase5_b1_listwise/*/test_metrics.json` (winner only; intentionally absent when no validation winner)
+- [ ] `artifacts/experiments/phase5_b1_listwise/*/test_metrics.status.json` (winner only; intentionally absent when no validation winner)
+- [x] `artifacts/experiments/phase5_b2_feature_balance/*/validation_metrics.json`
+- [x] `artifacts/experiments/phase5_b2_feature_balance/*/validation_metrics.status.json`
+- [x] `artifacts/experiments/phase5_b2_feature_balance/*/test_metrics.json` (winner only; intentionally absent because no validation winner)
+- [x] `artifacts/experiments/phase5_b2_feature_balance/*/test_metrics.status.json` (winner only; intentionally absent because no validation winner)
 - [x] `artifacts/experiments/phase5_b3_diversity_rerank/*/validation_metrics.json`
 - [x] `artifacts/experiments/phase5_b3_diversity_rerank/*/validation_metrics.status.json`
-- [ ] `artifacts/experiment_decisions.json`
-  - [ ] `phase5_ranking_collapse_mitigation` 항목 갱신
-- [ ] `artifacts/experiment_run_summary.md`
-  - [ ] Phase 5-B 결과 요약 반영
+- [x] `artifacts/experiments/phase5_c_text_embedding/phase5_c_text_embedding_rerun_summary.md`
+- [x] `artifacts/experiments/phase5_c_text_embedding/phase5_c_text_embedding_rerun_summary.json`
+- [x] `artifacts/experiment_decisions.json`
+  - [x] `phase5_text_embedding_ablation` 항목 갱신
+  - [x] `phase5_ranking_collapse_mitigation` 항목 갱신 via `phase5_pre_kure_closure` decision artifact
+- [x] `artifacts/experiment_run_summary.md`
+  - [x] Phase 5-C 결과 요약 반영
+  - [x] Phase 5-B 결과 요약 반영
 
-## Phase 5-C: Leakage-Safe Text Embedding Ablation
-
-> Goal: test whether masked persona text contains useful persona-aware signal that can reduce ranking collapse without leaking held-out hobbies.
-
-### Policy Lock
-
-- [x] Default path remains `include_text_embedding_feature=false` until a separate default-promotion decision is accepted.
-- [x] Text embedding ablation may use `diversity_probe` status for exploration, but cannot promote the default path by itself.
-- [x] Validation-first + winner-only test remains required.
-- [x] If masking/audit fails, the run is excluded from validation/test metric comparison.
-
-### Implementation Tasks
-
-- [ ] **Pre-check**: Verify `data.py` `prepare_hobby_edges()` successfully runs with `rare_item_policy=keep_with_fallback` and generates valid `vocabulary_report.json` including `rare_items_count`.
-- [ ] add training CLI/config path for `include_text_embedding_feature=true`
-- [ ] pass `include_text_embedding_feature` into `build_ranker_dataset()` from `train_ranker.py`
-- [ ] compute `text_embedding_similarity` during ranker dataset construction
-- [ ] apply `mask_holdout_hobbies()` before encoding persona text
-- [ ] run `post_mask_leakage_audit()` and persist audit summary in artifacts
-- [ ] cache persona/hobby text embeddings with reusable keys independent of `experiment_id`
-- [ ] make evaluation feature construction match training feature construction
-- [ ] record `feature_policy.include_text_embedding_feature=true` in train/eval artifacts
-
-### Validation Plan
-
-- [ ] run one validation ablation with closed Phase 2.5 baseline settings plus text embedding feature
-- [ ] compare against closed Phase 2.5 baseline
-- [ ] evaluate default promotion gate
-- [ ] evaluate diversity probe gate
-- [ ] evaluate diversity gate (`coverage@10`, `novelty@10`, `intra_list_diversity@10`)
-- [ ] evaluate stability gate (`candidate_recall@50`, `v2_fallback_count`)
-- [ ] record cold-start subset metrics
-- [ ] run test only if validation selects a winner under the applicable policy
-
-### Artifacts
-
-- [ ] `artifacts/experiments/phase5_c_text_embedding/<run>/ranker_model.txt`
-- [ ] `artifacts/experiments/phase5_c_text_embedding/<run>/ranker_params.json`
-- [ ] `artifacts/experiments/phase5_c_text_embedding/<run>/validation_metrics.json`
-- [ ] `artifacts/experiments/phase5_c_text_embedding/<run>/validation_metrics.status.json`
-- [ ] `artifacts/experiments/phase5_c_text_embedding/<run>/text_leakage_audit.json`
-- [ ] `artifacts/experiments/phase5_c_text_embedding/<run>/test_metrics.json` (winner only)
-- [ ] `artifacts/experiments/phase5_c_text_embedding/<run>/test_metrics.status.json` (winner only)
-- [ ] `artifacts/experiment_decisions.json`
-  - [ ] `phase5_text_embedding_ablation` 항목 갱신
-- [ ] `artifacts/experiment_run_summary.md`
-  - [ ] Phase 5-C 결과 요약 반영
-
-## Phase 5-Pre: Rare Hobby Fallback Policy (KRUE 도입 전 필수)
+## Phase 5-Pre: Rare Hobby Fallback Policy (KURE-v1 도입 전 필수)
 
 > Goal: 모델의 편향(랭킹 붕괴) 해소 및 long-tail 추천 품질 확보. 희귀 취미(raw hobby)를 삭제(drop)하지 않고, parent canonical 또는 category로 백오프(fallback)하여 학습/추천에 활용한다.
 
@@ -389,53 +386,27 @@ MMR=false
 
 > Goal: determine whether ranking-collapse mitigation helps users with sparse known hobbies, where persona text may carry the most value.
 
-- [ ] define cold-start subset as `known_hobbies <= 1`
-- [ ] add subset metric computation to ranker evaluation artifacts
-- [ ] report cold-start recall@10 and ndcg@10
-- [ ] report cold-start coverage@10, novelty@10, intra_list_diversity@10
-- [ ] compare cold-start results for closed Phase 2.5 default, Phase 5-B candidates, and Phase 5-C text embedding ablation
-   - [ ] record whether cold-start gains justify follow-up even if overall default-promotion gate fails
+- [x] define cold-start subset as `known_hobbies <= 1`
+- [x] add subset metric computation to ranker evaluation artifacts
+- [x] report cold-start recall@10 and ndcg@10
+- [x] report cold-start coverage@10, novelty@10, intra_list_diversity@10
+- [x] closed Phase 2.5 validation baseline recorded: Recall@10=0.592199, NDCG@10=0.367798, Coverage@10=0.002802, Novelty@10=4.570526, ILD@10=0.967444
+- [x] closed Phase 2.5 test baseline recorded: Recall@10=0.589513, NDCG@10=0.368271, Coverage@10=0.002802, Novelty@10=4.570526, ILD@10=0.967444
+- [x] dedicated artifacts persisted:
+  - `artifacts/experiments/phase2_5_cold_start_baseline/validation_metrics.json`
+  - `artifacts/experiments/phase2_5_cold_start_baseline/test_metrics.json`
+- [x] compare cold-start results for closed Phase 2.5 default, Phase 5-B candidates, and Phase 5-C text embedding ablation
+   - [x] record whether cold-start gains justify follow-up even if overall default-promotion gate fails
 
-## 🚀 Phase 5-E: Text Embedding 구조화 및 [ACT] 플레이스홀더 룰셋 적용 (PRD 패치 반영)
+## Phase 5-E: Text Embedding Preprocessing Hardening
 
-### 배경
-단순 취미 단어 매칭을 넘어선 'Persona 맥락(Context)'을 KURE 임베딩으로 계산하기 위한 핵심 전처리 규칙을 구체화합니다.
+> Goal: keep future text-embedding ablations leakage-safe and reproducible before any experiment is run.
 
-### 실행 태스크
-- [ ] **도메인별 Prefix 태깅 스크립트 구현** (`src/embeddings/text_preprocessor.py` 또는 `data.py` 내부 함수 추가)
-  - Persona 텍스트를 7개 도메인(`[PROF]`, `[SPORT]`, `[ART]`, `[TRAVEL]`, `[FOOD]`, `[FAM]`, `[CULT]`)으로 분리/태깅하여 단일 문장으로 결합.
-  - 예: `f"[PROF] ... [SPORT] ... [ACT]를 즐깁니다"`
-- [ ] **Leakage-safe [ACT] 플레이스홀더 로직 강화** (`gnn_recommender/text_embedding.py` 수정)
-  - `mask_holdout_hobbies()` 함수 내부 수정: 단순 삭제가 아닌, 문법적 흐름 유지(예: "~한다" -> "[ACT]를 한다")을 위한 정규식 룰셋 적용.
-  - 문장 끝의 불필요한 구두점/여백 정제 로직 추가.
-- [ ] **KURE 임베딩 품질 검증 프로세스 정의**
-  - [ACT] 플레이스홀더 적용 전/후의 Persona 벡터 간 코사인 유사도 모니터링 (하한선: 0.75 이상 유지).
-  - 임베딩 차원 분산(Variance) 분석을 통한 '문맥 손실' 최소화 검증.
-- [ ] **게이트 적용**
-  - `post_mask_leakage_audit()` 시 [ACT] 태깅 상태를 함께 로깅.
-  - PRD 제52항 준수: 마스킹/audit 실패 또는 문맥 왜곡 발생 시 해당 Run 즉시 `disabled` 처리.
---------------------------------------------------
-# ?�� Phase 5-B/C: Text Embedding (KURE) ?�험 구현 가?�드
---------------------------------------------------
+Current implementation evidence shows `[ACT]` masking and domain-tagged persona text scaffolding already exist. The remaining work is governance and hardening, not another immediate experiment run.
 
-## ?�� ?�이�?규칙 (Naming Convention)
-기존 2-Stage LightGBM ?�련(`train.py`)�? KURE ?�베??Feature�?추�??�는 ?�련??구분?�기 ?�한 규칙?�니??
-- **?�이??로더 ?�이�?** `gnn_recommender/data_loader.py` (?�는 `dataset.py`)
-  - ??��: ?�형 ?�이??+ `[PROF]...[FAM]` ?�깅???�스???�이?��? 결합?�여 최종 ?�습??`ranker_dataset.csv` ?�성 (KURE ?�처�?로직 ?�함).
-- **모델 ?�이�?** `gnn_recommender/ranker.py` (?�는 `train.py`)
-  - ??��: `data_loader.py`?�서 ?�성???�이?�셋??바탕?�로 ?�수 LightGBM 모델 ?�습 진행.
-
-## ?���?[TASK] 구현 ?�행 ?�서 (Execution Pipeline)
-- [ ] **1. ?�이??결합 �??�처�?(`data_loader.py` 로직 ?�성)**
-  - `build_domain_tagged_persona_text()`�??�용??7�??�메???�스?�에 `[PROF]`, `[SPORT]` ??Prefix ?�깅.
-  - `mask_holdout_hobbies()`�??�용???�보 취�? 마스??`[ACT]`).
-  - `KUREEncoder.compute_similarity()`�??�해 Persona???�스??벡터 �??�보 취�??�???�사???�렬 ?�출.
-  - `ranker_dataset.csv`???�스???�사??Feature 칼럼 결합.
-- [ ] **2. LightGBM ?�학??(`ranker.py` 로직 ?�성)**
-  - ?�성???�로???�이?�셋???�??기존 LightGBM ?�라미터�??�학???�행.
-- [ ] **3. Gate 검�?�?결과 로깅 (`evaluate.py` ?�행)**
-  - 기�?(Baseline) ?��?`Recall@10` ?�락 ???�인 (Gate 1: -0.005 ?�하 ?��?).
-  - `Coverage@10` ?�승 ???�인 (Gate 2: +0.03 ?�상 ?�승 ?�요).
-  - 결과???�라 `experiment_decisions.json` ?�태 `promoted` ?�는 `disabled` 기록.
-
---------------------------------------------------
+- [ ] Verify `build_domain_tagged_persona_text()` is the single train/eval input builder for text embedding features.
+- [ ] Strengthen `mask_holdout_hobbies()` only if tests reveal grammar loss after `[ACT]` replacement; do not change masking semantics without leakage-audit tests.
+- [ ] Persist masking policy metadata in every future text-embedding run artifact.
+- [ ] Persist embedding model metadata including model name, revision/hash when available, device, batch size, embedding dimension, and cache key.
+- [ ] Add tests proving feature/cache keys differ across KURE-v1, Snowflake-ko, and E5-small-ko candidates.
+- [ ] Keep all text embedding, KURE, MMR, and XSimGCL paths opt-in and non-default until a validation winner plus decision artifact exists.

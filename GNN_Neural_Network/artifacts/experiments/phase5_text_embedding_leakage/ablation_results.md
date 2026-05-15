@@ -20,7 +20,7 @@
 
 - 텍스트 누수율: 0.0152
 
-- TF-IDF 평균 Cosine Similarity: 0.2668
+- TF-IDF 평균 Cosine Similarity: 0.2627
 
 - TF-IDF 최대 Cosine Similarity: 1.0000
 

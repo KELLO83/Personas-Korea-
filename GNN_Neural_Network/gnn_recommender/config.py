@@ -28,6 +28,7 @@ class SplitConfig:
 
 @dataclass(frozen=True)
 class TrainConfig:
+    model_type: str = "lightgcn"
     embedding_dim: int = 64
     num_layers: int = 2
     batch_size: int = 4096
@@ -52,6 +53,15 @@ class RerankConfig:
     candidate_pool_size: int = 50
     use_text_fit: bool = False
     weights: dict[str, float] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ExperimentalFeatureConfig:
+    allow_kure_mmr: bool = False
+    allow_text_embedding_feature: bool = False
+    allow_stage1_kure_provider: bool = False
+    allow_xsimgcl: bool = False
+    allow_source_features: bool = False
 
 
 @dataclass(frozen=True)
@@ -90,6 +100,7 @@ class LightGCNConfig:
     train: TrainConfig = field(default_factory=TrainConfig)
     eval: EvalConfig = field(default_factory=EvalConfig)
     rerank: RerankConfig = field(default_factory=RerankConfig)
+    experimental: ExperimentalFeatureConfig = field(default_factory=ExperimentalFeatureConfig)
     paths: PathConfig = field(default_factory=PathConfig)
 
 
@@ -105,6 +116,7 @@ def load_config(path: Path) -> LightGCNConfig:
         train=TrainConfig(**_section(raw, "train")),
         eval=EvalConfig(**_normalize_eval(_section(raw, "eval"))),
         rerank=RerankConfig(**_section(raw, "rerank")),
+        experimental=ExperimentalFeatureConfig(**_section(raw, "experimental")),
         paths=PathConfig(**_normalize_paths(_section(raw, "paths"), base_dir)),
     )
 
@@ -140,3 +152,28 @@ def _normalize_paths(raw: dict[str, Any], base_dir: Path) -> dict[str, Any]:
         path = Path(value)
         normalized[key] = path if path.is_absolute() else (base_dir / path).resolve()
     return normalized
+
+
+def validate_experimental_feature_policy(
+    config: LightGCNConfig,
+    *,
+    use_kure_mmr: bool = False,
+    include_text_embedding_feature: bool = False,
+    use_stage1_kure_provider: bool = False,
+    use_xsimgcl: bool = False,
+    include_source_features: bool = False,
+) -> None:
+    blocked = []
+    if use_kure_mmr and not config.experimental.allow_kure_mmr:
+        blocked.append("KURE dense MMR")
+    if include_text_embedding_feature and not config.experimental.allow_text_embedding_feature:
+        blocked.append("text embedding feature")
+    if use_stage1_kure_provider and not config.experimental.allow_stage1_kure_provider:
+        blocked.append("KURE Stage1 semantic provider")
+    if use_xsimgcl and not config.experimental.allow_xsimgcl:
+        blocked.append("XSimGCL")
+    if include_source_features and not config.experimental.allow_source_features:
+        blocked.append("source one-hot features")
+    if blocked:
+        names = ", ".join(blocked)
+        raise ValueError(f"Experimental feature requires explicit opt-in: {names}")

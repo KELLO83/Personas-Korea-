@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from src.api.main import create_app
 from src.api.routes import graph_viz
+from src.graph.subgraph_queries import SUBGRAPH_DEPTH2_QUERY
 
 
 def _create_test_app() -> FastAPI:
@@ -57,6 +58,20 @@ FAKE_DEPTH2_RECORDS = [
     },
 ]
 
+FAKE_DEPTH2_DISTRICT_RECORDS = [
+    {
+        "entity_labels": ["District"],
+        "entity_name": "",
+        "entity_key": "부산-강서구",
+        "rel1_type": "LIVES_IN",
+        "rel2_type": "LIVES_IN",
+        "other_uuid": "other-uuid-002",
+        "other_display_name": "박민수",
+        "other_age": 27,
+        "other_sex": "남자",
+    },
+]
+
 FAKE_DEPTH3_RECORDS = [
     {
         "other_uuid": "other-uuid-001",
@@ -103,6 +118,7 @@ class FakeNeo4jSession:
         if "next_entity" in query:
             return FakeNeo4jResult(records=FAKE_DEPTH3_RECORDS)
         if "entity" in query:
+            assert kwargs.get("max_per_entity") == 4
             return FakeNeo4jResult(records=FAKE_DEPTH2_RECORDS)
         return FakeNeo4jResult(records=[])
 
@@ -139,6 +155,24 @@ class FakeNeo4jDriver:
 
 def _make_driver() -> FakeNeo4jDriver:
     return FakeNeo4jDriver(FakeNeo4jSession())
+
+
+class FakeNeo4jSessionDistrictDepth2(FakeNeo4jSession):
+    def run(self, query: str, **kwargs: object) -> FakeNeo4jResult:
+        if "p.uuid AS uuid LIMIT 1" in query:
+            return FakeNeo4jResult(single_data={"uuid": "test-uuid"})
+        if "SIMILAR_TO" in query:
+            return FakeNeo4jResult(records=FAKE_DEPTH1_RECORDS)
+        if "next_entity" in query:
+            return FakeNeo4jResult(records=[])
+        if "entity.key AS entity_key" in query:
+            assert kwargs.get("max_per_entity") == 4
+            return FakeNeo4jResult(records=FAKE_DEPTH2_DISTRICT_RECORDS)
+        return FakeNeo4jResult(records=[])
+
+
+def _make_district_depth2_driver() -> FakeNeo4jDriver:
+    return FakeNeo4jDriver(FakeNeo4jSessionDistrictDepth2())
 
 
 def _make_not_found_driver() -> FakeNeo4jDriver:
@@ -239,3 +273,26 @@ def test_subgraph_max_nodes(monkeypatch) -> None:
 
     node_ids = [n["id"] for n in body["nodes"]]
     assert "person_test-uuid" in node_ids
+
+
+def test_subgraph_depth2_uses_district_key_for_node_identity(monkeypatch) -> None:
+    monkeypatch.setattr(graph_viz, "get_neo4j_driver", _make_district_depth2_driver)
+    client = TestClient(_create_test_app())
+
+    response = client.get("/api/graph/subgraph/test-uuid?depth=2")
+
+    assert response.status_code == 200
+    body = response.json()
+    node_ids = [n["id"] for n in body["nodes"]]
+    assert "district_부산-강서구" in node_ids
+    assert "district_" not in node_ids
+
+
+def test_subgraph_depth2_query_caps_each_expansion_entity() -> None:
+    assert "CALL {" in SUBGRAPH_DEPTH2_QUERY
+    assert "WITH DISTINCT p, entity" in SUBGRAPH_DEPTH2_QUERY
+    assert "WITH DISTINCT other, type(r2) AS rel2_type" in SUBGRAPH_DEPTH2_QUERY
+    assert "LIMIT $max_per_entity" in SUBGRAPH_DEPTH2_QUERY
+    assert "LIMIT $max_secondary" in SUBGRAPH_DEPTH2_QUERY
+    assert "WHEN 'Hobby' IN labels(entity) THEN 0" in SUBGRAPH_DEPTH2_QUERY
+    assert "WHEN 'District' IN labels(entity) THEN 2" in SUBGRAPH_DEPTH2_QUERY

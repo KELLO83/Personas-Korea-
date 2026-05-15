@@ -11,7 +11,7 @@ from .baseline import baseline_ranking_metrics
 from .config import LightGCNConfig
 from .data import EdgeSplit, IndexedEdges, iter_bpr_batches, save_json
 from .metrics import summarize_ranking_metrics
-from .model import LightGCN, bpr_loss, build_normalized_adjacency, choose_device
+from .model import LightGCN, XSimGCL, bpr_loss, build_normalized_adjacency, choose_device
 from .recommend import batch_recommend_hobbies
 
 
@@ -19,12 +19,7 @@ def train_lightgcn(indexed: IndexedEdges, split: EdgeSplit, config: LightGCNConf
     torch.manual_seed(config.train.seed)
     random.seed(config.train.seed)
     device = choose_device(config.train.device)
-    model = LightGCN(
-        num_persons=len(indexed.person_to_id),
-        num_hobbies=len(indexed.hobby_to_id),
-        embedding_dim=config.train.embedding_dim,
-        num_layers=config.train.num_layers,
-    ).to(device)
+    model = _build_model(indexed, config).to(device)
     adjacency = build_normalized_adjacency(
         num_persons=model.num_persons,
         num_hobbies=model.num_hobbies,
@@ -32,7 +27,7 @@ def train_lightgcn(indexed: IndexedEdges, split: EdgeSplit, config: LightGCNConf
         device=device,
     )
     optimizer = _build_optimizer(model, config)
-    history: list[dict[str, float]] = []
+    history: list[dict[str, object]] = []
     best_recall = -1.0
     best_state: dict[str, torch.Tensor] | None = None
 
@@ -66,7 +61,8 @@ def train_lightgcn(indexed: IndexedEdges, split: EdgeSplit, config: LightGCNConf
         mean_loss = sum(losses) / len(losses) if losses else 0.0
         epoch_result = {"epoch": float(epoch), "loss": mean_loss, **metrics}
         history.append(epoch_result)
-        recall_10 = metrics.get("recall@10", 0.0)
+        recall_10_raw = metrics.get("recall@10", 0.0)
+        recall_10 = recall_10_raw if isinstance(recall_10_raw, float) else 0.0
         if recall_10 > best_recall:
             best_recall = recall_10
             best_state = {key: value.detach().cpu().clone() for key, value in model.state_dict().items()}
@@ -97,7 +93,7 @@ def evaluate_model(
     split: EdgeSplit,
     config: LightGCNConfig,
     device: torch.device,
-) -> dict[str, float]:
+) -> dict[str, object]:
     truth: dict[int, set[int]] = {}
     for person_id, hobby_id in split.validation:
         truth.setdefault(person_id, set()).add(hobby_id)
@@ -113,7 +109,33 @@ def evaluate_model(
         chunk_size=config.eval.score_chunk_size,
         device=device,
     )
-    return summarize_ranking_metrics(truth, recommended, config.eval.top_k)
+    return summarize_ranking_metrics(
+        truth,
+        recommended,
+        config.eval.top_k,
+        known_by_person=split.train_known,
+    )
+
+
+def _build_model(indexed: IndexedEdges, config: LightGCNConfig) -> LightGCN:
+    model_type = config.train.model_type.lower()
+    if model_type == "lightgcn":
+        return LightGCN(
+            num_persons=len(indexed.person_to_id),
+            num_hobbies=len(indexed.hobby_to_id),
+            embedding_dim=config.train.embedding_dim,
+            num_layers=config.train.num_layers,
+        )
+    if model_type == "xsimgcl":
+        if not config.experimental.allow_xsimgcl:
+            raise ValueError("XSimGCL requires experimental.allow_xsimgcl=true")
+        return XSimGCL(
+            num_persons=len(indexed.person_to_id),
+            num_hobbies=len(indexed.hobby_to_id),
+            embedding_dim=config.train.embedding_dim,
+            num_layers=config.train.num_layers,
+        )
+    raise ValueError("train.model_type must be 'lightgcn' or 'xsimgcl'")
 
 
 def _build_optimizer(model: LightGCN, config: LightGCNConfig) -> torch.optim.Optimizer:
@@ -140,6 +162,7 @@ def _save_checkpoint(
             "num_hobbies": model.num_hobbies,
             "embedding_dim": config.train.embedding_dim,
             "num_layers": config.train.num_layers,
+            "model_type": config.train.model_type,
             "person_to_id": indexed.person_to_id,
             "hobby_to_id": indexed.hobby_to_id,
         },

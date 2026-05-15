@@ -9,13 +9,32 @@ RETURN p, r, n, type(r) AS rel_type, labels(n) AS node_labels,
 """
 
 SUBGRAPH_DEPTH2_QUERY = """
-MATCH (p:Person {uuid: $uuid})-[r1]-(entity)-[r2]-(other:Person)
+MATCH (p:Person {uuid: $uuid})-[r1]-(entity)
 WHERE (entity:Hobby OR entity:Skill OR entity:District)
-  AND other.uuid <> $uuid
-RETURN entity, other, type(r1) AS rel1_type, type(r2) AS rel2_type,
-       labels(entity) AS entity_labels, entity.name AS entity_name,
+WITH DISTINCT p, entity
+CALL {
+    WITH p, entity
+    MATCH (entity)-[r2]-(other:Person)
+    WHERE other.uuid <> p.uuid
+    WITH DISTINCT other, type(r2) AS rel2_type
+    ORDER BY coalesce(other.display_name, other.uuid)
+    LIMIT $max_per_entity
+    RETURN collect({other: other, rel2_type: rel2_type}) AS capped_people
+}
+UNWIND capped_people AS capped_person
+WITH entity, capped_person.other AS other, capped_person.rel2_type AS rel2_type
+RETURN DISTINCT entity, other, rel2_type,
+       labels(entity) AS entity_labels, entity.name AS entity_name, entity.key AS entity_key,
        other.uuid AS other_uuid, other.display_name AS other_display_name,
        other.age AS other_age, other.sex AS other_sex
+ORDER BY CASE
+           WHEN 'Hobby' IN labels(entity) THEN 0
+           WHEN 'Skill' IN labels(entity) THEN 1
+           WHEN 'District' IN labels(entity) THEN 2
+           ELSE 3
+         END,
+         coalesce(entity.name, entity.key),
+         other.uuid
 LIMIT $max_secondary
 """
 

@@ -1,0 +1,32 @@
+{
+  "experiment_id": "kure_text_feature_004_full_context_fast_gpu_test",
+  "split": "test",
+  "status": "test_evaluated",
+  "event_timestamp": "2026-05-15T14:19:26Z",
+  "command_signature": "evaluate_ranker.py --config 'GNN_Neural_Network\\configs\\kure_text_optin_ranker.yaml' --split test --model-path 'GNN_Neural_Network\\artifacts\\experiments\\phase5_c_text_embedding\\kure_text_feature_004_full_context_fast_gpu\\ranker_model.txt' --output 'GNN_Neural_Network\\artifacts\\experiments\\phase5_c_text_embedding\\kure_text_feature_004_full_context_fast_gpu\\test_metrics.json' --experiment-id kure_text_feature_004_full_context_fast_gpu_test --skip-v1 --embedding-cache-dir 'GNN_Neural_Network\\artifacts\\text_embedding_cache' --embedding-batch-size 0 --embedding-vram-utilization 0.85 --cpu-thread-count 20 --feature-cache-dir 'GNN_Neural_Network\\artifacts\\experiments\\phase5_c_text_embedding\\kure_text_feature_004_full_context_fast_gpu\\feature_cache' --pool-cache-dir 'GNN_Neural_Network\\artifacts' --progress-mode on --progress-mininterval 2 --progress-maxinterval 5 --progress-miniters 1",
+  "log_policy": {
+    "progress_mode": "on",
+    "progress_mininterval": 2.0,
+    "progress_maxinterval": 5.0,
+    "progress_miniters": 1,
+    "tqdm_enabled": true
+  },
+  "artifact_path": "GNN_Neural_Network\\artifacts\\experiments\\phase5_c_text_embedding\\kure_text_feature_004_full_context_fast_gpu\\test_metrics.status.json",
+  "runtime_seconds": 517.6466151999775,
+  "input_config_summary": {
+    "config_path": "GNN_Neural_Network\\configs\\kure_text_optin_ranker.yaml",
+    "candidate_pool_size": 50,
+    "score_normalization": "rank_percentile"
+  },
+  "summary": {
+    "phase": "metrics_done",
+    "split": "test",
+    "v2_recall@10": 0.6244819010776458,
+    "v2_ndcg@10": 0.3933467303643029,
+    "coverage@10": 0.005203468979319547,
+    "novelty@10": 4.702826692912172,
+    "candidate_recall@50": 0.8272082527401676,
+    "v2_fallback_count": 0,
+    "promotion_status": "test_only"
+  }
+}

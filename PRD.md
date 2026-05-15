@@ -805,6 +805,192 @@ CREATE INDEX person_degree IF NOT EXISTS FOR (p:Person) ON (p.degree);
 
 ---
 
+## 11.8 향후 LeanRAG-style Graph RAG 확장 계획
+
+> **범위 구분**: 이 계획은 root Graph RAG/챗봇/insight API 품질 개선용이다. `GNN_Neural_Network/`의 취미 추천 모델 학습, LightGCN/LightGBM 실험, KURE 추천 feature 실험과는 별도 트랙으로 관리한다. 현재 우선순위는 GNN 추천시스템 개발이며, 본 섹션은 향후 구현 전 계획이다.
+
+### 11.8.1 배경
+
+현재 Graph RAG는 `src/rag/router.py`에서 질문을 `cypher`, `vector`, `composite`로 분기하고, `src/rag/cypher_chain.py`와 `src/rag/vector_chain.py`를 조합한다. 이 구조는 명확한 통계/필터 질의와 persona vector 검색에는 충분하지만, 다음 유형의 질문에서는 근거가 파편화될 수 있다.
+
+- 여러 community/segment를 비교해야 하는 질문
+- persona, hobby, skill, region, occupation 사이의 연결 근거를 설명해야 하는 질문
+- vector top-k 결과만으로는 관계 경로와 집단 맥락이 부족한 질문
+- 중복 근거가 많아 LLM 입력 token 효율이 떨어지는 질문
+
+LeanRAG는 2025년 8월 공개된 Knowledge-Graph RAG 방법론으로, semantic aggregation과 hierarchical retrieval을 통해 KG 기반 RAG의 중복 근거와 disconnected summary 문제를 줄이는 것을 목표로 한다. 본 프로젝트에는 Neo4j, KURE embedding, GDS Leiden/FastRP/KNN/PageRank 기반 그래프 자산이 이미 있으므로, 전체 프레임워크 교체가 아니라 LeanRAG-style 아이디어를 현재 구조 위에 단계적으로 흡수한다.
+
+### 11.8.2 적용 원칙
+
+- 기존 `CypherInsightChain`, `VectorInsightChain`, `InsightRouter`, `ChatGraph`를 교체하지 않는다.
+- LeanRAG-style 기능은 별도 route/chain으로 추가하고, A/B 평가 전까지 default 응답 경로로 승격하지 않는다.
+- summary/cache 생성은 batch job 또는 명시적 build command로 수행하고, API request path에서 대량 aggregation을 수행하지 않는다.
+- 생성 답변은 반드시 원본 Neo4j entity, relationship, community summary, 또는 vector result를 source로 남긴다.
+- GNN 추천시스템 실험 결과와 문서는 `GNN_Neural_Network/`에서 계속 관리한다.
+
+### 11.8.3 구현 단계
+
+**P1: LeanRAG-lite GraphEvidenceRetriever**
+
+- `query -> seed entity/persona/hobby/skill` 검색
+- seed 주변 Neo4j 1~2 hop expansion
+- PageRank, degree, community_id, relation type을 반영한 evidence ranking
+- 기존 `composite`와 별도인 `graph_evidence` route로 연결
+
+**P2: Semantic Aggregation Layer**
+
+- persona community summary 생성
+- hobby cluster summary 생성
+- skill cluster summary 생성
+- summary cache metadata에 source entity count, build timestamp, embedding model, graph snapshot id 기록
+
+**P3: Hierarchical Retrieval**
+
+- `query -> seed entity -> community/cluster summary -> original persona/evidence` 순서로 검색
+- summary node끼리의 semantic relation 또는 related-community edge를 생성/캐시
+- high-level summary와 low-level evidence를 함께 LLM synthesis prompt에 전달
+
+**P4: Structure-guided Evidence Selection**
+
+- 단순 vector top-k 대신 graph path, centrality, community relation, source diversity를 반영
+- token budget 내에서 중복 entity/summary를 제거
+- source coverage와 groundedness를 평가 지표로 기록
+
+### 11.8.4 평가 게이트
+
+LeanRAG-style route는 아래 조건을 만족할 때만 default 후보로 검토한다.
+
+| 평가 항목 | 기준 |
+|:---|:---|
+| Groundedness | 기존 `composite` 대비 hallucination 증가 없음 |
+| Answer correctness | 고정 Graph RAG QA set에서 기존 대비 동률 이상 |
+| Evidence precision | 답변에 사용된 source가 실제 근거와 연결됨 |
+| Redundancy | LLM 입력 evidence 중복률 감소 |
+| Latency | P95가 `/api/chat` 목표 SLA를 과도하게 초과하지 않음 |
+| Token usage | 동일 질문군에서 context token 증가가 통제 가능 |
+| Compatibility | 기존 `cypher`, `vector`, `composite` route 회귀 없음 |
+
+### 11.8.5 산출물
+
+- `src/rag/graph_evidence_chain.py` 또는 동등한 LeanRAG-lite chain
+- community/hobby/skill summary cache build script
+- Graph RAG QA golden set
+- 기존 route vs LeanRAG-style route 비교 리포트
+- default route 승격 여부 decision log
+
+### 11.8.6 Graph RAG Golden Set 요구사항
+
+LeanRAG-style route 구현 전에는 고정 Graph RAG QA golden set을 먼저 정의한다. 목적은 route 추가 후 "좋아 보이는 답변"이 아니라 재현 가능한 기준으로 개선 여부를 판단하는 것이다.
+
+Golden set 최소 요구사항:
+
+- 최소 30개, 권장 50개 질문을 고정한다.
+- 질문 유형은 `statistics`, `segment_compare`, `community_explanation`, `relationship_path`, `persona_profile`, `recommendation_explanation`, `open_insight`를 포함한다.
+- 각 질문은 기대 답변 조건, 허용 가능한 source type, 금지 hallucination 패턴을 함께 기록한다.
+- 동일 질문은 기존 `cypher`, `vector`, `composite`, 신규 LeanRAG-style route에서 모두 실행 가능해야 한다.
+- golden set은 코드 구현 결과에 맞춰 사후 수정하지 않는다. 데이터 스냅샷 변경 시에만 버전을 올린다.
+
+평가 결과는 최소 다음 필드를 포함한다.
+
+```json
+{
+  "question_id": "rag_golden_001",
+  "question_type": "community_explanation",
+  "route": "graph_evidence",
+  "answer_correctness": "pass",
+  "groundedness": "pass",
+  "evidence_precision": 0.0,
+  "source_redundancy": 0.0,
+  "latency_ms": 0,
+  "context_tokens": 0,
+  "failure_reason": ""
+}
+```
+
+### 11.8.7 RAG Evidence Contract
+
+모든 RAG route는 답변과 함께 source contract를 유지한다. LeanRAG-style route는 evidence가 더 복잡해지므로 source schema를 명시적으로 고정한다.
+
+허용 source type:
+
+- `cypher`: Cypher query 및 결과 row
+- `vector`: vector search result 및 similarity score
+- `entity`: Neo4j node 기반 evidence
+- `relationship`: Neo4j relationship 기반 evidence
+- `path`: 1~2 hop 또는 제한된 graph path
+- `community_summary`: community/cluster summary cache
+- `aggregation_summary`: hobby/skill/persona semantic aggregation 결과
+
+source payload 최소 필드:
+
+```json
+{
+  "source_type": "entity",
+  "source_id": "person:<uuid>",
+  "label": "Person",
+  "score": 0.0,
+  "route": "graph_evidence",
+  "path": [],
+  "community_id": null,
+  "snapshot_id": "",
+  "created_at": ""
+}
+```
+
+LLM synthesis는 source contract에 없는 내용을 근거로 사용하지 않는다. 답변에서 수치, 순위, 비교, 추천 이유를 제시할 경우 해당 source가 추적 가능해야 한다.
+
+### 11.8.8 RAG Route Promotion Policy
+
+신규 route는 기본값으로 바로 승격하지 않는다. default route 변경은 아래 절차를 따른다.
+
+1. 기존 `composite` route를 baseline으로 고정한다.
+2. golden set 전체를 baseline과 신규 route 모두에서 실행한다.
+3. correctness와 groundedness가 baseline 대비 동률 이상이어야 한다.
+4. latency 또는 token usage가 크게 악화되면 default 승격하지 않고 opt-in route로 둔다.
+5. fallback 순서는 `graph_evidence -> composite -> vector -> template fallback` 또는 별도 ADR에서 확정한다.
+6. default 변경 시 PRD, TASKS, API 문서, route decision log를 함께 갱신한다.
+
+Route status 값:
+
+- `experimental`: 구현 또는 내부 테스트 단계
+- `candidate`: golden set 기준 baseline 이상
+- `default_candidate`: latency/token/fallback까지 통과
+- `promoted`: default route 적용
+- `rejected`: baseline 대비 품질 또는 안정성 미달
+- `disabled`: cache, index, LLM, Neo4j 상태 문제로 비활성화
+
+### 11.8.9 Graph Summary Cache Governance
+
+Semantic aggregation summary는 API 요청 중 실시간 생성하지 않고, 명시적 build job 또는 batch script로 생성한다.
+
+Summary cache metadata 최소 필드:
+
+```json
+{
+  "summary_id": "community:<id>",
+  "summary_type": "community_summary",
+  "graph_snapshot_id": "",
+  "source_entity_count": 0,
+  "source_relationship_count": 0,
+  "embedding_model": "nlpai-lab/KURE-v1",
+  "embedding_revision": "",
+  "build_started_at": "",
+  "build_finished_at": "",
+  "stale_after": "",
+  "source_query_hash": ""
+}
+```
+
+Rebuild trigger:
+
+- Neo4j graph snapshot 변경
+- Leiden/community 재계산
+- KURE 또는 embedding model/revision 변경
+- source entity count 또는 relationship count의 큰 변화
+- summary prompt 또는 aggregation policy 변경
+
+stale summary는 default route에서 사용하지 않는다. 단, experimental route에서는 stale 여부를 source metadata에 표시한 뒤 사용할 수 있다.
+
 ## 12. 아키텍처 결정 기록 (ADRs)
 
 본 PRD의 중요한 기술적 결정은 별도 문서로 관리됩니다:
