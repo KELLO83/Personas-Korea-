@@ -194,3 +194,64 @@ Result: blocked. The preserved SOTA cache and the current split artifacts do not
 | required candidate_recall@50 guard | 0.950000 |
 
 Decision: the attempted strict SOTA-pool KURE comparison is invalid for default promotion. The default remains `phase2_5_num_leaves_31` with `include_text_embedding_feature=false`. A promotion-grade rerun would require the original SOTA split snapshot or a full rebuild of both baseline and KURE under one newly locked split.
+
+## 2026-05-16 current-data locked no-text vs KURE Stage2 rerun
+
+Because the older closed-SOTA cache is not comparable to the current split, the current data/split was locked and rerun with the same Stage1 candidate pool and SOTA LightGBM recipe (`num_leaves=31`):
+
+- Stage1: `popularity + cooccurrence`
+- Stage2 baseline: LightGBM without text embedding
+- Stage2 candidate: LightGBM with KURE `text_embedding_similarity`
+- CPU thread count: `10`
+- Progress mode: `on`
+- Direct cached-matrix evaluation script: `scripts/evaluate_cached_ranker_matrix.py`
+
+| Split | Model | Recall@10 | NDCG@10 | Candidate Recall@50 |
+| --- | --- | ---: | ---: | ---: |
+| validation | no-text | 0.591876 | 0.366105 | 0.827669 |
+| validation | KURE Stage2 | 0.634706 | 0.396559 | 0.827669 |
+| test | no-text | 0.579626 | 0.360270 | 0.827208 |
+| test | KURE Stage2 | 0.617482 | 0.386258 | 0.827208 |
+
+Current-split deltas:
+
+- validation Recall@10 `+0.042830`, NDCG@10 `+0.030454`
+- test Recall@10 `+0.037856`, NDCG@10 `+0.025988`
+
+Decision: KURE Stage2 is selected over the current no-text baseline for the current split/candidate pool and is the current SOTA/default candidate.
+
+## 2026-05-16 Stage1 vs Stage2 KURE role decision
+
+KURE should be used in Stage2, not Stage1, under the current evidence.
+
+| Role | Experiment | Validation Recall@10 | Validation NDCG@10 | Candidate Recall@50 | Decision |
+| --- | --- | ---: | ---: | ---: | --- |
+| Stage1 semantic provider | `kure_stage1_semantic_001_fast_gpu` | 0.599705 | 0.370891 | 0.794971 | rejected |
+| Stage2 feature | `current_locked_kure_stage2_num_leaves31_cpu10` | 0.634706 | 0.396559 | 0.827669 | selected |
+
+Reason: Stage1 KURE changes the retrieval pool and drops too many held-out positives before the ranker can see them. Stage2 KURE keeps the stronger `popularity + cooccurrence` candidate pool unchanged and improves ordering inside that pool. Future embedding-model experiments should therefore prioritize Stage2 feature ablations first.
+
+## 2026-05-16 KURE Stage2 feature training-method review
+
+The current KURE Stage2 feature construction is appropriate as the first promoted embedding feature:
+
+- Train/eval both use `build_domain_tagged_persona_text`.
+- Held-out hobby names are masked before persona encoding via `mask_holdout_hobbies`.
+- Leakage audit passed: `failed_person_count=0`, `passed_person_count=10857`.
+- Feature cache metadata records model name, preprocessing version, masking, and text builder.
+- The fixed Stage1 candidate pool remains `popularity + cooccurrence`; KURE only adds `text_embedding_similarity` to Stage2.
+- LightGBM uses KURE as one numeric feature, so popularity/cooccurrence/context features can still override bad semantic matches.
+
+Current limitation:
+
+- The feature is a single cosine similarity between masked persona text and hobby name text.
+- It does not yet expose domain-specific similarities such as sports/art/travel/food separately.
+- It does not include per-person KURE confidence or margin features.
+
+Recommended next Stage2 embedding work:
+
+1. Compare other Korean embedding models as the same single `text_embedding_similarity` feature.
+2. Add domain-specific KURE features, for example `kure_sports_similarity`, `kure_art_similarity`, `kure_travel_similarity`, while keeping leakage masking.
+3. Add rank/margin features inside the fixed candidate pool, for example KURE similarity percentile or gap to the person's top semantic candidate.
+
+Do not reopen Stage1 semantic retrieval until a design explicitly preserves candidate recall.

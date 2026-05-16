@@ -4,6 +4,7 @@ from typing import Any
 from src.embeddings.kure_model import KureEmbedder
 from src.embeddings.vector_index import Neo4jVectorIndex
 from src.rag.llm import create_llm
+from src.rag.tracing import trace_span
 
 logger = logging.getLogger(__name__)
 
@@ -15,8 +16,10 @@ class VectorInsightChain:
         self.llm = create_llm(temperature=0.2)
 
     def search(self, question: str, top_k: int = 5) -> list[dict[str, Any]]:
-        embedding = self.embedder.encode_one(question)
-        return self.vector_index.search(embedding, top_k=top_k)
+        with trace_span("embedding_query_encoded", {"question_length": len(question)}):
+            embedding = self.embedder.encode_one(question)
+        with trace_span("vector_search_executed", {"top_k": top_k}):
+            return self.vector_index.search(embedding, top_k=top_k)
 
     def ask(self, question: str, top_k: int = 5) -> dict[str, Any]:
         try:
@@ -37,8 +40,9 @@ class VectorInsightChain:
             }
 
         try:
-            context = _format_context(results)
-            prompt = _build_answer_prompt(question=question, context=context)
+            with trace_span("prompt_built", {"result_count": len(results)}):
+                context = _format_context(results)
+                prompt = _build_answer_prompt(question=question, context=context)
             response = self.llm.invoke(prompt)
             return {
                 "answer": response.content,

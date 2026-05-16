@@ -140,20 +140,45 @@ class RecommendationService:
                     score_property=influence_metric,
                 )
             ]
-        return [_format_recommendation(row, category) for row in rows]
+        return [_format_recommendation(row, category, rank=index) for index, row in enumerate(rows, start=1)]
 
 
-def _format_recommendation(row: dict[str, Any], category: str) -> dict[str, Any]:
+def _format_recommendation(row: dict[str, Any], category: str, rank: int = 0) -> dict[str, Any]:
     item_name = str(row.get("item_name") or "")
     similar_users_count = int(row.get("similar_users_count") or 0)
     reason_score = round(float(row.get("reason_score") or 0.0), 4)
+    weighted_score = round(float(row.get("weighted_score") or reason_score), 4)
     template = REASON_TEMPLATES[category]
+    reason = template.format(count=similar_users_count, ratio=reason_score, item=item_name)
     return {
         "item_name": item_name,
-        "reason": template.format(count=similar_users_count, ratio=reason_score, item=item_name),
+        "reason": reason,
         "reason_score": reason_score,
         "similar_users_count": similar_users_count,
         "supporting_personas": _format_supporting_personas(row.get("supporting_personas")),
+        "score": weighted_score,
+        "rank": rank,
+        "reason_cards": [
+            {
+                "type": "similar_person",
+                "title": "유사 페르소나 기반",
+                "detail": reason,
+                "strength": reason_score,
+            },
+            {
+                "type": "graph_frequency",
+                "title": "그래프 빈도 기반",
+                "detail": "Model is not promoted yet, so this item is ranked with Neo4j graph/rule fallback scoring.",
+                "strength": weighted_score,
+            },
+        ],
+        "already_known": False,
+        "sources": ["similar_person", "graph_frequency"],
+        "score_source": "fallback",
+        "model_version": None,
+        "graph_snapshot_id": None,
+        "fallback_used": True,
+        "fallback_reason": "recommendation_model_under_development",
     }
 
 

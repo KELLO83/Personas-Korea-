@@ -485,17 +485,17 @@
   - [x] root `/api/recommend/{uuid}`는 모델 확정 전까지 Neo4j graph/rule fallback 기반으로 유지
   - [x] 모델 평가 결과와 모델 선택 판단은 하위 실험 폴더에서만 관리
   - [x] 루트 PRD/TASKS에는 API/UI/adapter/fallback 영향만 반영
-- [ ] F11 추천 adapter contract 정의
+- [~] F11 추천 adapter contract 정의
   - [ ] 취미 추천 adapter interface 정의
   - [ ] 유사 페르소나 reranker adapter interface 정의
   - [ ] API 연동 방식 결정: batch export, artifact reader, 별도 service 중 선택
-  - [ ] 공통 응답 metadata 정의: `score_source`, `model_version`, `graph_snapshot_id`, `fallback_used`, `fallback_reason`
-- [ ] fallback 정책 정의
+  - [x] 공통 응답 metadata 정의: `score_source`, `model_version`, `graph_snapshot_id`, `fallback_used`, `fallback_reason`
+- [~] fallback 정책 정의
   - [ ] artifact 미준비/누락/구버전/schema mismatch 처리
-  - [ ] 모델 점수 미사용 시 graph/rule 기반 추천과 reason 표시
-  - [ ] 실험 모델 점수는 기본 사용자 화면에 자동 혼합하지 않도록 guard 정의
-- [ ] 프론트엔드 상태 표시 계약
-  - [ ] `fallback | experimental | promoted` 상태별 표시 정책 정의
+  - [x] 모델 점수 미사용 시 graph/rule 기반 추천과 reason 표시
+  - [x] 실험 모델 점수는 기본 사용자 화면에 자동 혼합하지 않도록 guard 정의
+- [~] 프론트엔드 상태 표시 계약
+  - [x] `fallback | experimental | promoted` 상태별 표시 정책 정의
   - [ ] 일반 사용자 화면에서는 모델 내부 메타데이터를 과도하게 노출하지 않도록 정책 정의
   - [ ] 관리자/품질 화면에서만 상세 metric/source를 확인하는 정책 정의
 - [ ] 검수 게이트
@@ -520,24 +520,25 @@
 
 ### Phase 24-A: 모델 연동 공통 계약
 
-- [ ] 공통 recommendation model status 정의
-  - [ ] `fallback`: 모델 artifact/가중치 미확정 또는 미준비
-  - [ ] `experimental`: 실험 모델은 있으나 제품 승격 전
-  - [ ] `promoted`: decision artifact에서 제품 후보로 승인
-- [ ] 공통 응답 metadata 정의
-  - [ ] `score_source`: `fallback | experimental | promoted`
-  - [ ] `model_version`
+- [~] 공통 recommendation model status 정의
+  - [x] `fallback`: 모델 artifact/가중치 미확정 또는 미준비
+  - [x] `experimental`: 실험 모델은 있으나 제품 승격 전
+  - [x] `promoted`: decision artifact에서 제품 후보로 승인
+  - [x] `GET /api/recommendation/status` 상태 API 구현
+- [~] 공통 응답 metadata 정의
+  - [x] `score_source`: `fallback | experimental | promoted`
+  - [x] `model_version`
   - [ ] `artifact_path`
-  - [ ] `graph_snapshot_id`
-  - [ ] `fallback_used`
-  - [ ] `fallback_reason`
+  - [x] `graph_snapshot_id`
+  - [x] `fallback_used`
+  - [x] `fallback_reason`
 - [ ] Backend adapter contract 수립
   - [ ] 취미 추천 adapter interface 정의
   - [ ] 유사 페르소나 reranker adapter interface 정의
   - [ ] artifact missing/schema mismatch/version mismatch fallback 정책 정의
   - [ ] 실험 모델 점수는 기본 사용자 화면에 자동 혼합하지 않도록 guard 추가
-- [ ] Frontend model status UX 정의
-  - [ ] 모델 미준비 상태를 오류가 아니라 “기본 그래프 기반 추천/설명”으로 표시
+- [~] Frontend model status UX 정의
+  - [x] 모델 미준비 상태를 오류가 아니라 “기본 그래프 기반 추천/설명”으로 표시
   - [ ] experimental/promoted badge 표시 정책 정의
   - [ ] score/model metadata는 일반 사용자에게 과도하게 노출하지 않고 상세/관리자 영역에 표시
 
@@ -585,22 +586,22 @@
 
 ### F21: 취미 추천 이유 카드
 
-- [ ] Backend API 설계 확정
-  - [ ] `GET /api/recommend/{uuid}` 응답 확장 방식 결정
-  - [ ] 추천 item에 `sources`, `reason_cards[]`, `model_version`, `score_source`, `fallback_used` 추가
-- [ ] Backend 구현
-  - [ ] 모델 확정 전 기본 구현은 graph/rule fallback 추천 이유만 제공
-  - [ ] 기존 추천 로직에서 graph_frequency/similar_person/popularity/cooccurrence source 정보 계산
-  - [ ] 기존 보유 취미 중복 제외 여부 테스트
+- [~] Backend API 설계 확정
+  - [x] `GET /api/recommend/{uuid}` 응답 확장 방식 결정
+  - [x] 추천 item에 `sources`, `reason_cards[]`, `model_version`, `score_source`, `fallback_used` 추가
+- [~] Backend 구현
+  - [x] 모델 확정 전 기본 구현은 graph/rule fallback 추천 이유만 제공
+  - [~] 기존 추천 로직에서 graph_frequency/similar_person/popularity/cooccurrence source 정보 계산
+  - [x] 기존 보유 취미 중복 제외 여부 테스트
   - [ ] 하위 추천 폴더의 decision metadata를 읽을 경우 adapter 경계와 fallback 정책 정의
-  - [ ] 모델 출력 미준비 시 기존 Cypher/SIMILAR_TO 기반 추천으로 fallback
-  - [ ] `score_source=fallback` 상태에서는 모델 승격 표현을 reason card에 표시하지 않음
+  - [x] 모델 출력 미준비 시 기존 Cypher/SIMILAR_TO 기반 추천으로 fallback
+  - [x] `score_source=fallback` 상태에서는 모델 승격 표현을 reason card에 표시하지 않음
 - [ ] Frontend 구현
   - [ ] 추천 카드에 이유 1~3개 compact 표시
   - [ ] 상세 펼침에서 source별 근거 표시
   - [ ] 이미 보유한 취미는 제외 또는 disabled 표시
-- [ ] Tests
-  - [ ] API 단위 테스트: reason_cards 존재, 중복 추천 제외, artifact 미준비 fallback
+- [~] Tests
+  - [x] API 단위 테스트: reason_cards 존재, 중복 추천 제외, artifact 미준비 fallback
   - [ ] Frontend smoke: 추천 카드 reason 표시
 
 ### F22: 비슷하지만 다른 페르소나 탐색
@@ -649,11 +650,11 @@
 - [ ] empty/loading/error UX 문구 정의
 - [ ] 추천 관련 API가 LLM 호출 없이 기본 응답 가능
 - [ ] LLM summary를 쓰는 경우 evidence/source를 함께 반환
-- [ ] `model_version`, `score_source`, `graph_snapshot_id` 중 적용 가능한 metadata를 응답에 포함
-- [ ] 취미 추천/유사 페르소나 모델 미확정 상태에서 fallback 동작 확인
-- [ ] 모델 출력이 없어도 사용자 화면이 오류 없이 동작
-- [ ] 신규 API 테스트 추가
-- [ ] 프론트엔드 smoke 테스트 또는 Playwright 확인
+- [x] `model_version`, `score_source`, `graph_snapshot_id` 중 적용 가능한 metadata를 응답에 포함
+- [x] 취미 추천/유사 페르소나 모델 미확정 상태에서 fallback 동작 확인
+- [x] 모델 출력이 없어도 사용자 화면이 오류 없이 동작
+- [x] 신규 API 테스트 추가
+- [x] 프론트엔드 smoke 테스트 또는 Playwright 확인
 - [ ] root `README.md` 업데이트 필요 여부 확인
 
 ---
@@ -666,35 +667,35 @@
   - [ ] Phoenix 우선 검토: self-host/local trace, RAG retrieval 평가, embedding 검색 품질 확인
   - [ ] LangSmith 선택 조건 정의: LangChain/LangGraph hosted trace와 prompt/run 관리가 필요할 때
   - [x] Python 의존성 반영: `langsmith`, `arize-phoenix-otel`, `arize-phoenix-client`, `opentelemetry-sdk`
-  - [ ] 기본값 `tracing_enabled=false` 및 환경변수 기반 enable/disable 정책 정의
-  - [ ] 원문 질문/prompt/응답/embedding payload 저장 여부와 redaction 정책 정의
-  - [ ] trace 보존 기간, 저장 위치, 삭제 절차 정의
-- [ ] Backend trace interface 설계
-  - [ ] `TraceSink` protocol/interface 정의
-  - [ ] `NoopTraceSink` 기본값 구현
+  - [x] 기본값 `tracing_enabled=false` 및 환경변수 기반 enable/disable 정책 정의
+  - [x] 원문 질문/prompt/응답/embedding payload 저장 여부와 redaction 정책 정의
+  - [x] trace 보존 기간, 저장 위치, 삭제 절차 정의
+- [~] Backend trace interface 설계
+  - [x] `TraceSink` protocol/interface 정의
+  - [x] `NoopTraceSink` 기본값 구현
   - [ ] Phoenix adapter 또는 LangSmith adapter 중 1개를 opt-in 구현 후보로 정의
-  - [ ] trace_id/session_id/run_id 전파 방식 정의
-- [ ] RAG/챗봇 span 계측
-  - [ ] `src/rag/router.py`: request, intent classification, route decision span
-  - [ ] `src/rag/cypher_chain.py`: Cypher 생성/실행/결과 count span
-  - [ ] `src/rag/vector_chain.py`: vector search query/result span
-  - [ ] `src/rag/llm.py`: prompt build, LLM call, token/latency/error span
-  - [ ] fallback/error span 표준화
-- [ ] Admin API 설계
-  - [ ] `GET /api/admin/rag/traces` contract 정의
-  - [ ] `GET /api/admin/rag/traces/{trace_id}` contract 정의
-  - [ ] trace list pagination/filter 정의: route, status, latency, error_type
-  - [ ] 관리자/개발자 전용 guard 정책 정의 (로컬 개발 모드 예외 여부 포함)
-- [ ] Frontend 구현 계획
-  - [ ] 관리자/개발자 탭에 trace list 추가
+  - [x] trace_id/session_id/run_id 전파 방식 정의
+- [~] RAG/챗봇 span 계측
+  - [x] `src/rag/router.py`: request, intent classification, route decision span
+  - [x] `src/rag/cypher_chain.py`: Cypher 생성/실행/결과 count span
+  - [x] `src/rag/vector_chain.py`: vector search query/result span
+  - [~] `src/rag/llm.py`: `llm_called` latency/error span 구현, prompt build와 token count는 후속
+  - [x] fallback/error span 표준화
+- [x] Admin API 설계
+  - [x] `GET /api/admin/rag/traces` contract 정의
+  - [x] `GET /api/admin/rag/traces/{trace_id}` contract 정의
+  - [x] trace list pagination/filter 정의: route, status, latency, error_type
+  - [x] 관리자/개발자 전용 guard 정책 정의 (로컬 개발 모드 예외 여부 포함)
+- [~] Frontend 구현 계획
+  - [x] 관리자/개발자 탭에 trace list 추가
   - [ ] trace detail drawer: 질문, route, 검색 결과, prompt summary, 응답, latency breakdown
-  - [ ] error/fallback badge 표시
-  - [ ] 일반 사용자 화면에는 trace detail 미노출
-- [ ] Tests
-  - [ ] tracing disabled 상태에서 기존 API 응답 변화 없음
+  - [x] error/fallback badge 표시
+  - [x] 일반 사용자 화면에는 trace detail 미노출
+- [~] Tests
+  - [x] tracing disabled 상태에서 기존 API 응답 변화 없음
   - [ ] LLM 실패/Neo4j 실패/vector 빈 결과 fallback trace 검증
-  - [ ] trace 저장 중 오류가 API 응답을 깨지 않음
-  - [ ] redaction enabled 상태에서 prompt/응답/검색 결과의 민감값이 저장되지 않음
+  - [x] trace 저장 중 오류가 API 응답을 깨지 않음
+  - [x] redaction enabled 상태에서 prompt/응답/검색 결과의 민감값이 저장되지 않음
   - [ ] 비인가 상태에서 admin trace API 접근이 차단되거나 로컬 모드에서만 명시 허용됨
 
 ---
@@ -709,16 +710,16 @@
   - [x] Frontend 의존성 반영: `echarts`, `d3`, `@types/d3`
   - [ ] bundle size와 SSR/client component 경계 확인
   - [ ] 기존 frontend 디자인 시스템과 색상/legend/tooltip 규칙 정의
-- [ ] 공통 chart component 설계
-  - [ ] ECharts wrapper component 작성 계획
-  - [ ] 공통 loading/empty/error state 정의
-  - [ ] 긴 한글 label 처리, tooltip, legend, responsive height 규칙 정의
+- [x] 공통 chart component 설계
+  - [x] ECharts wrapper component 작성 계획
+  - [x] 공통 loading/empty/error state 정의
+  - [x] 긴 한글 label 처리, tooltip, legend, responsive height 규칙 정의
   - [ ] chart data schema: `series`, `categories`, `metrics`, `metadata`
-- [ ] F6 인구통계 대시보드 개선
-  - [ ] 연령/성별/지역/직업/취미 분포 차트 적용
+- [~] F6 인구통계 대시보드 개선
+  - [x] 연령/성별/지역/직업/취미 분포 차트 적용
   - [ ] top-k ranking chart와 drilldown interaction 정의
-  - [ ] 기존 table/card와 chart 병행 표시 여부 결정
-  - [ ] age/sex/province + top occupation/hobby/skill 중 최소 3개 이상 차트 완료 기준 정의
+  - [x] 기존 table/card와 chart 병행 표시 여부 결정
+  - [x] age/sex/province + top occupation/hobby/skill 중 최소 3개 이상 차트 완료 기준 정의
 - [ ] F8 세그먼트 비교 시각화 개선
   - [ ] segment별 분포 비교 chart 적용
   - [ ] ratio difference 또는 lift chart 적용
@@ -735,8 +736,8 @@
   - [ ] repeated target table과 chart 병행 구성
   - [ ] F20 empty community / community_id 없음 fallback 표시 기준 정의
   - [ ] F23 metric source 없음 empty state와 coverage/diversity/hub/weak-only 표시 기준 정의
-- [ ] Tests
-  - [ ] 차트 empty/loading/error 렌더링 smoke
+- [~] Tests
+  - [x] 차트 empty/loading/error 렌더링 smoke
   - [ ] 모바일 폭에서 label/tooltip overlap 확인
   - [ ] Playwright screenshot으로 주요 chart nonblank 확인
   - [ ] 각 대상 화면(F6/F8/F9/F20/F23)의 최소 완료 기준 체크리스트 통과

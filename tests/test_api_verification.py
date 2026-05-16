@@ -28,6 +28,8 @@ def test_openapi_includes_phase_15_17_and_18_endpoints() -> None:
     assert "/api/lifestyle-map" in paths
     assert "/api/career-transition-map" in paths
     assert "/api/graph-quality" in paths
+    assert "/api/recommendation/status" in paths
+    assert "/api/admin/rag/traces" in paths
 
 
 def test_chat_search_and_stats_responses_meet_response_budget(monkeypatch: MonkeyPatch) -> None:

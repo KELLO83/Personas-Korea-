@@ -82,16 +82,16 @@ Do not confuse this with the completed KURE dense MMR sweep.
 
 ### Embedding Follow-Up Priority
 
-- [x] KURE-v1 embedding default-candidate paths are closed as rejected/no-go:
+- [x] KURE-v1 embedding decision is split by role:
   - KURE dense MMR: NO-GO.
-  - KURE Stage2 text feature: signal exists, but below closed Phase 2.5 default/SOTA.
+  - KURE Stage2 text feature: PROMOTED on the current data/split.
   - KURE Stage1 semantic provider: validation failed because candidate_recall@50 regressed materially.
-- [x] Default remains `popularity + cooccurrence -> LightGBM`, with `MMR=false`, `include_text_embedding_feature=false`, `kure_semantic=false`.
-- [x] Other embedding models remain PRD-allowed but are now lower-priority follow-up only.
+- [x] Current SOTA/default candidate is `popularity + cooccurrence -> LightGBM(num_leaves=31) + KURE text_embedding_similarity`, with `MMR=false` and `kure_semantic=false`.
+- [x] Other embedding models are now worth testing as Stage2 features, because KURE Stage2 improved the current split. They remain lower priority for Stage1 candidate generation.
 - [x] `kure_text_feature_005_domain_tagged_20k_cpu10_test_matrix_retry` completed on test with progress enabled and CPU thread count 10.
   - [x] Test Recall@10 `0.617482`, NDCG@10 `0.386258`.
   - [x] Delta vs its Stage1 baseline: Recall@10 `+0.047711`, NDCG@10 `+0.029900`.
-  - [x] Decision: positive feature signal, but **not SOTA** and **not default**.
+  - [x] Decision was superseded by the locked same-current-data comparison below; KURE Stage2 is now selected for the current split.
 - [x] Final KURE follow-up: run a validation-only matched-control experiment under the same current code/split/candidate pool:
   - [x] no-text control: validation Recall@10 `0.591692`, NDCG@10 `0.366055`
   - [x] `include_text_embedding_feature=true`: validation Recall@10 `0.634706`, NDCG@10 `0.396559`
@@ -104,8 +104,18 @@ Do not confuse this with the completed KURE dense MMR sweep.
   - [x] The script now aborts if SOTA candidate-pool reproduction fails (`candidate_recall@50 < 0.95`) before KURE training/evaluation is allowed.
   - [x] Current repo state is blocked for this strict SOTA-pool comparison: preserved `features_ac22205dddbdfaba.npz` has `9,841` persons, but current `validation_edges.csv` has `10,857` persons; reproduction candidate_recall@50 is only `0.361702`.
   - [x] Decision: strict "closed SOTA candidate pool + Stage2 KURE" promotion-grade evaluation is not valid with the current split artifacts. Do not use the attempted run for default promotion.
-- [ ] Optional future probe: `dragonkue/snowflake-arctic-embed-l-v2.0-ko` as a single validation-only Stage2 text feature ablation, only after higher-priority default integration or accuracy-safe diversity work.
-- [ ] Optional future probe: `dragonkue/multilingual-e5-small-ko-v2` as a lightweight Stage2 feature ablation only if runtime/cost reduction becomes important.
+- [x] Rerun current-data locked baseline vs KURE Stage2 comparison with SOTA LightGBM recipe (`num_leaves=31`).
+  - [x] no-text model: `artifacts/experiments/phase5_c_text_embedding/current_locked_no_text_num_leaves31_cpu10/ranker_model.txt`
+  - [x] KURE model: `artifacts/experiments/phase5_c_text_embedding/current_locked_kure_stage2_num_leaves31_cpu10/ranker_model.txt`
+  - [x] validation no-text: Recall@10 `0.591876`, NDCG@10 `0.366105`, candidate_recall@50 `0.827669`
+  - [x] validation KURE: Recall@10 `0.634706`, NDCG@10 `0.396559`, candidate_recall@50 `0.827669`
+  - [x] test no-text: Recall@10 `0.579626`, NDCG@10 `0.360270`, candidate_recall@50 `0.827208`
+  - [x] test KURE: Recall@10 `0.617482`, NDCG@10 `0.386258`, candidate_recall@50 `0.827208`
+  - [x] Decision: on the current split/candidate pool, KURE Stage2 is selected over the current no-text baseline and is the current SOTA/default candidate.
+- [ ] Next Stage2 embedding probe: `dragonkue/snowflake-arctic-embed-l-v2.0-ko` as a single validation-only Stage2 text feature ablation against the KURE Stage2 SOTA.
+- [ ] Optional Stage2 embedding probe: `dragonkue/multilingual-e5-small-ko-v2` as a lightweight feature ablation if runtime/cost reduction becomes important.
+- [ ] Next KURE Stage2 feature-shape probe: split the single cosine feature into domain-specific masked text blocks (`sports`, `arts`, `travel`, `food`, etc.) and compare against the promoted single-feature KURE SOTA.
+- [ ] Optional KURE Stage2 rank/margin probe: add within-candidate-pool KURE percentile/gap features without changing Stage1 candidate generation.
 - [ ] Do not run another Stage1 semantic candidate generator experiment without a new PRD/TASKS reopening note, because KURE Stage1 reduced candidate_recall@50 from `0.977645` to `0.794971`.
 - [ ] Stop any future embedding run at validation if Recall@10/NDCG@10 miss the closed Phase 2.5 promotion gate or candidate_recall@50 regresses materially.
 

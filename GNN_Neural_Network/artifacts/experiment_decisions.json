@@ -1038,5 +1038,77 @@
     },
     "reason": "The preserved closed-SOTA feature cache does not match the current validation split/truth labels, so SOTA candidate-pool reproduction fails before KURE can be evaluated for promotion. Any KURE uplift from this artifact state would be invalid for default decisions.",
     "next_step": "Use the closed Phase 2.5 SOTA as default. A strict KURE Stage2 promotion test requires either the original SOTA split snapshot or a full rebuilt locked-split baseline and KURE pair."
+  },
+  "phase5_c_current_locked_kure_stage2": {
+    "experiment": "Current_Locked_No_Text_vs_KURE_Stage2_Num_Leaves_31",
+    "timestamp": "2026-05-16",
+    "status": "promoted_current_split",
+    "decision": "promote_kure_stage2_for_current_split",
+    "default_change": true,
+    "comparison_path": "artifacts/experiments/phase5_c_text_embedding/current_locked_num_leaves31_comparison.json",
+    "protocol": "current split/current candidate pool; Stage1 popularity+cooccurrence fixed; Stage2 LightGBM no-text vs KURE text_embedding_similarity; num_leaves=31 SOTA recipe",
+    "resource_policy": {
+      "cpu_thread_count": 10,
+      "progress_mode": "on"
+    },
+    "validation": {
+      "no_text": {
+        "recall@10": 0.5918757483651109,
+        "ndcg@10": 0.36610459794702854,
+        "candidate_recall@50": 0.8276687851155936
+      },
+      "kure_stage2": {
+        "recall@10": 0.6347052592797282,
+        "ndcg@10": 0.3965589144631506,
+        "candidate_recall@50": 0.8276687851155936
+      },
+      "delta": {
+        "recall@10": 0.042829510914617286,
+        "ndcg@10": 0.03045431651612207
+      }
+    },
+    "test": {
+      "no_text": {
+        "recall@10": 0.5796260477111541,
+        "ndcg@10": 0.3602697691765377,
+        "candidate_recall@50": 0.8272082527401676
+      },
+      "kure_stage2": {
+        "recall@10": 0.6174818089711707,
+        "ndcg@10": 0.386258213941051,
+        "candidate_recall@50": 0.8272082527401676
+      },
+      "delta": {
+        "recall@10": 0.03785576126001655,
+        "ndcg@10": 0.02598844476451334
+      }
+    },
+    "reason": "Under the current split and fixed current candidate pool, KURE Stage2 improves Recall@10 and NDCG@10 on validation and the winner-only test while candidate_recall@50 remains unchanged. This promotes KURE Stage2 as the current SOTA/default candidate for the current data baseline.",
+    "next_step": "Use KURE as a Stage2 feature by default for the current offline recommender. Keep KURE Stage1 semantic provider disabled because it regressed candidate recall."
+  },
+  "phase5_c_kure_role_decision": {
+    "experiment": "KURE_Stage1_vs_Stage2_Role_Decision",
+    "timestamp": "2026-05-16",
+    "status": "closed",
+    "decision": "use_kure_in_stage2_not_stage1",
+    "stage1_kure_semantic": {
+      "run_id": "kure_stage1_semantic_001_fast_gpu",
+      "validation_recall@10": 0.5997052592797274,
+      "validation_ndcg@10": 0.37089053979698977,
+      "validation_candidate_recall@50": 0.7949709864603481,
+      "decision": "rejected"
+    },
+    "stage2_kure_feature": {
+      "run_id": "current_locked_kure_stage2_num_leaves31_cpu10",
+      "validation_recall@10": 0.6347057198121028,
+      "validation_ndcg@10": 0.3965589149631506,
+      "validation_candidate_recall@50": 0.8276687851155936,
+      "test_recall@10": 0.6174818089711707,
+      "test_ndcg@10": 0.386258213985051,
+      "test_candidate_recall@50": 0.8272082527401676,
+      "decision": "selected"
+    },
+    "reason": "Stage1 KURE semantic retrieval changed the candidate pool and lost held-out positives before ranking. Stage2 KURE preserved the stronger popularity+cooccurrence pool and improved ordering inside the same pool.",
+    "next_step": "Prioritize additional embedding models as Stage2 feature ablations. Do not reopen Stage1 semantic KURE unless the retrieval design explicitly protects candidate recall."
   }
 }

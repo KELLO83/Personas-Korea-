@@ -55,10 +55,6 @@ def main() -> None:
         feature_metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
 
     model = lgb.Booster(model_file=str(args.model_path))
-    try:
-        model.reset_parameter({"num_threads": cpu_threads})
-    except Exception:
-        pass
 
     show_progress = args.progress_mode == "on"
     print(f"Batch scoring cached matrix rows={X.shape[0]} features={X.shape[1]}", flush=True)

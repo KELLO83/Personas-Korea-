@@ -60,6 +60,11 @@ def test_format_recommendation_uses_template() -> None:
     assert "Python" in item["reason"]
     assert "스킬" in item["reason"]
     assert item["supporting_personas"][0]["uuid"] == "u1"
+    assert item["score"] == 0.5
+    assert item["rank"] == 0
+    assert item["already_known"] is False
+    assert item["graph_snapshot_id"] is None
+    assert item["reason_cards"][0]["type"] == "similar_person"
 
 
 def test_recommend_endpoint(monkeypatch) -> None:
@@ -73,6 +78,27 @@ def test_recommend_endpoint(monkeypatch) -> None:
     assert body["uuid"] == "u1"
     assert body["category"] == "hobby"
     assert body["recommendations"][0]["item_name"] == "클라이밍"
+    assert body["recommendations"][0]["rank"] == 1
+    assert body["recommendations"][0]["score_source"] == "fallback"
+    assert body["recommendations"][0]["graph_snapshot_id"] is None
+    assert body["recommendations"][0]["fallback_used"] is True
+    assert body["recommendations"][0]["already_known"] is False
+    assert body["recommendations"][0]["reason_cards"]
+    assert body["model_status"]["target"] == "hobby"
+    assert body["model_status"]["status"] == "under_development"
+    assert body["model_status"]["graph_snapshot_id"] is None
+
+
+def test_recommend_endpoint_reports_non_hobby_category_status(monkeypatch) -> None:
+    monkeypatch.setattr(recommend, "get_recommendation_service", lambda: FakeRecommendationService())
+    client = TestClient(create_app())
+
+    response = client.get("/api/recommend/u1?category=skill&top_n=1")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["model_status"]["target"] == "skill"
+    assert body["model_status"]["status"] == "fallback_only"
 
 
 def test_recommend_endpoint_rejects_invalid_category(monkeypatch) -> None:

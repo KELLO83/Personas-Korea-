@@ -4,6 +4,7 @@ from typing import Any, Literal, Protocol, TypedDict
 from langgraph.graph import END, StateGraph
 
 from src.rag.cypher_chain import CypherInsightChain
+from src.rag.tracing import trace_span
 from src.rag.vector_chain import VectorInsightChain
 
 logger = logging.getLogger(__name__)
@@ -46,7 +47,8 @@ class InsightRouter:
         return self._vector_chain
 
     def ask(self, question: str) -> dict[str, Any]:
-        result = self.graph.invoke({"question": question})
+        with trace_span("insight.graph.invoke", {"question_length": len(question)}):
+            result = self.graph.invoke({"question": question})
         return {
             "answer": result.get("answer", ""),
             "sources": result.get("sources", []),
@@ -72,12 +74,17 @@ class InsightRouter:
 
     def _classify(self, state: InsightState) -> InsightState:
         question = state.get("question", "")
-        return {"route": classify_question(question)}
+        with trace_span("intent_classified", {"question_length": len(question)}):
+            route = classify_question(question)
+        return {"route": route}
 
     def _ask_cypher(self, state: InsightState) -> InsightState:
-        result = self.cypher_chain.ask(state.get("question", ""))
+        with trace_span("cypher_chain.ask", {"route": "cypher"}):
+            result = self.cypher_chain.ask(state.get("question", ""))
         if result.get("query_type") == "cypher_fallback":
             logger.info("Cypher failed, falling back to composite")
+            with trace_span("fallback_used", {"from": "cypher", "to": "composite"}):
+                pass
             return self._ask_composite(state)
         return {
             "answer": result["answer"],
@@ -87,12 +94,15 @@ class InsightRouter:
 
     def _ask_vector(self, state: InsightState) -> InsightState:
         try:
-            result = self.vector_chain.ask(state.get("question", ""))
+            with trace_span("vector_chain.ask", {"route": "vector"}):
+                result = self.vector_chain.ask(state.get("question", ""))
         except Exception as exc:
             logger.warning("Vector chain failed before producing a result: %s", exc)
             return _vector_error_response()
         if result.get("query_type") == "vector_empty":
             logger.info("Vector returned empty, falling back to composite")
+            with trace_span("fallback_used", {"from": "vector_empty", "to": "composite"}):
+                pass
             return self._ask_composite(state)
         if result.get("query_type") == "vector_error" and not result.get("answer"):
             return _vector_error_response(result.get("sources", []))
@@ -104,9 +114,11 @@ class InsightRouter:
 
     def _ask_composite(self, state: InsightState) -> InsightState:
         question = state.get("question", "")
-        cypher_result = self.cypher_chain.ask(question)
+        with trace_span("cypher_chain.ask", {"route": "composite"}):
+            cypher_result = self.cypher_chain.ask(question)
         try:
-            vector_result = self.vector_chain.ask(question)
+            with trace_span("vector_chain.ask", {"route": "composite"}):
+                vector_result = self.vector_chain.ask(question)
         except Exception as exc:
             logger.warning("Vector chain failed during composite route: %s", exc)
             vector_result = _vector_error_response()

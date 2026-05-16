@@ -307,12 +307,40 @@ class RecommendItem(BaseModel):
     reason_score: float
     similar_users_count: int
     supporting_personas: list[SimilarPreview] = Field(default_factory=list)
+    score: float = 0.0
+    rank: int = 0
+    reason_cards: list[dict[str, Any]] = Field(default_factory=list)
+    already_known: bool = False
+    sources: list[str] = Field(default_factory=list)
+    score_source: str = "fallback"
+    model_version: str | None = None
+    graph_snapshot_id: str | None = None
+    fallback_used: bool = True
+    fallback_reason: str = "recommendation_model_under_development"
+
+
+class RecommendationModelInfo(BaseModel):
+    target: str
+    status: str
+    score_source: str
+    model_version: str | None = None
+    graph_snapshot_id: str | None = None
+    fallback_used: bool = True
+    fallback_reason: str
+    message: str
 
 
 class RecommendResponse(BaseModel):
     uuid: str
     category: str
     recommendations: list[RecommendItem] = Field(default_factory=list)
+    model_status: RecommendationModelInfo | None = None
+
+
+class RecommendationStatusResponse(BaseModel):
+    hobby_recommender: RecommendationModelInfo
+    persona_similarity_recommender: RecommendationModelInfo
+    product_policy: str
 
 
 class TargetPersonaSample(BaseModel):
@@ -422,3 +450,31 @@ class ChatResponse(BaseModel):
     context_filters: dict[str, str] = Field(default_factory=dict)
     sources: list[dict[str, Any]] = Field(default_factory=list)
     turn_count: int = 0
+
+
+class RagTraceSpan(BaseModel):
+    name: str
+    status: str
+    latency_ms: float
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    error_type: str | None = None
+    error_message: str | None = None
+
+
+class RagTraceRecord(BaseModel):
+    trace_id: str
+    route: str
+    session_id: str | None = None
+    question: str | None = None
+    status: str
+    created_at: str
+    latency_ms: float
+    spans: list[RagTraceSpan] = Field(default_factory=list)
+    response_preview: str | None = None
+    error_type: str | None = None
+    error_message: str | None = None
+
+
+class RagTraceListResponse(BaseModel):
+    tracing_enabled: bool
+    traces: list[RagTraceRecord] = Field(default_factory=list)

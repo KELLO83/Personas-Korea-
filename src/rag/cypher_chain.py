@@ -6,6 +6,7 @@ from langchain_neo4j import GraphCypherQAChain, Neo4jGraph
 
 from src.config import settings
 from src.rag.llm import create_llm
+from src.rag.tracing import trace_span
 
 logger = logging.getLogger(__name__)
 
@@ -56,10 +57,14 @@ class CypherInsightChain:
         last_error: Exception | None = None
         for attempt in range(self.max_retries + 1):
             try:
-                result = self.chain.invoke({"query": question})
+                with trace_span("cypher_generated", {"attempt": attempt + 1, "question_length": len(question)}):
+                    result = self.chain.invoke({"query": question})
+                intermediate_steps = result.get("intermediate_steps", [])
+                with trace_span("neo4j_query_executed", {"intermediate_step_count": len(intermediate_steps)}):
+                    pass
                 return {
                     "answer": result.get("result", ""),
-                    "sources": result.get("intermediate_steps", []),
+                    "sources": intermediate_steps,
                     "query_type": "cypher",
                 }
             except Exception as exc:

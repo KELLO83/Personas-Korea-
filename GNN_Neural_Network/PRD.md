@@ -6,34 +6,36 @@ This section is the current source of truth for running experiments against the 
 
 ## Current SOTA And KURE-v1 Decision Update (2026-05-16)
 
-Current offline SOTA remains the closed Phase 2.5 LightGBM path:
+Current offline SOTA for the current local data/split is the KURE Stage2
+LightGBM path:
 
 ```text
 Stage 1 = popularity + cooccurrence
-Stage 2 = LightGBM learned ranker
-model = artifacts/experiments/phase2_5_num_leaves_31/ranker_model.txt
-include_text_embedding_feature = false
+Stage 2 = LightGBM learned ranker + KURE text_embedding_similarity
+model = artifacts/experiments/phase5_c_text_embedding/current_locked_kure_stage2_num_leaves31_cpu10/ranker_model.txt
+include_text_embedding_feature = true
 MMR = false
+KURE Stage1 semantic provider = false
 ```
 
-Reference test metrics:
+Current locked test metrics:
 
-| Metric | Closed Phase 2.5 SOTA |
+| Metric | Current KURE Stage2 SOTA |
 | --- | ---: |
-| Recall@10 | 0.709684 |
-| NDCG@10 | 0.447713 |
-| candidate_recall@50 | 0.977136 |
-| coverage@10 | 0.155556 |
+| Recall@10 | 0.617482 |
+| NDCG@10 | 0.386258 |
+| candidate_recall@50 | 0.827208 |
 
-The latest KURE-v1 domain-tagged text-feature experiment showed a real Stage2 signal but did not beat the closed SOTA. On the current test run (`kure_text_feature_005_domain_tagged_20k_cpu10_test_matrix_retry`), KURE text improved its own Stage1 baseline by Recall@10 `+0.047711` and NDCG@10 `+0.029900`, but absolute test Recall@10 was only `0.617482` and NDCG@10 was `0.386258`.
+The latest controlled comparison used the same current split, same Stage1
+candidate pool, and the same LightGBM SOTA recipe (`num_leaves=31`). Only the
+Stage2 KURE feature changed.
 
 Decision:
 
-- KURE-v1 domain-tagged text feature is **not promoted** and is **not default**.
-- Current KURE text path is **NO-GO for default replacement** because it remains below the closed Phase 2.5 SOTA.
-- KURE-v1 remains **follow-up-only** as a Stage2 auxiliary feature because it has positive signal under matched weak-candidate conditions.
-- The strict follow-up requested for default promotion, "closed SOTA candidate pool unchanged + Stage2 KURE feature only", is currently blocked by artifact provenance. The preserved SOTA feature cache (`features_ac22205dddbdfaba.npz`) has `9,841` persons, while the current `validation_edges.csv` has `10,857` persons; reproducing the SOTA pool against the current split gives candidate_recall@50 `0.361702`, far below the required `>=0.95` guard. Therefore that attempted comparison is invalid for promotion.
-- Do not run another KURE Stage1 semantic candidate provider without a new PRD/TASKS reopening note.
+- KURE-v1 domain-tagged text feature is **promoted for Stage2** on the current data/split.
+- The current SOTA/default candidate is `popularity + cooccurrence -> LightGBM(num_leaves=31) + KURE text_embedding_similarity`.
+- KURE-v1 semantic Stage1 provider remains **rejected**. On the current split it reduced validation candidate_recall@50 to `0.794971`, while the fixed Stage1 pool used by Stage2 KURE holds `0.827669`.
+- Embedding-model exploration is no longer globally low priority. It is now high priority for **Stage2 feature** ablations, but remains low priority for **Stage1 candidate generation** unless a new retrieval design protects candidate recall.
 
 ### Local 50K Data Reality
 
@@ -91,14 +93,17 @@ Rationale:
 
 Use the spelling `KURE-v1` for the model (`nlpai-lab/KURE-v1`). Older notes that say `KRUE` are historical aliases and must be treated as KURE-v1, not as a separate model family.
 
-Embedding-related experiments are now considered **low-priority, opt-in follow-up work** unless a later PRD update explicitly reopens them as default-promotion candidates. KURE-v1 produced useful semantic signals in some places, but every default-candidate embedding path tested so far lost to the closed Phase 2.5 accuracy baseline. This means other embedding models may still be evaluated, but they start with a reduced prior probability of improving the default path and must not displace higher-priority product integration or accuracy-safe diversity work.
+Embedding-related experiments are now split by role:
+
+- **Stage2 embedding features are high-priority follow-up work** because KURE-v1 improved the current SOTA recipe on the current data/split.
+- **Stage1 semantic embedding retrieval remains low-priority and opt-in only** because KURE Stage1 reduced candidate_recall@50 and removed too many held-out positives before Stage2 ranking.
 
 Two KURE-related experiment families must stay separate:
 
 | Experiment family | Status | Default impact |
 | --- | --- | --- |
 | KURE dense MMR reranking | completed, NO-GO | `MMR=false` remains default |
-| KURE text embedding feature ablation | completed/rejected after corrected audit and fallback reruns; may remain as Stage2-only signal analysis | `include_text_embedding_feature=false` remains default |
+| KURE text embedding feature ablation | completed and promoted on current split | `include_text_embedding_feature=true` for current SOTA/default candidate |
 | KURE semantic Stage1 candidate provider | completed/rejected after `kure_stage1_semantic_001_fast_gpu` validation | `kure_semantic` remains opt-in only; default Stage1 unchanged |
 
 The initial KURE text feature run set `include_text_embedding_feature=true`, but the post-mask leakage audit failed above the 5% threshold and the run was excluded before LightGBM fitting:
@@ -128,7 +133,63 @@ validation_delta_ndcg@10_vs_stage1: +0.000197
 decision: rejected_recall_regression
 ```
 
-The corrected audit and fallback reruns showed that KURE-v1 can carry semantic signal, but it still did not beat the closed Phase 2.5 default. Therefore, the next recommended work is no longer another blind KURE rerun. Any future embedding work must be justified as a low-priority follow-up after product/default integration or accuracy-safe diversity work, and must remain opt-in until it beats the same gates.
+The corrected audit and current locked reruns showed that KURE-v1 carries useful Stage2 semantic signal. The next recommended work is not another blind KURE rerun; it is a controlled Stage2 feature-improvement program against the promoted KURE Stage2 SOTA.
+
+### Stage2 Embedding Feature Improvement Plan
+
+Baseline for all follow-up experiments:
+
+```text
+run_id = current_locked_kure_stage2_num_leaves31_cpu10
+Stage1 = popularity + cooccurrence
+Stage2 = LightGBM(num_leaves=31)
+baseline feature = KURE-v1 text_embedding_similarity
+candidate_recall@50 validation/test = 0.827669 / 0.827208
+```
+
+Experiment track A: embedding backbone swap.
+
+| Candidate | Purpose | Rule |
+| --- | --- | --- |
+| `dragonkue/snowflake-arctic-embed-l-v2.0-ko` | higher-quality Korean embedding probe | validation first; test only if it beats KURE-v1 Stage2 on Recall@10 and NDCG@10 |
+| `dragonkue/multilingual-e5-small-ko-v2` | lightweight speed/cost probe | validation first; may be accepted only if close in accuracy with material runtime/cache benefit |
+
+Experiment track B: domain-specific KURE features.
+
+Replace the single persona-text cosine with multiple masked domain block similarities while keeping the same candidate pool:
+
+```text
+kure_sports_similarity
+kure_arts_similarity
+kure_travel_similarity
+kure_food_similarity
+kure_family_similarity
+kure_professional_similarity
+```
+
+This tests whether LightGBM benefits from knowing which persona domain matched the hobby instead of receiving one mixed cosine score.
+
+Experiment track C: KURE rank/margin features inside the fixed candidate pool.
+
+Add ranking features derived from the KURE scores for the same 50 candidates:
+
+```text
+kure_similarity_percentile
+kure_similarity_rank
+kure_similarity_gap_to_top
+kure_similarity_gap_to_mean
+```
+
+These features must not change Stage1 candidate generation. They only describe a candidate's semantic position inside the already fixed pool.
+
+Promotion gates for all three tracks:
+
+- Validation-first.
+- Winner-only test.
+- Candidate pool must remain `popularity + cooccurrence`; `candidate_recall@50` must not regress.
+- Must beat the promoted KURE Stage2 SOTA on validation Recall@10 and NDCG@10 before test.
+- Must preserve leakage controls: `mask_holdout_hobbies`, `post_mask_leakage_audit`, domain-tagged text builder, and model-specific cache metadata.
+- Must record runtime, device, batch size, cache hit/miss, and feature columns.
 
 ### Mandatory Blockers Before KURE Text Feature Ablation
 
@@ -209,23 +270,23 @@ Outcome recorded for `kure_stage1_semantic_001_fast_gpu`:
 
 ### Text Embedding Backbone Follow-Up Candidates
 
-KURE-v1 remains the current reference backbone for leakage-safe text embedding feature experiments, but its observed results lower the priority of additional embedding probes. Other embedding backbones are allowed by this PRD, but they are now **deferred follow-up work**, not the next default-track activity. Run them only when there is an explicit need to test semantic quality after higher-value work is complete.
+KURE-v1 is the current reference backbone for leakage-safe Stage2 text embedding feature experiments. Because KURE-v1 improved the current locked SOTA recipe on the current data/split, additional embedding probes are now active Stage2 follow-up work, not deferred work.
 
 Two additional backbones may be evaluated only as Phase 5-C follow-up ablations under the same masking, leakage-audit, cache, validation-first, and winner-only-test rules:
 
 | Candidate | Role | Rationale | Promotion impact |
 | --- | --- | --- | --- |
-| `dragonkue/snowflake-arctic-embed-l-v2.0-ko` | accuracy-ceiling probe | Korean retrieval benchmarks suggest it can exceed KURE-v1 quality, but it is not expected to be materially lighter | no default change unless it beats the closed baseline gates |
-| `dragonkue/multilingual-e5-small-ko-v2` | lightweight probe | 118M parameter / 384-dim class model; useful if validation quality is close enough while reducing VRAM, cache, and runtime cost | may become a lightweight candidate only after validation gate and cold-start review |
+| `dragonkue/snowflake-arctic-embed-l-v2.0-ko` | accuracy-ceiling probe | Korean retrieval benchmarks suggest it can exceed KURE-v1 quality, but it is not expected to be materially lighter | may replace KURE-v1 only if it beats the current KURE Stage2 SOTA on validation Recall@10 and NDCG@10 |
+| `dragonkue/multilingual-e5-small-ko-v2` | lightweight probe | 118M parameter / 384-dim class model; useful if validation quality is close enough while reducing VRAM, cache, and runtime cost | may become a lightweight candidate only after validation gate, runtime review, and cold-start review |
 
 These runs must not reuse incompatible KURE feature caches. Cache metadata and feature-cache keys must include the embedding model name or revision so KURE-v1, Snowflake-ko, and E5-small-ko vectors cannot mix.
 
 Caution from completed KURE-v1 experiments:
 
 - Do not use semantic embeddings as a Stage1 candidate generator by default. `kure_stage1_semantic_001_fast_gpu` reduced validation candidate_recall@50 from `0.977645` to `0.794971`, which lowered the maximum possible Stage2 accuracy.
-- Do not assume a stronger embedding backbone will fix the current ranking-collapse problem. Stage2 text features showed signal, but the closed Phase 2.5 default still won on Recall@10 and NDCG@10.
+- Do not assume a stronger embedding backbone will fix ranking collapse by itself. The current test is narrower: can the same Stage2 feature slot beat the promoted KURE-v1 Stage2 baseline without changing the candidate pool?
 - If Snowflake-ko or E5-small-ko is tested, prefer a single validation-only Stage2 feature probe first. Stage1 semantic retrieval with another embedding model is lower priority and requires a separate PRD/TASKS reopening note.
-- A future embedding run must be stopped at validation if Recall@10/NDCG@10 miss the default promotion gate or if candidate_recall@50 regresses materially.
+- A future embedding run must be stopped at validation if Recall@10/NDCG@10 miss the current KURE Stage2 SOTA gate or if candidate_recall@50 regresses materially.
 
 ## 문서 계층 및 우선순위
 
@@ -252,16 +313,16 @@ Caution from completed KURE-v1 experiments:
 
 ### Phase 5-B/C. Text Embedding Status And Follow-Up Boundary
 
-Phase 5-B/C text-embedding work is **not** an active default-promotion path. The completed KURE-v1 text feature ablation is recorded as `rejected_needs_followup`, and the default remains `include_text_embedding_feature=false`.
+Phase 5-B/C text-embedding work is reopened as an active **Stage2 feature** improvement path. The current locked same-split rerun promoted KURE-v1 `text_embedding_similarity`, and the current default candidate is `include_text_embedding_feature=true` for the Stage2 ranker.
 
 Completed result:
 
 - `kure_text_feature_001`: disabled by leakage gate before LightGBM fitting.
 - `kure_text_feature_002_context_coverage_gate`: corrected audit passed for covered contexts, but context coverage was too low for robust validation impact.
 - `kure_text_feature_003_full_ranker_fallback`: rejected because validation Recall@10 regressed and stayed below the closed Phase 2.5 default.
-- No winner was selected for test; no default path changed.
+- `current_locked_kure_stage2_num_leaves31_cpu10`: selected on the current data/split because it improved validation and test Recall@10/NDCG@10 against the same no-text LightGBM recipe while preserving candidate_recall@50.
 
-Follow-up may resume because the pre-KURE blockers above are closed, but it must be implementation/governance first: context coverage repair, model/revision-safe cache keys, and artifact metadata. Do not treat KURE text features as a live promotion candidate without new validation artifacts.
+Follow-up may continue, but it must be implementation/governance first: model/revision-safe cache keys, feature-column metadata, leakage audit, candidate-pool guard, visible progress, and artifact metadata. Treat Stage2 embedding work as live only under the current locked candidate pool; Stage1 semantic retrieval remains rejected unless separately reopened.
 
 ## 6. 현재 승인 기준 (프로젝트 내부 SOTA 경로) 및 Feature Policy
 
@@ -275,7 +336,7 @@ Follow-up may resume because the pre-KURE blockers above are closed, but it must
 ### Feature Policy
 
 - `include_source_features=false`: current default. Source one-hot features were evaluated and rejected for the default path.
-- `include_text_embedding_feature=false`: current default. KURE-v1 text embedding was evaluated and rejected/needs-follow-up; it may be enabled only in explicitly gated ablation runs.
+- `include_text_embedding_feature=true`: current default candidate for the promoted KURE Stage2 path on the current data/split. Raw or unmasked text features remain disallowed.
 - Text embedding ablations must use leakage-safe `[ACT]` masking, domain-tagged persona text, persisted `post_mask_leakage_audit()`, and identical train/eval feature construction.
 - Text/embedding cache keys must include the embedding model name or revision plus masking/feature policy metadata so KURE-v1, Snowflake-ko, and E5-small-ko vectors cannot mix.
 - `candidate_k=50` pool based reranking experiments must preserve the full candidate pool before selecting top-k.

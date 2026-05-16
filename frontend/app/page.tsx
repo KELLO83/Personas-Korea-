@@ -1,10 +1,10 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import type { ChatMessage, PersonaProfileResponse, SearchResponse, StatsResponse, SubgraphResponse } from "@/lib/api-types";
+import type { ChatMessage, PersonaProfileResponse, RagTraceListResponse, RecommendationStatusResponse, SearchResponse, StatsResponse, SubgraphResponse } from "@/lib/api-types";
 import { personaApi } from "@/lib/api-client";
 import { DEFAULT_PERSONA_UUID } from "@/lib/constants";
-import { shortUuid } from "@/lib/formatters";
+import { shortUuid, uuidWithName } from "@/lib/formatters";
 import { chatSessionId, resetChatSessionId } from "@/lib/chat-session";
 import { useLoadable } from "@/hooks/use-loadable";
 import { DashboardSection } from "@/components/dashboard-section";
@@ -13,8 +13,9 @@ import { ProfileSection } from "@/components/profile-section";
 import { GraphSection } from "@/components/graph-section";
 import { ChatSection } from "@/components/chat-section";
 import { InsightsSection } from "@/components/insights-section";
+import { OperationsSection } from "@/components/operations-section";
 
-type ViewKey = "dashboard" | "search" | "profile" | "graph" | "chat" | "insights";
+type ViewKey = "dashboard" | "search" | "profile" | "graph" | "chat" | "insights" | "operations";
 
 const views: Array<{ key: ViewKey; label: string; caption: string }> = [
   { key: "dashboard", label: "대시보드", caption: "전체 분포" },
@@ -23,6 +24,7 @@ const views: Array<{ key: ViewKey; label: string; caption: string }> = [
   { key: "graph", label: "그래프", caption: "관계 맵" },
   { key: "chat", label: "대화형 탐색", caption: "질문 기반 분석" },
   { key: "insights", label: "확장 분석", caption: "F16-F18 검수" },
+  { key: "operations", label: "운영 상태", caption: "추천/RAG 관측성" },
 ];
 
 const emptySearchFilters: SearchFilters = {
@@ -42,16 +44,26 @@ export default function Home() {
   const [search, runSearch] = useLoadable<SearchResponse>();
   const [profile, loadProfile] = useLoadable<PersonaProfileResponse>();
   const [graph, loadGraph] = useLoadable<SubgraphResponse>();
+  const [recommendationStatus, loadRecommendationStatus] = useLoadable<RecommendationStatusResponse>();
+  const [ragTraces, loadRagTraces] = useLoadable<RagTraceListResponse>();
   const [filters, setFilters] = useState<SearchFilters>(emptySearchFilters);
   const [page, setPage] = useState(1);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
+  const selectedDisplayName = profile.data?.display_name ?? selectedLabel;
 
   useEffect(() => {
     void loadStats(() => personaApi.stats());
-  }, [loadStats]);
+    void loadRecommendationStatus(() => personaApi.recommendationStatus());
+  }, [loadRecommendationStatus, loadStats]);
+
+  useEffect(() => {
+    if (activeView === "operations" && !ragTraces.data && !ragTraces.loading && !ragTraces.error) {
+      void loadRagTraces(() => personaApi.ragTraces({ limit: 20 }));
+    }
+  }, [activeView, loadRagTraces, ragTraces.data, ragTraces.error, ragTraces.loading]);
 
   useEffect(() => {
     void loadProfile(() => personaApi.profile(selectedUuid));
@@ -85,6 +97,11 @@ export default function Home() {
     setChatInput("");
     setChatError(null);
     setChatLoading(false);
+  }
+
+  function refreshOperations() {
+    void loadRecommendationStatus(() => personaApi.recommendationStatus());
+    void loadRagTraces(() => personaApi.ragTraces({ limit: 20 }));
   }
 
   async function submitChat(event: FormEvent<HTMLFormElement>) {
@@ -140,7 +157,7 @@ export default function Home() {
             <div className="card status-card">
               <span className="status-dot" /> <span className="small muted">현재 선택</span>
               <h2>{selectedLabel}</h2>
-              <p className="muted small">UUID {shortUuid(selectedUuid)}</p>
+              <p className="muted small">UUID {uuidWithName(selectedUuid, selectedDisplayName)}</p>
               <button className="ghost-button" onClick={() => setActiveView("graph")}>관계 그래프로 보기</button>
             </div>
           </section>
@@ -149,7 +166,7 @@ export default function Home() {
             <span className="status-dot" />
             <div>
               <div className="eyebrow">현재 선택</div>
-              <h2>{selectedLabel} <span className="muted">({shortUuid(selectedUuid)})</span></h2>
+              <h2>{selectedLabel} <span className="muted">({uuidWithName(selectedUuid, selectedDisplayName)})</span></h2>
             </div>
             <button className="ghost-button" onClick={() => setActiveView("graph")} style={{ marginLeft: "auto" }}>관계 그래프</button>
           </div>
@@ -161,6 +178,7 @@ export default function Home() {
         {activeView === "graph" && <GraphSection graph={graph} profile={profile.data} onSelectPersona={selectGraphPersona} />}
         {activeView === "chat" && <ChatSection messages={chatMessages} input={chatInput} loading={chatLoading} error={chatError} onInputChange={setChatInput} onSubmit={submitChat} onReset={resetChat} />}
         {activeView === "insights" && <InsightsSection />}
+        {activeView === "operations" && <OperationsSection recommendationStatus={recommendationStatus} ragTraces={ragTraces} onRefresh={refreshOperations} />}
       </main>
     </div>
   );

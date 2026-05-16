@@ -3,7 +3,7 @@ import type { PersonaProfileResponse, SearchResponse, SimilarityExplanationRespo
 import type { Loadable } from "@/hooks/use-loadable";
 import { personaApi } from "@/lib/api-client";
 import { lowPriorityLabel, profileExposurePolicy } from "@/lib/exposure-policy";
-import { fullNumber, joinDefined, percent, shortUuid } from "@/lib/formatters";
+import { fullNumber, joinDefined, percent, shortUuid, uuidWithName } from "@/lib/formatters";
 
 export interface SearchFilters {
   province: string;
@@ -203,7 +203,7 @@ export function SearchDetailProfile({
       )}
       <div className="grid two">
         <div className="detail-panel">
-          <p className="small muted">UUID {shortUuid(profile.uuid)}</p>
+          <p className="small muted">UUID {uuidWithName(profile.uuid, profile.display_name)}</p>
           <h3>{profile.display_name ?? shortUuid(profile.uuid)}</h3>
           <p className="muted">
             {joinDefined([

@@ -3,7 +3,7 @@ import type { PersonaProfileResponse, SimilarPreview, SimilarityExplanationRespo
 import type { Loadable } from "@/hooks/use-loadable";
 import { personaApi } from "@/lib/api-client";
 import { lowPriorityLabel, profileExposurePolicy } from "@/lib/exposure-policy";
-import { joinDefined, percent, shortUuid } from "@/lib/formatters";
+import { joinDefined, percent, shortUuid, uuidWithName } from "@/lib/formatters";
 import { SearchDetailProfile, type SimilarityContext } from "@/components/search-section";
 
 interface ProfileSectionProps {
@@ -142,7 +142,7 @@ function ProfileDetailBody({
       <div className="card">
         <div className="grid two">
           <div className="detail-panel">
-            <p className="small muted">UUID {shortUuid(profile.uuid)}</p>
+            <p className="small muted">UUID {uuidWithName(profile.uuid, profile.display_name)}</p>
             <h3>{profile.display_name ?? shortUuid(profile.uuid)}</h3>
             <p className="muted">{joinDefined([profile.demographics.age ? `${profile.demographics.age}세` : null, profile.demographics.sex, profile.location.province, profile.location.district, profile.occupation])}</p>
             <p className="small muted">커뮤니티 {profile.community.label ?? profile.community.community_id ?? "미지정"}</p>

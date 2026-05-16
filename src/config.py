@@ -46,6 +46,13 @@ class Settings(BaseSettings):
     API_HOST: str = "0.0.0.0"
     API_PORT: int = 8000
 
+    RAG_TRACING_ENABLED: bool = False
+    RAG_TRACE_STORE_RAW_INPUT: bool = False
+    RAG_TRACE_STORE_PROMPT: bool = False
+    RAG_TRACE_STORE_RESPONSE: bool = False
+    RAG_TRACE_MAX_EVENTS: int = 200
+    RAG_TRACE_ADMIN_ENABLED: bool = False
+
     GDS_FASTRP_DIMENSION: int = 256
     GDS_LEIDEN_MIN_COMMUNITY_SIZE: int = 10
     GDS_KNN_TOP_K: int = 5
