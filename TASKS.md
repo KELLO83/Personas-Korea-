@@ -83,7 +83,7 @@
 
 ## Phase 5-A: 향후 LeanRAG-style Graph RAG 확장 계획
 
-> PRD §11.8 — 현재는 GNN 추천시스템 개발이 우선이다. 이 Phase는 코드 작성 전 계획이며, `GNN_Neural_Network/` 추천 모델 실험과 분리해서 root Graph RAG/챗봇/insight API 향후 개선 과제로 관리한다.
+> PRD §11.8 — 이 Phase는 코드 작성 전 계획이며, 추천 모델 실험과 분리해서 root Graph RAG/챗봇/insight API 향후 개선 과제로 관리한다.
 
 - [ ] LeanRAG-style 적용 범위 확정
   - [ ] 기존 `cypher`, `vector`, `composite` route는 유지
@@ -115,7 +115,7 @@
 - [ ] 문서화
   - [ ] 구현 시작 전 ADR 작성 여부 결정
   - [ ] LeanRAG-style route가 default 후보가 될 경우 PRD/TASKS 갱신
-  - [ ] GNN 추천시스템 문서와 scope 충돌이 없도록 확인
+  - [ ] 추천 실험 폴더 문서와 scope 충돌이 없도록 확인
 
 ## Phase 6: FastAPI 엔드포인트
 
@@ -304,7 +304,7 @@
 > PRD §11.2~11.3 — 코드 구현 전 검수 우선. 이 Phase의 항목은 자동화/코드 작성 전에 계획과 기준을 승인받기 위한 체크리스트다.
 
 - [x] 검수 계획 승인
-  - [x] 대규모 운영검증 범위 확정 (1M 데이터, F10/F11/F12, Streamlit UI)
+  - [x] 대규모 운영검증 범위 확정 (1M 데이터, F10/F11/F12, Next.js 운영 UI)
   - [x] 검증 환경 명세 작성 (OS, Neo4j/GDS 버전, heap/pagecache, CPU/GPU, 데이터 크기)
   - [x] Go/No-Go 판정 기준 문서화
   - [x] `docs/phase19-f13-operational-readiness-plan.md` 초안 작성
@@ -322,11 +322,11 @@
   - [x] `/api/recommend/{uuid}` < 500ms 측정 절차 작성
   - [x] `/api/chat` < 3초 측정 절차 작성
   - [x] GDS/KNN/중심성 미준비 시 503/422 응답 검수 시나리오 작성
-- [x] Streamlit 운영 QA 계획
+- [x] Next.js 운영 QA 계획
   - [x] 핵심 인물 탭 empty/loading/error/stale state 검수 시나리오 작성
   - [x] 추천 섹션 empty/loading/error state 검수 시나리오 작성
   - [x] 대화형 탐색 탭 세션 분리/필터 누적/리셋 검수 시나리오 작성
-  - [x] 전체 데이터 기준 UI timeout 또는 rerun 문제 확인 절차 작성
+  - [x] 전체 데이터 기준 UI timeout, 상태 유지, 새로고침 문제 확인 절차 작성
 - [ ] 검수 리뷰
   - [ ] 운영검증 계획 Momus/Oracle 또는 동등 리뷰 요청
   - [ ] 리뷰 blocker 수정
@@ -339,7 +339,7 @@
 > PRD §11.4~11.5 — F12 MVP 이후 기능 확장을 코드 작성 전 계획/검수한다.
 
 - [x] 통합 챗봇 UX 전환 계획
-   - [x] 대화형 탐색을 Streamlit 메인 자연어 UX로 유지하는 화면 구조 정의
+   - [x] 대화형 탐색을 Next.js 메인 자연어 UX로 유지하는 화면 구조 정의
    - [x] 인사이트 질의를 별도 주 탭이 아닌 챗봇 내부 `고급 분석 모드`로 흡수하는 전환 방식 정의
    - [x] 고급 분석 진입 UX 결정 (토글/버튼/slash command/자동 intent 중 선택)
    - [x] `/api/chat` mode 확장 또는 내부 `/api/insight` 호출 중 API 통합 방식 결정
@@ -476,42 +476,270 @@
 
 ---
 
-## Phase 23: GNN Phase 2.5 결과 기반 추천 연동 검수 (F11)
+## Phase 23: 추천 모델 adapter/fallback 연동 검수 (F11)
 
-> PRD §2.1 F11, §11.4 — `GNN_Neural_Network/` 오프라인 추천 PoC 결과를 루트 추천 기능과 연동할지 검수한다. 코드 구현은 GNN 실험 결과 확정 이후에만 진행한다.
+> PRD §2.1 F11, §11.4 — 루트 추천 기능은 모델 실험을 수행하지 않는다. 이 Phase는 향후 확정된 취미 추천/유사 페르소나 추천 출력을 백엔드 API와 프론트엔드에서 소비하기 위한 제품 연동 계약만 검수한다.
+> Phase 23은 **구현 전 계약 승인 게이트**이며, 실제 F19~F23 제품 기능 구현 계획은 Phase 24에서 추적한다.
 
-- [x] Phase 2.5 및 최신 GNN decision artifact 결과 확인 (closed default: `popularity + cooccurrence -> LightGBM`, text/source/MMR/KURE Stage1 기본 비활성)
-  - [x] closed Phase 2.5 default test Recall@10 `0.709684`, NDCG@10 `0.447713` 확인
-  - [x] 50K canonical/fallback prepare-only refresh 확인 (`rare_item_policy=keep_with_fallback`, dropped_edges=0)
-  - [x] Phase 5-B2 feature-balance 결과 확인 (feature_fraction 0.7/0.8 모두 blocked, default change 없음)
-  - [x] KURE dense MMR, KURE text feature, KURE semantic Stage1 provider rejected/NO-GO 상태 확인
-  - [x] LightGBM regularization tuning 결과 확인
-  - [x] negative sampling ablation 결과 확인
-  - [x] source one-hot ablation 결과 확인
-  - [x] ranking collapse 완화 여부 확인 (coverage/novelty/recall 동시 검토)
-  - [x] Phase 2.5 default decision closure 기록
-  - [x] PRD §2.5 로그 거버넌스 규칙 준수 상태 확인 (새로운 실험 결과 반영)
-    - [x] 출력 채널 분리(`stdout` 요약, `stderr` 경고/에러)
-    - [x] 반복 로그 기본 비활성/요약 중심 정책 적용
-    - [x] `log_policy`가 상태 artifact에 남는지 확인
-- [x] 실험 결정 기록 확인
-   - [x] `GNN_Neural_Network/artifacts/experiment_decisions.json` 업데이트 여부 확인
-   - [x] `GNN_Neural_Network/artifacts/experiment_run_summary.md` 업데이트 여부 확인
-  - [x] default recommendation path 변경 여부 확인
-- [ ] F11 A/B 연동 계획
-  - [ ] 기존 Cypher 기반 추천과 GNN 기반 추천의 비교 지표 정의
-  - [ ] API 연동 방식 결정 (오프라인 artifact 조회, 별도 service, batch export 중 선택)
-  - [ ] fallback 정책 정의 (GNN artifact 미준비/누락/버전 불일치)
-  - [ ] 개인정보/누수 방지 기준 재확인 (text feature 기본 비활성 유지 여부 포함)
+- [x] 루트 추천 기능 범위 재확인
+  - [x] root `/api/recommend/{uuid}`는 모델 확정 전까지 Neo4j graph/rule fallback 기반으로 유지
+  - [x] 모델 평가 결과와 모델 선택 판단은 하위 실험 폴더에서만 관리
+  - [x] 루트 PRD/TASKS에는 API/UI/adapter/fallback 영향만 반영
+- [ ] F11 추천 adapter contract 정의
+  - [ ] 취미 추천 adapter interface 정의
+  - [ ] 유사 페르소나 reranker adapter interface 정의
+  - [ ] API 연동 방식 결정: batch export, artifact reader, 별도 service 중 선택
+  - [ ] 공통 응답 metadata 정의: `score_source`, `model_version`, `graph_snapshot_id`, `fallback_used`, `fallback_reason`
+- [ ] fallback 정책 정의
+  - [ ] artifact 미준비/누락/구버전/schema mismatch 처리
+  - [ ] 모델 점수 미사용 시 graph/rule 기반 추천과 reason 표시
+  - [ ] 실험 모델 점수는 기본 사용자 화면에 자동 혼합하지 않도록 guard 정의
+- [ ] 프론트엔드 상태 표시 계약
+  - [ ] `fallback | experimental | promoted` 상태별 표시 정책 정의
+  - [ ] 일반 사용자 화면에서는 모델 내부 메타데이터를 과도하게 노출하지 않도록 정책 정의
+  - [ ] 관리자/품질 화면에서만 상세 metric/source를 확인하는 정책 정의
 - [ ] 검수 게이트
-  - [ ] GNN 추천을 기본 경로로 승격할지, 실험 옵션으로 둘지 결정
+  - [ ] 모델 확정 전 구현 가능한 API/UI 작업과 모델 확정 후 작업 분리
   - [ ] 루트 `README.md`, `PRD.md`, `TASKS.md` 업데이트 필요 여부 확인
   - [ ] 구현 착수 승인 여부 기록
 
-### Phase 2.5 동기화 체크 (루트-하위 문서 정합)
+### 하위 추천 문서 라우팅 정합
 
-- [x] `GNN_Neural_Network/PRD.md` §Phase 2.5 로그/거버넌스 항목과 `GNN_Neural_Network/TASKS.md` 항목 정합성 점검
-- [x] Phase 2.5 current result snapshot 항목(2026-05-01)과 root PRD 반영 범위 일치 여부 점검
+- [x] 취미 추천 실험 계획/결과는 `GNN_Neural_Network/`에만 기록
+- [x] 유사 페르소나 추천 실험 계획/결과는 `experiments/persona_similarity/`에만 기록
+- [x] root 문서는 백엔드/프론트엔드 기능 구축과 운영 연동 계약만 추적
+
+---
+
+## Phase 24: 추천 UX 고도화 기능 구축 계획 (F19-F23)
+
+> PRD §11.9 — 현재 데이터/그래프/API를 활용해 백엔드와 프론트엔드에 추가할 추천 관련 제품 기능. 모델 학습 실험은 각 실험 폴더에서 계속 관리하고, 이 Phase는 제품 API/UI 구현 범위만 추적한다.
+>
+> 모델 상태: 취미 추천 모델과 유사 페르소나 reranker는 아직 제품 기본 모델로 확정하지 않는다. Phase 24는 모델/가중치가 확정되기 전에도 동작하는 fallback API/UI와, 향후 확정된 모델 출력을 연결할 adapter contract를 먼저 구축하는 계획이다.
+> Phase 24 구현은 Phase 23의 공통 adapter/fallback 계약을 재정의하지 않고, 승인된 계약을 각 제품 기능에 적용한다.
+
+### Phase 24-A: 모델 연동 공통 계약
+
+- [ ] 공통 recommendation model status 정의
+  - [ ] `fallback`: 모델 artifact/가중치 미확정 또는 미준비
+  - [ ] `experimental`: 실험 모델은 있으나 제품 승격 전
+  - [ ] `promoted`: decision artifact에서 제품 후보로 승인
+- [ ] 공통 응답 metadata 정의
+  - [ ] `score_source`: `fallback | experimental | promoted`
+  - [ ] `model_version`
+  - [ ] `artifact_path`
+  - [ ] `graph_snapshot_id`
+  - [ ] `fallback_used`
+  - [ ] `fallback_reason`
+- [ ] Backend adapter contract 수립
+  - [ ] 취미 추천 adapter interface 정의
+  - [ ] 유사 페르소나 reranker adapter interface 정의
+  - [ ] artifact missing/schema mismatch/version mismatch fallback 정책 정의
+  - [ ] 실험 모델 점수는 기본 사용자 화면에 자동 혼합하지 않도록 guard 추가
+- [ ] Frontend model status UX 정의
+  - [ ] 모델 미준비 상태를 오류가 아니라 “기본 그래프 기반 추천/설명”으로 표시
+  - [ ] experimental/promoted badge 표시 정책 정의
+  - [ ] score/model metadata는 일반 사용자에게 과도하게 노출하지 않고 상세/관리자 영역에 표시
+
+### F19: 유사 페르소나 이유 기반 필터/정렬
+
+- [ ] Backend API 설계 확정
+  - [ ] `GET /api/persona/{uuid}/similar` 신규 추가 또는 기존 profile API 확장 방식 결정
+  - [ ] query params 정의: `top_k`, `reason`, `exclude_weak_only`, `sort`
+  - [ ] 응답 schema 정의: `reason_strength`, `reason_categories`, `reasons[]`, `weak_only`
+- [ ] Backend 구현
+  - [ ] `src/api/schemas.py`에 유사 페르소나 reason/filter 응답 모델 추가
+  - [ ] `src/api/routes/persona.py` 또는 별도 route에 유사 페르소나 목록 API 구현
+  - [ ] 기존 similarity explanation 로직을 재사용해 reason category 계산
+  - [ ] 기본 구현은 `SIMILAR_TO` + post-hoc reason 기반 fallback으로 동작
+  - [ ] 향후 persona_similarity 모델 promotion 시 adapter score를 연결할 수 있게 score provider 경계 분리
+  - [ ] weak-only 후보 판정 로직 구현
+  - [ ] `sort=similarity | reason_strength | diversity` 정렬 구현
+- [ ] Frontend 구현
+  - [ ] 프로필 상세 유사 페르소나 섹션에 reason filter chips 추가
+  - [ ] “약한 근거만 있는 후보 숨기기” toggle 추가
+  - [ ] 유사 페르소나 카드에 reason summary와 상세보기 버튼 표시
+- [ ] Tests
+  - [ ] API 단위 테스트: 존재하지 않는 UUID, 빈 후보, reason filter, weak-only filter
+  - [ ] Frontend smoke: 필터 변경 시 목록 갱신
+
+### F20: 커뮤니티 프로파일링
+
+- [ ] Backend API 설계 확정
+  - [ ] `GET /api/communities/{community_id}/profile` contract 정의
+  - [ ] query params 정의: `sample_size`, `include_text_summary`
+  - [ ] 응답 schema 정의: 대표 속성, 분포, 대표 페르소나, summary
+- [ ] Backend 구현
+  - [ ] community별 top province/district/occupation/education/hobby 쿼리 작성
+  - [ ] age/sex distribution 쿼리 작성
+  - [ ] representative_personas sampling 쿼리 작성
+  - [ ] empty community / missing community_id 처리
+  - [ ] 필요 시 community profile cache 또는 제한된 top-N 쿼리 적용
+- [ ] Frontend 구현
+  - [ ] 프로필 상세에 “소속 커뮤니티 요약” 패널 추가
+  - [ ] community_id 클릭 시 profile drawer/modal 표시
+  - [ ] 커뮤니티 프로필 페이지 또는 대시보드 섹션 추가
+- [ ] Tests
+  - [ ] API 단위 테스트: valid community, empty community, invalid id
+  - [ ] 응답 시간 smoke: top-N 쿼리 과도한 full scan 방지
+
+### F21: 취미 추천 이유 카드
+
+- [ ] Backend API 설계 확정
+  - [ ] `GET /api/recommend/{uuid}` 응답 확장 방식 결정
+  - [ ] 추천 item에 `sources`, `reason_cards[]`, `model_version`, `score_source`, `fallback_used` 추가
+- [ ] Backend 구현
+  - [ ] 모델 확정 전 기본 구현은 graph/rule fallback 추천 이유만 제공
+  - [ ] 기존 추천 로직에서 graph_frequency/similar_person/popularity/cooccurrence source 정보 계산
+  - [ ] 기존 보유 취미 중복 제외 여부 테스트
+  - [ ] 하위 추천 폴더의 decision metadata를 읽을 경우 adapter 경계와 fallback 정책 정의
+  - [ ] 모델 출력 미준비 시 기존 Cypher/SIMILAR_TO 기반 추천으로 fallback
+  - [ ] `score_source=fallback` 상태에서는 모델 승격 표현을 reason card에 표시하지 않음
+- [ ] Frontend 구현
+  - [ ] 추천 카드에 이유 1~3개 compact 표시
+  - [ ] 상세 펼침에서 source별 근거 표시
+  - [ ] 이미 보유한 취미는 제외 또는 disabled 표시
+- [ ] Tests
+  - [ ] API 단위 테스트: reason_cards 존재, 중복 추천 제외, artifact 미준비 fallback
+  - [ ] Frontend smoke: 추천 카드 reason 표시
+
+### F22: 비슷하지만 다른 페르소나 탐색
+
+- [ ] Backend API 설계 확정
+  - [ ] `GET /api/persona/{uuid}/similar-diverse` contract 정의
+  - [ ] query params 정의: `top_k`, `diversity_axis`, `min_reason_strength`
+  - [ ] 응답 schema 정의: `similarity_score`, `diversity_score`, `contrast_reason`
+- [ ] Backend 구현
+  - [ ] base 후보는 `SIMILAR_TO` 또는 F19 fallback 후보 목록 재사용
+  - [ ] 향후 persona_similarity 모델 promotion 시 adapter score를 연결할 수 있게 경계 분리
+  - [ ] occupation/location/community/demographic 반복 penalty 구현
+  - [ ] strong reason 없는 후보 제외 또는 감점
+  - [ ] contrast reason 생성: “직업은 다르지만 공유 취미가 있음” 등
+- [ ] Frontend 구현
+  - [ ] 프로필 상세 유사 페르소나 섹션에 “비슷하지만 다른 사람” 탭 추가
+  - [ ] diversity axis segmented control 추가
+  - [ ] 카드에 공통점과 차이점 동시 표시
+- [ ] Tests
+  - [ ] API 단위 테스트: diversity axis별 정렬 변화
+  - [ ] 동일 직업/지역 반복률이 기본 유사 목록보다 낮아지는지 smoke metric 확인
+
+### F23: 추천 품질 대시보드
+
+- [ ] Backend API 설계 확정
+  - [ ] `GET /api/recommendation/quality` contract 정의
+  - [ ] query params 정의: `target`, `split_or_scope`, `limit`
+  - [ ] 응답 schema 정의: coverage, diversity, hub target, weak-only, manual samples
+- [ ] Backend 구현
+  - [ ] 취미 추천 decision/metric source reader 구현(read-only)
+  - [ ] 유사 페르소나 decision/metric source reader 구현(read-only)
+  - [ ] 현재 Neo4j DB 기반 fallback 집계 구현
+  - [ ] artifact 없음/구버전/파싱 실패 empty state 구현
+- [ ] Frontend 구현
+  - [ ] 관리자/실험 탭에 추천 품질 대시보드 추가
+  - [ ] hobby/persona_similarity target toggle 추가
+  - [ ] metric cards, repeated target table, manual review sample table 구성
+- [ ] Tests
+  - [ ] API 단위 테스트: artifact 있음/없음, target별 응답 구조
+  - [ ] Frontend smoke: metric card와 table 렌더링
+
+### Phase 24 공통 게이트
+
+- [ ] root `PRD.md` §11.9와 구현 범위 정합성 점검
+- [ ] API schema가 Swagger UI에서 확인 가능
+- [ ] empty/loading/error UX 문구 정의
+- [ ] 추천 관련 API가 LLM 호출 없이 기본 응답 가능
+- [ ] LLM summary를 쓰는 경우 evidence/source를 함께 반환
+- [ ] `model_version`, `score_source`, `graph_snapshot_id` 중 적용 가능한 metadata를 응답에 포함
+- [ ] 취미 추천/유사 페르소나 모델 미확정 상태에서 fallback 동작 확인
+- [ ] 모델 출력이 없어도 사용자 화면이 오류 없이 동작
+- [ ] 신규 API 테스트 추가
+- [ ] 프론트엔드 smoke 테스트 또는 Playwright 확인
+- [ ] root `README.md` 업데이트 필요 여부 확인
+
+---
+
+## Phase 25: RAG/챗봇 관측성 구축 계획 (F24)
+
+> PRD §11.10 — LangSmith/Phoenix 계열 도구는 모델 실험이 아니라 RAG/챗봇 제품 기능의 디버깅·관측성 계층이다. 초기 구현은 내부 trace interface를 먼저 만들고, 외부 도구 adapter는 opt-in으로 둔다.
+
+- [ ] 관측성 도구 선택 기준 확정
+  - [ ] Phoenix 우선 검토: self-host/local trace, RAG retrieval 평가, embedding 검색 품질 확인
+  - [ ] LangSmith 선택 조건 정의: LangChain/LangGraph hosted trace와 prompt/run 관리가 필요할 때
+  - [x] Python 의존성 반영: `langsmith`, `arize-phoenix-otel`, `arize-phoenix-client`, `opentelemetry-sdk`
+  - [ ] 기본값 `tracing_enabled=false` 및 환경변수 기반 enable/disable 정책 정의
+  - [ ] 원문 질문/prompt/응답/embedding payload 저장 여부와 redaction 정책 정의
+  - [ ] trace 보존 기간, 저장 위치, 삭제 절차 정의
+- [ ] Backend trace interface 설계
+  - [ ] `TraceSink` protocol/interface 정의
+  - [ ] `NoopTraceSink` 기본값 구현
+  - [ ] Phoenix adapter 또는 LangSmith adapter 중 1개를 opt-in 구현 후보로 정의
+  - [ ] trace_id/session_id/run_id 전파 방식 정의
+- [ ] RAG/챗봇 span 계측
+  - [ ] `src/rag/router.py`: request, intent classification, route decision span
+  - [ ] `src/rag/cypher_chain.py`: Cypher 생성/실행/결과 count span
+  - [ ] `src/rag/vector_chain.py`: vector search query/result span
+  - [ ] `src/rag/llm.py`: prompt build, LLM call, token/latency/error span
+  - [ ] fallback/error span 표준화
+- [ ] Admin API 설계
+  - [ ] `GET /api/admin/rag/traces` contract 정의
+  - [ ] `GET /api/admin/rag/traces/{trace_id}` contract 정의
+  - [ ] trace list pagination/filter 정의: route, status, latency, error_type
+  - [ ] 관리자/개발자 전용 guard 정책 정의 (로컬 개발 모드 예외 여부 포함)
+- [ ] Frontend 구현 계획
+  - [ ] 관리자/개발자 탭에 trace list 추가
+  - [ ] trace detail drawer: 질문, route, 검색 결과, prompt summary, 응답, latency breakdown
+  - [ ] error/fallback badge 표시
+  - [ ] 일반 사용자 화면에는 trace detail 미노출
+- [ ] Tests
+  - [ ] tracing disabled 상태에서 기존 API 응답 변화 없음
+  - [ ] LLM 실패/Neo4j 실패/vector 빈 결과 fallback trace 검증
+  - [ ] trace 저장 중 오류가 API 응답을 깨지 않음
+  - [ ] redaction enabled 상태에서 prompt/응답/검색 결과의 민감값이 저장되지 않음
+  - [ ] 비인가 상태에서 admin trace API 접근이 차단되거나 로컬 모드에서만 명시 허용됨
+
+---
+
+## Phase 26: 분석 시각화 고도화 구축 계획 (F25)
+
+> PRD §11.10 — ECharts/D3는 프론트엔드 분석 시각화 도구다. 대시보드형 차트는 ECharts를 우선 사용하고, D3는 F9 같은 커스텀 관계망 화면에 제한적으로 사용한다.
+
+- [ ] 라이브러리 도입 기준 확정
+  - [ ] ECharts 우선 적용 화면 정의: F6, F8, F20, F23
+  - [ ] D3 제한 적용 화면 정의: F9 graph/network view
+  - [x] Frontend 의존성 반영: `echarts`, `d3`, `@types/d3`
+  - [ ] bundle size와 SSR/client component 경계 확인
+  - [ ] 기존 frontend 디자인 시스템과 색상/legend/tooltip 규칙 정의
+- [ ] 공통 chart component 설계
+  - [ ] ECharts wrapper component 작성 계획
+  - [ ] 공통 loading/empty/error state 정의
+  - [ ] 긴 한글 label 처리, tooltip, legend, responsive height 규칙 정의
+  - [ ] chart data schema: `series`, `categories`, `metrics`, `metadata`
+- [ ] F6 인구통계 대시보드 개선
+  - [ ] 연령/성별/지역/직업/취미 분포 차트 적용
+  - [ ] top-k ranking chart와 drilldown interaction 정의
+  - [ ] 기존 table/card와 chart 병행 표시 여부 결정
+  - [ ] age/sex/province + top occupation/hobby/skill 중 최소 3개 이상 차트 완료 기준 정의
+- [ ] F8 세그먼트 비교 시각화 개선
+  - [ ] segment별 분포 비교 chart 적용
+  - [ ] ratio difference 또는 lift chart 적용
+  - [ ] segment filter 변경 시 chart 갱신 검증
+  - [ ] empty segment 또는 결과 0건일 때 빈 차트 대신 안내 문구 표시 기준 정의
+- [ ] F9 서브그래프 시각화 개선
+  - [ ] D3 force-directed graph 적용 여부 검토
+  - [ ] node/edge type legend, depth filter, selected node state 정의
+  - [ ] max node/edge limit과 sampling 정책 UI 표시
+  - [ ] ECharts로 대체 가능한 범위와 D3가 필요한 커스텀 상호작용 범위 분리
+- [ ] F20/F23 신규 화면 시각화
+  - [ ] community profile attribute distribution chart
+  - [ ] recommendation quality metric chart
+  - [ ] repeated target table과 chart 병행 구성
+  - [ ] F20 empty community / community_id 없음 fallback 표시 기준 정의
+  - [ ] F23 metric source 없음 empty state와 coverage/diversity/hub/weak-only 표시 기준 정의
+- [ ] Tests
+  - [ ] 차트 empty/loading/error 렌더링 smoke
+  - [ ] 모바일 폭에서 label/tooltip overlap 확인
+  - [ ] Playwright screenshot으로 주요 chart nonblank 확인
+  - [ ] 각 대상 화면(F6/F8/F9/F20/F23)의 최소 완료 기준 체크리스트 통과
 
 ---
 
@@ -623,14 +851,11 @@
   - [x] 결과 0건 세그먼트 → count: 0 + 빈 분포
   - [x] LLM 실패 시 ai_analysis 빈 문자열
 
-## Phase 14: Phase 2 통합 테스트 및 Streamlit 확장
+## Phase 14: Phase 2 통합 테스트 및 Legacy Streamlit 확장 이력
 
 - [x] 5개 신규 엔드포인트 Swagger UI 일괄 확인
-- [ ] Streamlit UI에 신규 기능 탭 추가
-  - [ ] 검색/필터 UI (다중 조건 입력 + 결과 테이블)
-  - [ ] 대시보드 UI (차트/그래프 시각화)
-  - [ ] 프로필 상세 UI (클릭 → 전체 프로필 표시)
-  - [ ] 세그먼트 비교 UI (두 그룹 선택 → 비교 차트 + AI 해석)
-  - [ ] 그래프 시각화 UI (인터랙티브 네트워크 그래프)
-- [ ] Phase 2 엔드투엔드 테스트 (검색 → 프로필 클릭 → 그래프 탐색 전체 흐름)
+- [x] Streamlit UI 확장 항목은 현재 운영 범위에서 제외
+  - [x] 기존 Streamlit 프론트 코드는 삭제되었고, 운영 프론트는 `frontend/` Next.js로 전환됨
+  - [x] 검색/필터, 대시보드, 프로필 상세, 세그먼트 비교, 그래프 시각화는 Next.js 운영 프론트 기준으로 추적
+- [ ] Phase 2 엔드투엔드 테스트 (Next.js 검색 → 프로필 클릭 → 그래프 탐색 전체 흐름)
 - [ ] 성능 테스트 (검색/필터 응답 < 2초, 대시보드 부하 테스트)

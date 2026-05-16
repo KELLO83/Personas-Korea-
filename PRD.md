@@ -30,13 +30,13 @@ NVIDIA Nemotron-Personas-Korea의 100만 한국인 페르소나 데이터를 Neo
 | **Phase 1** | GraphRAG 인사이트, 유사 페르소나 매칭, 커뮤니티 탐지, 관계 경로 | ✅ 완료 | `docs/prd-archive/prd-v1.0-phase1.md` |
 | **Phase 2** | 검색/필터(F5), 통계 대시보드(F6), 프로필 상세(F7), 세그먼트 비교(F8), 서브그래프 시각화(F9) | ✅ 완료 | `docs/prd-archive/prd-v1.5-phase2.md` |
 | **Phase 3** | 네트워크 영향력(F10), 추천 엔진(F11), 대화형 챗봇(F12) | ✅ 핵심 구현 완료 | 본 문서 §3~5 |
-| **Phase 4** | 대규모 운영검증(F13), 확장/고도화(F14), 챗봇 LLM 합성(F15), Target Persona Generator(F16), Cross-domain Lifestyle Map(F17), Career Transition Map(F18) | 📝 계획/선택 구현 | 본 문서 §11 |
+| **Phase 4** | 대규모 운영검증(F13), 확장/고도화(F14), 챗봇 LLM 합성(F15), Target Persona Generator(F16), Cross-domain Lifestyle Map(F17), Career Transition Map(F18), 추천 UX 고도화(F19~F23), RAG 관측성(F24), 분석 시각화(F25) | 📝 계획/선택 구현 | 본 문서 §11 |
 
 ### 1.4 개인 프로젝트 예외 규칙
 
 - **적용 대상:** 본 저장소는 개인 실험용/연구용으로 운영, 즉 배포/대규모 서비스 운영은 기본 전제가 아닙니다.
 - **필수 유지:** Phase 1~3의 기본 기능(검색/필터/그래프 분석/추천/챗봇 기본)을 중심으로 기능 완전성만 관리합니다.
-- **선택 항목:** F13~F18은 **요구 기능(구현 선택사항)** 입니다. 필요시 구현하고, 불필요하면 생략해도 PRD 위반으로 간주하지 않습니다.
+- **선택 항목:** F13~F25는 **요구 기능(구현 선택사항)** 입니다. 필요시 구현하고, 불필요하면 생략해도 PRD 위반으로 간주하지 않습니다.
 - **실행 우선순위:** 운영 SLA, 장애주입, Go/No-Go, runbook, 장기 운영 상태 API 등은 현재 모드에서는 `계획 참고`로 분류합니다.
 
 ### 1.5 검수 이력 (Review History)
@@ -75,6 +75,13 @@ NVIDIA Nemotron-Personas-Korea의 100만 한국인 페르소나 데이터를 Neo
 | **F16** | **Target Persona Generator** | 신규 | **4** | 📝 | **조건 기반 유사 페르소나 텍스트 LLM 합성** |
 | **F17** | **Cross-domain Lifestyle Map** | 신규 | **4** | 📝 | **7개 domain persona 텍스트 간 상관관계 통계** |
 | **F18** | **Career Transition Map** | 신규 | **4** | 📝 | **직업·목표·스킬 교차 분석** |
+| **F19** | **유사 페르소나 이유 기반 필터/정렬** | `GET /api/persona/{uuid}/similar` 확장 | **4** | 📝 | **설명 feature, 기존 유사도 점수, post-hoc reason scoring** |
+| **F20** | **커뮤니티 프로파일링** | `GET /api/communities/{id}/profile` | **4** | 📝 | **Leiden community, 대표 속성/문장/페르소나 요약** |
+| **F21** | **취미 추천 이유 카드** | `GET /api/recommend/{uuid}` 확장 | **4** | 📝 | **모델 adapter, 후보/근거 metadata, fallback 추천** |
+| **F22** | **비슷하지만 다른 페르소나 탐색** | `GET /api/persona/{uuid}/similar-diverse` | **4** | 📝 | **diversity rerank, contrastive reason, demographic-only penalty** |
+| **F23** | **추천 품질 대시보드** | `GET /api/recommendation/quality` | **4** | 📝 | **coverage/diversity/hub rate/manual review metrics** |
+| **F24** | **RAG/챗봇 관측성** | traces / admin debug view | **4** | 📝 | **LangSmith/Phoenix 선택 연동, trace, prompt, retrieval evidence** |
+| **F25** | **분석 시각화 고도화** | frontend chart/graph library | **4** | 📝 | **ECharts dashboard, D3 custom graph view** |
 
 ---
 
@@ -177,9 +184,9 @@ class CentralityBatchJob:
 - **연결성 정의**: `largest_component_size / total_subgraph_nodes`를 connectivity로 사용합니다.
 
 ### 3.5 Frontend Changes
-- **"핵심 인물" 탭 추가** (Streamlit)
-  - 중심성 지표 라디오 버튼 (PageRank / Betweenness / Degree)
-  - 상위 20인 테이블 + Plotly bar chart
+- **운영 프론트(Next.js) 기준 "핵심 인물" 화면 추가**
+  - 중심성 지표 선택 UI (PageRank / Betweenness / Degree)
+  - 상위 20인 테이블 + chart component
   - 마지막 계산 시간 표시 ("마지막 갱신: 2026-04-28 02:00")
   - 노드 클릭 → 제거 시뮬레이션 팝업 (max 5개 선택)
 
@@ -206,11 +213,10 @@ class CentralityBatchJob:
 - **성공 지표**:
    - API 응답 시간 < 500ms (템플릿 기반 reasoning)
    - 추천 정확도: 유사 페르소나의 70%+가 해당 속성 보유
-- **오프라인 GNN 추천 PoC 상태**: `GNN_Neural_Network/`의 최신 decision artifact 기준, 기본 추천 경로는 `Stage 1 = popularity + cooccurrence`, `Stage 2 = LightGBM learned ranker`, `include_source_features=false`, `include_text_embedding_feature=false`, `MMR=false`로 닫혀 있다.
-- **현재 내부 SOTA 기준**: closed Phase 2.5 default는 `GNN_Neural_Network/artifacts/experiments/phase2_5_num_leaves_31/ranker_model.txt`이며, test 기준 Recall@10 `0.709684`, NDCG@10 `0.447713`을 기록했다. 이는 LightGCN 단독 및 Stage1 baseline보다 높다.
-- **F11 연동 상태**: root `/api/recommend/{uuid}`는 현재 Cypher/SIMILAR_TO 기반 템플릿 추천 API로 유지한다. GNN 기반 추천의 root F11 기본 경로 승격 여부는 `TASKS.md` Phase 23의 A/B 연동 계획과 fallback 정책을 먼저 확정한 뒤 결정한다.
-- **KURE/semantic 실험 상태**: KURE dense MMR, KURE text embedding feature, KURE semantic Stage1 provider는 모두 기본 승격에 실패했거나 NO-GO로 기록되어 있다. 향후 embedding 실험은 opt-in, validation-first, leakage-audit, cold-start 비교를 통과해야 하며 기본 경로를 변경하지 않는다.
-- **데이터 품질 상태**: 50K local slice는 `rare_item_policy=keep_with_fallback` 기준으로 prepare-only artifact가 갱신되었고, taxonomy over-merge는 warning으로 기록되었으나 default-changing blocker는 아니다. 세부 결정은 `GNN_Neural_Network/artifacts/experiment_decisions.json` 및 `experiment_run_summary.md`를 따른다.
+- **루트 제품 범위**: root `/api/recommend/{uuid}`는 모델 확정 전까지 Neo4j graph/rule fallback 기반 템플릿 추천 API로 유지한다.
+- **실험 범위 분리**: 취미 추천 모델의 평가 결과와 모델 선택 판단은 `GNN_Neural_Network/`에서만 관리한다.
+- **F11 연동 상태**: 루트 PRD는 모델 실험을 정의하지 않고, 향후 확정된 추천 모델을 연결할 adapter contract, fallback 정책, API/UI 상태 표시만 정의한다.
+- **데이터/품질 상태**: 추천 데이터 품질 및 모델 승격 근거는 하위 실험 폴더의 decision metadata를 source of truth로 삼고, 루트 문서에는 API 동작 또는 프론트 화면에 영향을 주는 계약만 반영한다.
 
 ### 4.2 아키텍처 결정 (ADR-002 반영)
 ⚠️ **추천 사유(Reasoning)는 LLM 동기 호출 금지 → 템플릿 기반**
@@ -453,7 +459,7 @@ CREATE INDEX district_key FOR (d:District) ON (d.key);
 
 운영 원칙:
 - 배치/재계산 작업은 FastAPI request-response 경로에서 실행하지 않습니다.
-- Streamlit UI는 GDS 재생성/배치 실행을 직접 트리거하지 않습니다.
+- 운영 프론트(Next.js)는 GDS 재생성/배치 실행을 직접 트리거하지 않습니다.
 - 스케줄러는 앱 프로세스와 분리된 외부 프로세스(Windows Task Scheduler, cron, 또는 독립 실행 스크립트)를 우선합니다.
 - UI는 상태 조회와 polling만 수행합니다.
 
@@ -581,7 +587,7 @@ CREATE INDEX person_degree IF NOT EXISTS FOR (p:Person) ON (p.degree);
 추가 UX 규칙:
 - F10 시뮬레이션은 세션당 1개 작업만 진행 중일 수 있습니다.
 - F10 시뮬레이션 선택 노드는 취소/초기화 버튼으로 모두 해제할 수 있어야 합니다.
-- Streamlit rerun 이후에도 선택된 중심성 metric, 선택 노드, 챗봇 필터 chip은 `st.session_state`로 유지합니다.
+- Next.js 화면 전환/새로고침 이후에도 필요한 선택 상태는 React state, URL query, local/session storage 중 하나로 명시적으로 보존합니다.
 - 사용자-facing 문구는 한국어를 기본으로 하며, `Last updated` 대신 `마지막 갱신`을 사용합니다.
 
 ---
@@ -596,7 +602,7 @@ CREATE INDEX person_degree IF NOT EXISTS FOR (p:Person) ON (p.degree);
 ### 11.1 목표
 
 - [개인 모드 기본 제외] 1M 전체 데이터 기준으로 Phase 3 기능의 운영 가능성을 의무적으로 검증하지 않습니다.
-- [개인 모드 기본 제외] 배치 작업, API SLA, Streamlit UX, 장애/롤백 기준을 운영 환경 기준으로 강제 점검하지 않습니다.
+- [개인 모드 기본 제외] 배치 작업, API SLA, Next.js 운영 UX, 장애/롤백 기준을 운영 환경 기준으로 강제 점검하지 않습니다.
 - 필요 시 F12 챗봇을 추천·영향력·프로필 orchestration으로 확장할 수 있습니다.
 - 구현 전 검수 산출물(PRD, 체크리스트, runbook, QA 시나리오, Go/No-Go 기준)은 배포 시에만 필수입니다.
 
@@ -612,7 +618,7 @@ CREATE INDEX person_degree IF NOT EXISTS FOR (p:Person) ON (p.degree);
 | API SLA | `/api/influence/top`, `/api/recommend/{uuid}`, `/api/chat` | 각각 < 100ms, < 500ms, < 3초 목표 | smoke 결과표 |
 | 스케줄러 | Windows Task Scheduler/cron 운영 | 앱 프로세스와 분리, 실패 재시도/로그 확인 | 운영 runbook |
 | 장애 대응 | GDS/KNN/중심성 미준비 상태 | 사용자 API에서 전체 재계산 금지, 503/stale 경고 | 장애 시나리오표 |
-| UI QA | Streamlit F10/F11/F12 흐름 | empty/loading/error state 한국어 표시 | QA 체크리스트 |
+| UI QA | Next.js F10/F11/F12 흐름 | empty/loading/error state 한국어 표시 | QA 체크리스트 |
 
 ### 11.3 운영검증 절차
 
@@ -622,7 +628,7 @@ CREATE INDEX person_degree IF NOT EXISTS FOR (p:Person) ON (p.degree);
 2. **환경 고정**: Neo4j heap/pagecache, GDS 버전, 데이터 크기, GPU/CPU 환경을 기록합니다.
 3. **데이터 준비 검증**: Person/관계/SIMILAR_TO/중심성 속성의 기준 수량을 확인합니다.
 4. **배치 벤치마크**: PageRank, Degree, Betweenness를 독립 실행하고 run_id별 결과를 보존합니다.
-5. **API/UI smoke**: 신규 API와 Streamlit 주요 흐름을 전체 데이터 기준으로 확인합니다.
+5. **API/UI smoke**: 신규 API와 Next.js 주요 흐름을 전체 데이터 기준으로 확인합니다.
 6. **장애 주입 검수**: projection 없음, SIMILAR_TO 없음, stale batch, timeout 상황의 응답을 확인합니다.
 7. **Go/No-Go 판정**: 모든 P0 기준 통과 시 구현/자동화 단계로 넘어갑니다.
 
@@ -637,14 +643,21 @@ CREATE INDEX person_degree IF NOT EXISTS FOR (p:Person) ON (p.degree);
 | P1 | 운영 상태 API/화면 | batch run_id, last_success_at, stale 여부를 UI에서 확인 | SystemStatus 저장 정책 |
 | P2 | LLM 기반 필터 추출 | regex를 Pydantic structured output으로 보강 | golden set, hallucination guardrail |
 | P2 | 고급 추천 스코어링 | 중심성/커뮤니티/유사도 가중치 혼합 | F10/F11 교차 검증 |
+| P2 | 유사 페르소나 이유 기반 필터/정렬 | 유사 후보를 직업/지역/교육/취미/문장 유사도 등 이유별로 필터링하고 약한 근거 후보를 낮춤 | F7 프로필 상세, similarity explanation API |
+| P2 | 커뮤니티 프로파일링 | `community_id`별 대표 속성, 대표 취미, 대표 페르소나, 집단 요약을 제공 | F3 community_id, F6 stats |
+| P2 | 취미 추천 이유 카드 | `/api/recommend/{uuid}` 결과에 후보 출처와 근거를 카드 형태로 제공. 모델 확정 전에는 fallback/graph 기반 근거만 표시 | F11 추천 API, 추천 adapter contract |
 | P2 | 비동기 장기 작업 | removal simulation/Betweenness를 job queue로 분리 | job status API 설계 |
 | P2 | 관측성 강화 | metrics, structured logs, alerting | 운영 로그 표준 |
-| P2 | GNN Phase 2.5 연동 | GNN closed default(`popularity + cooccurrence -> LightGBM`)는 `GNN_Neural_Network/` decision artifacts를 source of truth로 유지한다. Root F11 기본 경로 승격은 `TASKS.md` Phase 23에서 A/B 지표, artifact 조회 방식, fallback 정책을 확정한 뒤 검토한다. | GNN 문서 및 Phase 23 참조 |
+| P2 | RAG/챗봇 관측성 | 사용자 질문, intent, 검색 결과, 프롬프트, LLM 응답, latency, error trace를 추적 | F12/F15, tracing backend 선택 |
+| P2 | 추천 모델 adapter/fallback 연동 | 취미 추천과 유사 페르소나 추천 모델은 하위 실험 폴더에서 결정하고, 루트는 API adapter, fallback 정책, UI 상태 표시만 구현한다. | Phase 23/24 참조 |
 | P2 | Country 노드 제거 | `Country` 노드는 1개 값(`대한민국`)으로 정보량 0. 그래프에서 제거하고 District→Province 직접 연결로 단순화 | Schema 협의 |
 | P2 | MilitaryStatus/bachelors_field 노드 검토 | `MilitaryStatus`(분산 낮음), `bachelors_field`(`해당없음` 비중 높음) 불필요한 노드 정리 | 데이터 분포 분석 |
 | P3 | Target Persona Generator | 입력 조건(연령/지역/직업 등)과 일치하는 페르소나 5~10명의 텍스트를 KURE 검색 + LLM 합성으로 대표 프로필 생성 | `similar.py`, KURE vector index |
 | P3 | Cross-domain Lifestyle Map | 7개 domain persona 텍스트 간 통계 상관관계 시각화 (예: sports_persona 언급 X → culinary_persona 언급 Y 확률) | Persona text 7개 필드 |
 | P3 | Career Transition Map | `occupation` + `career_goals_and_ambitions` + `skills_and_expertise_list` 교차 분석으로 직무 전환 패턴 도출 | occupation(500+ class), goals, skills |
+| P3 | 비슷하지만 다른 페르소나 탐색 | 유사하지만 직업/지역/커뮤니티가 과도하게 반복되지 않는 discovery 추천 | F2 SIMILAR_TO, F19 reason scoring |
+| P3 | 추천 품질 대시보드 | coverage, diversity, hub target, weak-only 비율, manual review sample을 내부 화면에서 확인 | 추천 metric source, F11/F19 |
+| P3 | 분석 시각화 고도화 | 통계/품질/커뮤니티/그래프 화면을 ECharts와 D3 기반으로 개선 | F6/F9/F20/F23 |
 
 ### 11.5 구현 전 검수 게이트
 
@@ -808,7 +821,7 @@ CREATE INDEX person_degree IF NOT EXISTS FOR (p:Person) ON (p.degree);
 
 ## 11.8 향후 LeanRAG-style Graph RAG 확장 계획
 
-> **범위 구분**: 이 계획은 root Graph RAG/챗봇/insight API 품질 개선용이다. `GNN_Neural_Network/`의 취미 추천 모델 학습, LightGCN/LightGBM 실험, KURE 추천 feature 실험과는 별도 트랙으로 관리한다. 현재 우선순위는 GNN 추천시스템 개발이며, 본 섹션은 향후 구현 전 계획이다.
+> **범위 구분**: 이 계획은 root Graph RAG/챗봇/insight API 품질 개선용이다. 추천 모델 학습과 모델 비교 실험은 하위 실험 폴더의 별도 트랙으로 관리하며, 본 섹션은 향후 구현 전 제품 기능 계획이다.
 
 ### 11.8.1 배경
 
@@ -992,6 +1005,353 @@ Rebuild trigger:
 
 stale summary는 default route에서 사용하지 않는다. 단, experimental route에서는 stale 여부를 source metadata에 표시한 뒤 사용할 수 있다.
 
+## 11.9 F19-F23: 추천 UX 고도화 기능 계획
+
+> **범위 구분**: 이 섹션은 백엔드 API와 프론트엔드 화면에 추가할 제품 기능 계획이다. 모델 학습 실험 자체는 `GNN_Neural_Network/`와 `experiments/persona_similarity/`에서 계속 관리한다. 루트 PRD는 확정된 추천 출력을 제품 화면/API에서 소비하기 위한 계약만 정의한다.
+>
+> **모델 상태 원칙**: 취미 추천 모델과 유사 페르소나 reranker는 아직 제품 기본 모델로 확정하지 않는다. 본 섹션의 구현은 모델/가중치 확정 전에도 동작하는 graph/rule fallback과, 향후 확정된 모델 출력을 연결할 adapter/API contract를 먼저 수립하는 것이다.
+
+### 11.9.1 우선순위
+
+현재 데이터와 구현 상태 기준 권장 순서는 다음과 같다.
+
+| 우선순위 | 기능 | 이유 |
+|:---:|:---|:---|
+| P0 | F19 유사 페르소나 이유 기반 필터/정렬 | 이미 similarity explanation API와 공통 속성 feature가 있어 구현 효율이 가장 높음 |
+| P0 | F20 커뮤니티 프로파일링 | `community_id`, GDS Leiden, 통계 쿼리를 바로 활용 가능 |
+| P1 | F21 취미 추천 이유 카드 | 추천 결과 신뢰도와 설명가능성을 높임. 향후 확정된 취미 추천 adapter와 연결 |
+| P1 | F22 비슷하지만 다른 페르소나 탐색 | 유사 추천이 지역/직업/커뮤니티에 과도하게 몰리는 문제를 완화 |
+| P2 | F23 추천 품질 대시보드 | 운영/품질 비교용 내부 화면. 모델 승격 전 제품 검수에 유용 |
+
+### 11.9.1.1 모델 연동 게이트
+
+F19~F23은 아래 상태를 구분한다.
+
+| 상태 | 의미 | 제품 동작 |
+|:---|:---|:---|
+| `fallback` | 모델 artifact/가중치 미확정 또는 미준비 | Neo4j `SIMILAR_TO`, graph statistics, rule-based reason만 사용 |
+| `experimental` | 실험 모델은 있으나 promotion 전 | 관리자/실험 화면 또는 명시적 query flag에서만 사용 |
+| `promoted` | 실험 폴더 decision artifact에서 제품 후보로 승인 | root API adapter를 통해 기본 또는 선택 모델로 사용 가능 |
+
+모델을 제품 경로에 태우기 전 필수 조건:
+
+- `GNN_Neural_Network/` 또는 `experiments/persona_similarity/`의 PRD/TASKS/decision artifact에 모델 승격 근거가 기록되어야 한다.
+- root API는 `model_version`, `artifact_path`, `score_source`, `fallback_used`를 응답 metadata에 포함해야 한다.
+- artifact 누락, 버전 불일치, schema mismatch 시 기존 graph/rule fallback으로 돌아가야 한다.
+- 프론트엔드는 모델 미준비 상태를 오류가 아니라 “기본 그래프 기반 추천/설명” 상태로 보여준다.
+
+### 11.9.2 F19 유사 페르소나 이유 기반 필터/정렬
+
+목표:
+
+- 프로필 상세의 유사 페르소나 목록을 단순 점수순이 아니라 “왜 비슷한가” 기준으로 필터링/정렬한다.
+- 사용자가 `직업`, `지역`, `교육`, `가족/주거`, `공유 취미`, `문장 의미 유사도`, `커뮤니티` 근거를 선택해 볼 수 있어야 한다.
+- `성별만 같음`, `혼인상태만 같음`, `province만 같음`, `community만 같음` 같은 약한 근거만 있는 후보는 숨기거나 낮게 정렬할 수 있어야 한다.
+
+Backend:
+
+- `GET /api/persona/{uuid}/similar`를 신규 추가하거나 기존 프로필 API의 `similar_preview`를 확장한다.
+- Query params:
+  - `top_k`: 기본 10, 최대 50
+  - `reason`: `occupation | location | education | family | housing | hobby | text | community | strong`
+  - `exclude_weak_only`: boolean, 기본 `false`
+  - `sort`: `similarity | reason_strength | diversity`
+- 응답 item:
+  - `uuid`, `display_name`, `age`, `sex`, `occupation`, `province`, `district`
+  - `similarity_score`
+  - `reason_strength`
+  - `reason_categories`
+  - `reasons[]`: `{type, label, value, weight}`
+  - `weak_only`: boolean
+- 데이터 소스:
+  - `SIMILAR_TO.score`
+  - `src/api/routes/persona.py`의 similarity explanation query/logic
+  - 향후 `experiments/persona_similarity` reranker가 promotion될 경우 adapter로 score source를 연결하고 metadata로 표시
+
+Frontend:
+
+- 프로필 상세의 “유사 페르소나” 섹션에 reason filter chips 추가.
+- 카드에 “상세보기”와 “비슷한 이유” 요약 표시.
+- 약한 근거 후보는 badge로 표시하거나 접기.
+- 클릭 시 기존 상세보기 모달/라우팅을 재사용한다.
+
+Success criteria:
+
+- 유사 페르소나 카드마다 최소 1개 이상의 이유가 표시된다.
+- `exclude_weak_only=true`일 때 weak-only 후보가 제거된다.
+- API 응답 P95 < 500ms, `top_k <= 50` 기준.
+
+### 11.9.3 F20 커뮤니티 프로파일링
+
+목표:
+
+- `community_id`별 대표 속성과 대표 페르소나를 보여준다.
+- “이 사람이 속한 커뮤니티는 어떤 집단인가?”를 프로필 상세와 그래프 화면에서 설명한다.
+
+Backend:
+
+- `GET /api/communities/{community_id}/profile`
+- Query params:
+  - `sample_size`: 기본 10, 최대 50
+  - `include_text_summary`: boolean, 기본 `false`
+- 응답:
+  - `community_id`, `person_count`
+  - `top_provinces`, `top_districts`, `top_occupations`, `top_education`, `top_hobbies`
+  - `age_distribution`, `sex_distribution`
+  - `representative_personas[]`
+  - `summary`: rule-based 요약, LLM 사용 시 근거 기반 합성
+- 계산 원칙:
+  - API request path에서는 과도한 full scan을 피한다.
+  - community별 집계 cache 또는 제한된 top-N Cypher를 우선 사용한다.
+
+Frontend:
+
+- 프로필 상세에 “소속 커뮤니티 요약” 패널 추가.
+- 커뮤니티 페이지 또는 대시보드에서 community selector 제공.
+- 대표 속성은 bar/list 형태로 표시하고, 대표 페르소나는 기존 카드 컴포넌트를 재사용한다.
+
+Success criteria:
+
+- 특정 persona의 `community_id`를 클릭해 커뮤니티 프로필을 볼 수 있다.
+- 대표 속성은 최소 직업/지역/취미/연령/성별을 포함한다.
+- empty community 또는 `community_id` 없음 상태를 명확히 처리한다.
+
+### 11.9.4 F21 취미 추천 이유 카드
+
+목표:
+
+- `/api/recommend/{uuid}` 결과에 추천 이유를 함께 제공한다.
+- 취미 추천 모델/가중치가 확정되기 전에도 graph/rule 기반 fallback 추천 이유를 제공한다.
+- 향후 `GNN_Neural_Network/`에서 제품 승격 모델이 확정되면 같은 응답 contract에 model score와 source metadata를 연결한다.
+
+Backend:
+
+- 기존 `GET /api/recommend/{uuid}` 응답 item 확장.
+- 응답 item에 다음 필드 추가:
+  - `score`
+  - `rank`
+  - `sources`: `graph_frequency`, `similar_person`, `popularity`, `cooccurrence`, `model` 등
+  - `reason_cards[]`: `{type, title, detail, strength}`
+  - `already_known`: boolean
+  - `model_version`
+  - `score_source`: `fallback | experimental | promoted`
+  - `fallback_used`: boolean
+- 이유 예시:
+  - “현재 데이터에서 자주 등장하는 취미입니다.”
+  - “이미 가진 취미와 함께 자주 등장합니다.”
+  - “유사 페르소나 그룹에서 많이 나타납니다.”
+  - “제품 승격 모델이 후보 pool 내에서 높게 정렬했습니다.” 단, 모델이 `promoted` 상태일 때만 표시.
+
+Frontend:
+
+- 추천 결과 카드에 이유 1~3개를 compact하게 표시.
+- 상세 펼침에서 source별 점수/근거 표시.
+- 기존 취미와 중복된 추천은 표시하지 않거나 “이미 보유”로 제외한다.
+
+Success criteria:
+
+- 추천 item마다 최소 1개 reason card가 있다.
+- 기존 보유 취미와 중복 추천하지 않는다.
+- `model_version`/`score_source`/`fallback_used`가 응답에 포함된다.
+- 모델 미확정 상태에서도 API와 UI가 fallback으로 정상 동작한다.
+
+### 11.9.5 F22 비슷하지만 다른 페르소나 탐색
+
+목표:
+
+- 유사하지만 완전히 같은 demographic/직업/지역으로만 묶이지 않는 탐색형 추천을 제공한다.
+- “직업은 다르지만 생활패턴이 비슷함”, “지역은 다르지만 취미/가족관이 비슷함” 같은 발견 경험을 만든다.
+
+Backend:
+
+- `GET /api/persona/{uuid}/similar-diverse`
+- Query params:
+  - `top_k`: 기본 10, 최대 50
+  - `diversity_axis`: `occupation | location | community | demographic | mixed`
+  - `min_reason_strength`: 기본 0.2
+- 로직:
+  - 기본 후보는 `SIMILAR_TO`를 사용한다.
+  - 향후 유사 페르소나 reranker가 promotion되면 adapter로 후보 score를 교체할 수 있다.
+  - base similarity가 너무 낮은 후보는 제외한다.
+  - 선택한 axis가 반복될수록 penalty를 준다.
+  - strong reason이 없는 후보는 제외하거나 낮춘다.
+- 응답 item:
+  - `similarity_score`
+  - `diversity_score`
+  - `contrast_reason`: “직업은 다르지만 공유 취미와 생활 문장 유사도가 높음”
+
+Frontend:
+
+- 유사 페르소나 섹션에 “비슷하지만 다른 사람 보기” 탭 추가.
+- diversity axis segmented control 제공.
+- 각 카드에 공통점과 차이점을 함께 표시.
+
+Success criteria:
+
+- top-k 내 동일 직업/동일 지역 반복률이 기본 유사 목록보다 낮다.
+- 각 후보는 최소 1개 strong reason을 가진다.
+- 사용자가 “왜 다른데 비슷한지”를 카드에서 이해할 수 있다.
+
+### 11.9.6 F23 추천 품질 대시보드
+
+목표:
+
+- 취미 추천과 유사 페르소나 추천의 품질 지표를 내부적으로 관찰한다.
+- 실험 결과를 제품 통합하기 전 manual review와 metric 비교를 쉽게 한다.
+
+Backend:
+
+- `GET /api/recommendation/quality`
+- Query params:
+  - `target`: `hobby | persona_similarity`
+  - `split_or_scope`: `current_db | validation | test`
+  - `limit`: 기본 100
+- 응답:
+  - `coverage`
+  - `novelty`
+  - `diversity`
+  - `hub_target_rate`
+  - `demographic_only_rate`
+  - `explanation_coverage`
+  - `strong_reason_coverage`
+  - `top_repeated_targets`
+  - `manual_review_samples`
+- 데이터 소스:
+  - 하위 추천 폴더의 read-only metric/decision source
+  - 현재 Neo4j DB 집계
+  - 향후 제품 연동 모델의 decision metadata
+
+Frontend:
+
+- 관리자/실험 탭에 품질 대시보드 추가.
+- hobby/persona_similarity target toggle 제공.
+- metric cards + top repeated targets table + manual review sample table 구성.
+
+Success criteria:
+
+- 현재 default와 실험 후보의 metric을 한 화면에서 비교할 수 있다.
+- recommendation metric source가 없을 때도 명확한 empty state를 보여준다.
+- 대시보드는 일반 사용자 화면과 분리한다.
+
+### 11.9.7 공통 구현 원칙
+
+- 추천 관련 API는 LLM 호출 없이 rule/model/graph 기반 응답을 먼저 제공한다.
+- LLM 합성은 optional summary에만 사용하고, 원본 evidence를 반드시 함께 반환한다.
+- 추천 모델 승격 여부는 각 실험 폴더의 decision artifact를 따른다.
+- root API는 `model_version`, `score_source`, `graph_snapshot_id`를 응답 또는 metadata에 포함해 추적 가능해야 한다.
+- 모델/가중치 미확정 상태에서는 `score_source=fallback`으로 동작하고, 실험 모델 점수를 기본 사용자 화면에 섞지 않는다.
+- 프론트엔드는 기존 프로필 상세, 검색/필터, 그래프 화면의 컴포넌트를 최대한 재사용한다.
+
+## 11.10 F24-F25: 관측성 및 시각화 고도화 계획
+
+> **범위 구분**: 이 섹션은 모델 실험이 아니라 root 백엔드/프론트엔드 제품 기능 계획이다. 목적은 챗봇/RAG 답변의 원인 추적성과 분석 화면의 가독성을 높이는 것이다.
+
+### 11.10.1 F24 RAG/챗봇 관측성
+
+목표:
+
+- 챗봇/RAG 답변이 왜 그렇게 생성되었는지 개발자가 추적할 수 있게 한다.
+- 사용자 질문, intent 분류, Cypher/vector 검색 결과, 생성 프롬프트, LLM 응답, token/latency/error를 trace 단위로 확인한다.
+- 운영 기본 경로에는 영향을 주지 않고, 환경변수로 켜고 끌 수 있는 opt-in 관측 기능으로 둔다.
+
+도구 선택 원칙:
+
+- Phoenix: self-host/local 관측, RAG 검색 품질, embedding/retrieval 평가를 우선 보고 싶을 때 1순위 후보.
+- LangSmith: LangChain/LangGraph trace와 hosted workflow를 적극 활용할 때 선택 후보.
+- 초기 구현은 vendor lock-in을 줄이기 위해 내부 `TraceSink` interface를 먼저 만들고, Phoenix/LangSmith adapter는 선택 구현으로 둔다.
+
+보안/보존 원칙:
+
+- 기본값은 `tracing_enabled=false`이며, 명시적 환경변수로만 활성화한다.
+- 원문 질문, prompt, LLM 응답, embedding payload 저장 여부는 각각 환경변수로 분리 제어한다.
+- trace 저장 전 redaction/masking 단계를 거치며 API key, access token, Neo4j credential, 개인 식별 가능 텍스트는 저장하지 않는다.
+- trace 보존 기간, 저장 위치(local file, SQLite/Postgres, Phoenix/LangSmith 등), 삭제 절차를 구현 전 결정한다.
+- trace 저장/전송 실패는 사용자-facing `/api/chat`, `/api/insight` 응답을 실패시키지 않는다.
+
+Backend:
+
+- `src/rag/router.py`, `src/rag/cypher_chain.py`, `src/rag/vector_chain.py`, `src/rag/llm.py`에 trace span 경계를 정의한다.
+- trace event:
+  - `request_received`
+  - `intent_classified`
+  - `cypher_generated`
+  - `neo4j_query_executed`
+  - `vector_search_executed`
+  - `prompt_built`
+  - `llm_called`
+  - `answer_returned`
+  - `fallback_used`
+  - `error`
+- trace metadata:
+  - `trace_id`, `session_id`, `route`, `latency_ms`, `token_count`, `retrieved_entity_count`, `error_type`
+  - 민감한 원문 저장 여부는 환경변수로 제어한다.
+- `GET /api/admin/rag/traces`와 `GET /api/admin/rag/traces/{trace_id}`는 내부/관리자 화면용으로만 제공하고, 로컬 개발 모드를 제외하면 관리자 guard 없이는 활성화하지 않는다.
+
+Frontend:
+
+- 관리자/개발자 탭에 RAG trace list와 상세 drawer를 추가한다.
+- 상세 화면에서 질문, route, 검색 결과, prompt summary, LLM 응답, fallback 여부, latency breakdown을 확인한다.
+- 일반 사용자 화면에는 trace 상세를 노출하지 않는다.
+
+Success criteria:
+
+- 한 번의 `/api/chat` 또는 `/api/insight` 요청에 대해 단계별 trace가 남는다.
+- LLM 실패, Neo4j query 실패, vector 빈 결과 fallback을 trace에서 구분할 수 있다.
+- 관측 기능을 꺼도 기존 API 응답과 latency에 의미 있는 영향이 없어야 한다.
+- trace 저장 실패 또는 외부 관측 도구 장애가 발생해도 원래 API 응답은 정상 fallback으로 반환된다.
+- redaction 정책이 켜진 상태에서 prompt/응답/검색 결과에 민감값이 남지 않는 테스트가 통과한다.
+- admin trace API는 비인가 상태에서 접근할 수 없거나, 개인 로컬 모드에서만 명시적으로 허용된다.
+
+### 11.10.2 F25 분석 시각화 고도화
+
+목표:
+
+- 통계/품질/커뮤니티/그래프 화면을 단순 텍스트와 테이블 중심에서 시각적 분석 화면으로 개선한다.
+- 대시보드형 차트는 ECharts를 우선 사용하고, 관계망처럼 커스텀 제어가 큰 화면은 D3를 제한적으로 사용한다.
+
+라이브러리 선택 원칙:
+
+- ECharts 우선: 막대, 파이, 히트맵, 분포, ranking, 대시보드 카드 차트.
+- D3 제한 사용: force-directed graph, 커스텀 네트워크 layout, 직접 좌표/색상/interaction 제어가 필요한 화면.
+- 기존 frontend 스타일과 컴포넌트 구조를 유지하고, 차트 라이브러리 도입은 화면 단위로 작게 진행한다.
+
+대상 화면:
+
+- F6 인구통계 대시보드: 연령/성별/지역/직업/취미 분포 chart.
+- F8 세그먼트 비교: segment별 분포 비교, ratio 차이, top-k 차트.
+- F9 서브그래프 시각화: 관계망 layout, node/edge type legend, depth filter.
+- F20 커뮤니티 프로파일링: community attribute distribution, 대표 취미/직업 ranking.
+- F23 추천 품질 대시보드: coverage/diversity/hub target/weak-only metric chart.
+
+화면별 최소 완료 기준:
+
+- F6: age/sex/province 분포와 top occupation/hobby/skill 중 최소 3개 이상을 차트로 표시하고 기존 수치 카드와 값이 일치한다.
+- F8: 두 세그먼트의 count/ratio 차이를 한 화면에서 비교할 수 있고, empty segment는 빈 차트가 아니라 안내 문구로 처리한다.
+- F9: node/edge type legend, depth filter, selected node 강조, max_nodes 초과 안내가 표시된다.
+- F20: community_id가 없거나 empty community일 때 fallback 문구를 표시하고, 정상 community는 대표 속성 ranking chart를 제공한다.
+- F23: coverage/diversity/hub/weak-only 지표를 metric card와 chart로 함께 보여주며, metric source가 없을 때 empty state를 표시한다.
+
+Backend:
+
+- 차트 전용 API를 새로 남발하지 않고 기존 API 응답을 chart-friendly schema로 보강한다.
+- 필요 시 `chart_data` 형태의 normalized series를 응답에 포함한다.
+- 대량 그래프는 node/edge limit, sampling, depth limit을 명시한다.
+
+Frontend:
+
+- ECharts wrapper component를 만든다.
+- 공통 empty/loading/error state를 통일한다.
+- D3 graph component는 F9처럼 그래프 상호작용이 필요한 화면에만 둔다.
+- 모바일에서는 chart label overflow와 tooltip 접근성을 별도로 확인한다.
+
+Success criteria:
+
+- F6/F23의 핵심 지표는 표 없이도 차트만으로 분포와 이상치를 파악할 수 있다.
+- F9 그래프는 node/edge type, depth, selected node를 시각적으로 구분한다.
+- 차트가 비어 있는 데이터, 긴 한글 label, 모바일 폭에서 깨지지 않는다.
+- ECharts는 표준 대시보드 차트에 우선 적용하고, D3는 F9 관계망처럼 ECharts로 부족한 커스텀 그래프에만 사용한다.
+- 각 대상 화면은 기존 table/card fallback을 유지하거나 제거 여부를 명시적으로 결정한다.
+
 ## 12. 아키텍처 결정 기록 (ADRs)
 
 본 PRD의 중요한 기술적 결정은 별도 문서로 관리됩니다:
@@ -1026,7 +1386,7 @@ docs/
 1. PRD 수정 필요 시 **본 파일(PRD.md)만** 수정
 2. 실행 상태와 완료 조건 변경은 `TASKS.md`에 함께 반영
 3. 중대한 아키텍처 결정은 `docs/decisions/ADR-###` 신규 작성
-4. GNN 오프라인 추천 실험 결정은 `GNN_Neural_Network/artifacts/experiment_decisions.json` 및 `experiment_run_summary.md`에 기록
+4. 추천 모델 실험 결정은 각 하위 실험 폴더에 기록하고, root 문서에는 API/UI/adapter 계약 변경만 반영
 5. Phase 완료 시 해당 Phase의 아카이브 파일은 **수정하지 않음** (읽기 전용)
 
 ---
@@ -1034,4 +1394,4 @@ docs/
 **작성일**: 2026-04-28  
 **버전**: v2.4-f16-f18-expansion  
 **상태**: Phase 3 핵심 구현 완료 / Phase 4 계획 검수 대기 / F16-F18 확장 계획 추가  
-**다음 단계**: F16-F18 구현 계획 검수 → Country/MilitaryStatus/bachelors_field 그래프 정리 검수 → GNN closed default 기반 F11 A/B 연동 계획 확정
+**다음 단계**: F16-F18 구현 계획 검수 → Country/MilitaryStatus/bachelors_field 그래프 정리 검수 → F19-F23 추천 UX adapter/fallback 계약 검수

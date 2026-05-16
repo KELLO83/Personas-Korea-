@@ -24,6 +24,12 @@ langchain-neo4j>=0.3.0
 langchain-openai>=0.2.0
 langgraph>=0.2.0
 
+# RAG/LLM observability (opt-in)
+langsmith>=0.3.0
+arize-phoenix-otel>=0.16.0
+arize-phoenix-client>=1.0.0
+opentelemetry-sdk>=1.27.0
+
 # API
 fastapi>=0.110.0
 uvicorn>=0.27.0
