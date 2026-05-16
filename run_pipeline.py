@@ -52,7 +52,7 @@ def run_pipeline(sample_size: int | None = None) -> None:
             logger.warning("embedding_text 컬럼이 없어 persona 컬럼을 임시로 사용합니다.")
             texts = df_to_embed["persona"].fillna("").tolist()
         
-        batch_size = settings.EMBEDDING_BATCH_SIZE
+        batch_size = settings.EMBEDDING_BATCH_SIZE or 128
         embedded_count = 0
         for i in range(0, len(texts), batch_size):
             batch_texts = texts[i : i + batch_size]

@@ -39,12 +39,14 @@ opencode_backup.json
 .env
 .env.*
 !.env.example
+.neo4j-docker.env
 *.local
 config.json
 secrets.json
 
 # Data / Databases
 data/
+artifacts/
 GNN_Neural_Network/data/
 experiments/**/artifacts/datasets/
 experiments/**/artifacts/**/*.xlsx

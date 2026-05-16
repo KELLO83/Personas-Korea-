@@ -1,8 +1,8 @@
 {
   "experiment_id": "kure_text_feature_005_domain_tagged_20k_cpu10_test_matrix_retry",
   "split": "test",
-  "status": "candidates_done",
-  "event_timestamp": "2026-05-16T05:01:04Z",
+  "status": "test_evaluated",
+  "event_timestamp": "2026-05-16T05:39:57Z",
   "command_signature": "evaluate_ranker.py --config 'GNN_Neural_Network\\configs\\lightgbm_ranker.yaml' --split test --model-path 'GNN_Neural_Network\\artifacts\\experiments\\phase5_c_text_embedding\\kure_text_feature_005_domain_tagged_full_validation\\ranker_model.txt' --output 'GNN_Neural_Network\\artifacts\\experiments\\phase5_c_text_embedding\\kure_text_feature_005_domain_tagged_20k_cpu10_test_matrix_retry\\test_metrics.json' --experiment-id kure_text_feature_005_domain_tagged_20k_cpu10_test_matrix_retry --max-persons 20000 --skip-v1 --embedding-cache-dir 'GNN_Neural_Network\\artifacts\\text_embedding_cache' --embedding-batch-size 0 --embedding-vram-utilization 0.85 --cpu-thread-count 10 --progress-mode on",
   "log_policy": {
     "progress_mode": "on",
@@ -12,10 +12,21 @@
     "tqdm_enabled": true
   },
   "artifact_path": "GNN_Neural_Network\\artifacts\\experiments\\phase5_c_text_embedding\\kure_text_feature_005_domain_tagged_20k_cpu10_test_matrix_retry\\test_metrics.status.json",
+  "runtime_seconds": 2422.290370200004,
+  "input_config_summary": {
+    "config_path": "GNN_Neural_Network\\configs\\lightgbm_ranker.yaml",
+    "candidate_pool_size": 50,
+    "score_normalization": "rank_percentile"
+  },
   "summary": {
-    "phase": "candidates_done",
+    "phase": "metrics_done",
     "split": "test",
-    "candidate_pool_person_count": 10857,
-    "candidate_ranked_person_count": 10857
+    "v2_recall@10": 0.6174818089711707,
+    "v2_ndcg@10": 0.386258213985051,
+    "coverage@10": 0.004002668445630421,
+    "novelty@10": 4.672494042183176,
+    "candidate_recall@50": 0.8272082527401676,
+    "v2_fallback_count": 0,
+    "promotion_status": "test_only"
   }
 }
