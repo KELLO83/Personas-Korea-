@@ -1,209 +1,296 @@
-# GNN Neural Network PoC
+# GNN_Neural_Network: 취미 추천 실험 요약
 
-Offline LightGCN hobby/leisure recommendation PoC for `Nemotron-Personas-Korea`.
+이 폴더는 `Nemotron-Personas-Korea` 데이터에서 `Person -> Hobby` 추천을 실험한 오프라인 추천시스템 workspace입니다.
 
-## Documentation hierarchy
+현재 결론은 명확합니다.
 
-- This README is a **single source of truth for execution commands and current recommendation status**.
-- For requirements and implementation decisions, follow:
-  - `PRD.md` (scope, architecture, goals)
-  - `TASKS.md` (execution gate and completion status)
-- v2 experimental docs are supplementary:
-  - `PRD_GNN_Reranker_v2.md`
-  - `CHECKLIST_GNN_Reranker_v2.md`
-- Dataset and schema description is contextual reference:
-  - `DATASET_EXPLAIN.md`
-- Experiment navigation and script ownership:
-  - `EXPERIMENTS.md`
-  - `scripts/README.md`
-- Conflict rule: if a conflict appears, prioritize requirements/gates above and then align this README.
-
-## Scope
-
-- Runs as Python scripts only.
-- Uses the existing project `.venv` interpreter.
-- Initial Neo4j access is limited to edge export.
-- Training/evaluation/recommendation after export use local files only.
-- No FastAPI, Streamlit, or Next.js integration in the initial PoC.
-
-## Dependency policy
-
-Allowed:
-
-- PyTorch core APIs (`torch`, `torch.nn.Module`, `torch.optim.Adam`, `torch.sparse.mm`)
-- Small helper packages in `requirements-gnn.txt`
-
-Not allowed for the initial PoC:
-
-- PyTorch Geometric
-- DGL
-- TorchRec
-- RecBole
-- External LightGCN implementations
-
-## CUDA check
-
-```powershell
-.\.venv\Scripts\python.exe -c "import torch; print(torch.__version__); print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU')"
+```text
+현재 SOTA/default:
+Stage 1 = popularity + cooccurrence 후보생성
+Stage 2 = LightGBM learned ranker
+Text feature = off
+MMR = off
 ```
 
-## Install helper dependencies
+모델 artifact:
+
+```text
+GNN_Neural_Network/artifacts/experiments/phase2_5_num_leaves_31/ranker_model.txt
+```
+
+기준 문서:
+
+- `PRD.md`: 실험 요구사항, 모델 정책, promotion gate
+- `TASKS.md`: 현재 작업 상태
+- `DATASET_EXPLAIN.md`: 데이터 형태와 학습 row 설명
+- `artifacts/experiment_decisions.json`: machine-readable 실험 의사결정
+- `artifacts/experiment_run_summary.md`: 최신 human-readable 실험 요약
+
+## 추천 구조
+
+```mermaid
+flowchart LR
+    A[Persona] --> B[Known hobbies / context]
+    B --> C[Stage 1 candidate generation]
+    C --> C1[Popularity]
+    C --> C2[Co-occurrence]
+    C1 --> D[Candidate pool]
+    C2 --> D
+    D --> E[Stage 2 LightGBM ranker]
+    E --> F[Top-K hobby recommendations]
+```
+
+Stage 1은 추천 후보를 넓게 뽑는 단계이고, Stage 2는 같은 후보 pool 안에서 순서를 다시 정렬하는 단계입니다.
+
+## 현재 SOTA 성능
+
+최종 SOTA는 closed Phase 2.5 LightGBM ranker입니다.
+
+| Split | Model path | Recall@10 | NDCG@10 | Candidate Recall@50 | Decision |
+| --- | --- | ---: | ---: | ---: | --- |
+| validation | Stage 1 `popularity + cooccurrence` | 0.694035 | 0.435455 | 0.977645 | baseline |
+| validation | Phase 2.5 LightGBM | 0.739051 | 0.457970 | 0.977645 | selected |
+| test | LightGCN | 0.677980 | 0.429997 | - | analysis only |
+| test | Stage 1 `popularity + cooccurrence` | 0.690885 | 0.437556 | 0.977136 | baseline |
+| test | Phase 2.5 LightGBM | 0.709684 | 0.447713 | 0.977136 | current SOTA/default |
+
+SOTA의 test 개선폭:
+
+| Comparison | Recall@10 delta | NDCG@10 delta |
+| --- | ---: | ---: |
+| LightGBM vs Stage 1 baseline | +0.018799 | +0.010157 |
+
+해석:
+
+- 후보생성 자체는 이미 강합니다. `candidate_recall@50 ~= 0.977`입니다.
+- 병목은 후보 retrieval 부족이 아니라 top-k 정렬에서 인기 취미로 몰리는 ranking collapse입니다.
+- LightGBM은 정확도 기준 SOTA지만, 다양성 문제는 아직 남아 있습니다.
+
+## 모델 실험 타임라인
+
+```mermaid
+flowchart TD
+    S0[Raw person-hobby data] --> S1[Canonicalization / fallback policy]
+    S1 --> E1[Stage 1 provider ablation]
+    E1 --> E2[Deterministic reranker v1]
+    E2 --> E3[LightGBM learned ranker]
+    E3 --> E4[Regularization tuning]
+    E4 --> E5[Negative sampling ablation]
+    E5 --> E6[Source one-hot ablation]
+    E6 --> E7[MMR / diversity experiments]
+    E7 --> E8[KURE text / semantic experiments]
+    E8 --> D[Current decision: Phase 2.5 LightGBM default]
+```
+
+| Order | Experiment | Tested | Result | Decision |
+| ---: | --- | --- | --- | --- |
+| 1 | Data preparation | raw hobby phrase canonicalization, rare item fallback | 50K local slice prepared, rare items kept with fallback | accepted with taxonomy warning |
+| 2 | Stage 1 provider ablation | popularity, cooccurrence, LightGCN, BM25, PMI, IDF, Jaccard, pop-capped | `popularity + cooccurrence` was strongest stable candidate generator | accepted |
+| 3 | Deterministic reranker v1 | persona-aware weighted reranker | strong diversity, lower accuracy than LightGBM | retained as fallback/comparison |
+| 4 | LightGBM learned ranker | Stage 2 learned reranker | beat Stage 1 and v1 on validation/test Recall/NDCG | promoted |
+| 5 | Regularization tuning | tree size and regularization | `num_leaves=31` selected | accepted |
+| 6 | Negative sampling | `neg_ratio`, `hard_ratio` variants | `hard_ratio=1.0` won validation but lost final test | rejected default change |
+| 7 | Source one-hot features | source flags for popularity/cooccurrence | validation Recall/NDCG/Coverage regressed | rejected |
+| 8 | Category one-hot MMR | MMR lambda sweep | binary similarity made MMR ineffective | no-go |
+| 9 | KURE dense MMR | KURE embedding MMR lambda 0.5/0.7/0.8/0.9 | all failed accuracy gate | no-go |
+| 10 | KURE semantic Stage1 | `popularity + cooccurrence + kure_semantic` | candidate recall collapsed | rejected |
+| 11 | KURE text feature | domain-tagged text embedding as Stage2 feature | useful signal vs matched weak control, below SOTA | not promoted |
+
+## Stage 1 후보생성 실험
+
+Stage 1은 `Person`에게 추천할 hobby 후보를 만드는 단계입니다.
+
+현재 선택:
+
+```text
+popularity + cooccurrence
+```
+
+의미:
+
+- `popularity`: train split에서 많이 등장한 취미를 후보로 사용
+- `cooccurrence`: source persona가 가진 취미와 함께 자주 등장한 취미를 후보로 사용
+
+핵심 결과:
+
+| Provider / Combination | Validation Recall@10 | Validation NDCG@10 | Decision |
+| --- | ---: | ---: | --- |
+| `popularity + cooccurrence` | 0.694035 | 0.435455 | selected |
+| LightGCN test reference | 0.677980 | 0.429997 | analysis only |
+| BM25 ItemKNN | 0.4493 | 0.1970 | rejected |
+| PMI ItemKNN | 0.0076 | 0.0030 | rejected |
+| IDF / Jaccard / pop-capped variants | slightly below baseline | slightly below baseline | not selected |
+
+결론:
+
+- 현재 데이터에서는 graph neural candidate generator보다 단순하지만 강한 `popularity + cooccurrence`가 더 안정적입니다.
+- LightGCN은 실험/분석용으로 남기지만 default Stage 1에 병합하지 않습니다.
+
+## Stage 2 LightGBM 실험
+
+현재 SOTA LightGBM 설정:
+
+```text
+num_leaves=31
+min_data_in_leaf=50
+learning_rate=0.05
+reg_alpha=0.1
+reg_lambda=0.1
+neg_ratio=4
+hard_ratio=0.8
+include_source_features=false
+include_text_embedding_feature=false
+MMR=false
+```
+
+LightGBM이 학습하는 것은 `source_uuid`와 `hobby_id` 자체가 아니라 pair/candidate feature입니다.
+
+주요 feature:
+
+```text
+popularity_prior
+cooccurrence_score
+known_hobby_count
+candidate popularity / profile features
+segment or context-derived numeric features
+```
+
+Feature importance는 `cooccurrence_score`와 `popularity_prior`에 크게 집중되었습니다. 따라서 정확도는 좋아졌지만 인기/동시발생 취미 쪽으로 top-k가 몰리는 ranking collapse가 남아 있습니다.
+
+## KURE-v1 / text embedding 실험
+
+KURE-v1 관련 실험은 세 계열로 나눠서 봐야 합니다.
+
+| Experiment family | Role | Result | Default impact |
+| --- | --- | --- | --- |
+| KURE dense MMR | diversity rerank | all lambda failed accuracy gate | `MMR=false` 유지 |
+| KURE semantic Stage1 | semantic candidate generator | candidate_recall@50 하락 | rejected |
+| KURE text feature | Stage2 auxiliary feature | matched control 대비 signal 있음, SOTA 미달 | `include_text_embedding_feature=false` 유지 |
+
+KURE semantic Stage1 결과:
+
+| Run | Validation Recall@10 | Validation NDCG@10 | Candidate Recall@50 | Decision |
+| --- | ---: | ---: | ---: | --- |
+| closed Phase 2.5 baseline | 0.739051 | 0.457970 | 0.977645 | baseline |
+| `kure_stage1_semantic_001_fast_gpu` | 0.599705 | 0.370891 | 0.794971 | rejected |
+
+KURE domain-tagged text feature test 결과:
+
+| Run | Split | Recall@10 | NDCG@10 | Candidate Recall@50 | Decision |
+| --- | --- | ---: | ---: | ---: | --- |
+| `phase2_5_num_leaves_31` | test | 0.709684 | 0.447713 | 0.977136 | current SOTA |
+| `kure_text_feature_005_domain_tagged_20k_cpu10_test_matrix_retry` | test | 0.617482 | 0.386258 | 0.827208 | not promoted |
+
+해석:
+
+- KURE text feature는 같은 후보 pool 안에서는 positive signal을 보였습니다.
+- 하지만 절대 성능이 closed Phase 2.5 SOTA보다 낮아서 default로 승격하지 않습니다.
+- 앞으로 text embedding은 Stage2 보조 feature 후보로만 다룹니다. Stage1 semantic retrieval로 기본 전환하지 않습니다.
+
+## Cold-start 결과
+
+`known_hobbies <= 1`인 sparse user subset에 대한 별도 기준입니다.
+
+| Split | People | V2 Recall@10 | V2 NDCG@10 | Candidate Recall@50 | Decision |
+| --- | ---: | ---: | ---: | ---: | --- |
+| validation | 8,563 | 0.592199 | 0.367798 | 0.827669 | fixed baseline |
+| test | 8,563 | 0.589513 | 0.368271 | 0.827208 | fixed baseline |
+
+Cold-start는 전체 promotion hard gate를 대체하지 않습니다. 다만 KURE/text/diversity 실험이 cold-start에서 개선되는지 반드시 별도 기록합니다.
+
+## 현재 남은 문제
+
+```mermaid
+flowchart LR
+    A[High candidate recall] --> B[Candidate pool is sufficient]
+    B --> C[LightGBM improves accuracy]
+    C --> D[Top-K concentrates on popular hobbies]
+    D --> E[Ranking collapse remains]
+```
+
+남은 핵심 문제:
+
+- `candidate_recall@50`은 높으므로 retrieval 부족이 1차 병목이 아닙니다.
+- LightGBM top-k가 인기/동시발생 취미에 강하게 몰립니다.
+- coverage/novelty는 v1 deterministic reranker보다 낮습니다.
+- taxonomy over-merge와 long-tail hobby phrase 문제가 diversity metric을 왜곡할 수 있습니다.
+
+따라서 다음 개선 방향은 Stage1 교체보다 다음이 우선입니다.
+
+1. accuracy-safe diversity reranking
+2. LightGBM objective/feature balance 개선
+3. taxonomy/canonicalization 품질 검수
+4. leakage-safe text feature의 보조 feature 검증
+
+## 실행 명령
+
+모든 명령은 repo root에서 `.venv` Python으로 실행합니다.
+
+Install:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r GNN_Neural_Network\requirements-gnn.txt
 ```
 
-## Export Person-Hobby edges
-
-```powershell
-.\.venv\Scripts\python.exe GNN_Neural_Network\scripts\export_person_hobby_edges.py --output GNN_Neural_Network\data\person_hobby_edges.csv
-```
-
-By default this also writes raw persona context for later offline reranking:
-
-```text
-GNN_Neural_Network/data/person_context.csv
-```
-
-Use `--skip-context` only when you intentionally want edge export without context export.
-
-## Vocabulary quality gate
-
-Training preparation canonicalizes hobby names before indexing them as LightGCN items.
-
-- `data.normalize_hobbies`: trims, Unicode-normalizes, lowercases, and collapses whitespace.
-- `data.alias_map_path`: optional JSON map from raw/variant hobby names to canonical hobby names.
-- `data.min_item_degree`: drops canonical hobbies below the configured support threshold.
-- `paths.vocabulary_report`: stores raw/canonical/retained edge, person, hobby, singleton, and dropped counts.
-
-Run `--prepare-only` and inspect `vocabulary_report.json` before any actual training.
-
-## Prepare splits without training
+Prepare only:
 
 ```powershell
 .\.venv\Scripts\python.exe GNN_Neural_Network\scripts\train_lightgcn.py --prepare-only
 ```
 
-Preparation writes train/validation/test splits plus leakage-safe offline artifacts:
-
-- `hobby_profile.json`: train-split-only popularity, distributions, and co-occurrence profile
-- `leakage_audit.json`: validation/test held-out hobby mentions in persona text fields
-- `score_normalization.json`: initial provider score normalization contract
-- `fallback_usage.json`: placeholder updated by recommendation fallback execution
-- `experiment_decisions.json`: current accepted/rejected provider decisions and final recommendation status snapshot
-- `experiment_run_summary.md`: human-readable engineering summary of the selected baseline, promoted reranker, model architecture, data input pipeline, feature schema, current metrics, and failed ablations
-
-## Train
-
-Only run when training is explicitly intended.
-
-```powershell
-.\.venv\Scripts\python.exe GNN_Neural_Network\scripts\train_lightgcn.py
-```
-
-## Evaluate
-
-```powershell
-.\.venv\Scripts\python.exe GNN_Neural_Network\scripts\evaluate_lightgcn.py --split test
-```
-
-## Recommend
-
-```powershell
-.\.venv\Scripts\python.exe GNN_Neural_Network\scripts\recommend_for_persona.py --uuid a5ad493e75e74e5cb4a81ac934a1db8f --top-k 10
-```
-
-For the legacy v1 comparison path, add `--rerank` to apply the deterministic Stage 2 reranker to the Stage 1 candidate pool before printing final recommendations.
-
-For the current promoted ranking path, run the same CLI with `--use-learned-ranker` so the Stage 1 candidate pool is scored by the LightGBM ranker.
-
-If the UUID is unknown to the trained canonical vocabulary, the CLI falls back to global popularity recommendations from the gated train split. If LightGCN returns fewer than `top-k` candidates after known-hobby masking, popularity fills the remaining slots.
-
-The recommendation CLI now records Stage 1 provider observability:
-
-- `candidates_sample.json`: Stage 1 provider candidate samples and selected candidates
-- `provider_contribution.json`: raw/normalized candidates per provider and selected source counts
-- `fallback_usage.json`: unknown UUID and underfilled-candidate fallback usage
-
-Selected Stage 1 baseline is currently `popularity + cooccurrence`.
-
-- Primary/default providers: train-split global popularity, train-split co-occurrence
-- Auxiliary/experimental provider: LightGCN
-- Disabled by default after ablation: `segment_popularity`, `bm25_itemknn`, `pmi_itemknn`
-- Not selected (slightly below baseline): `idf_cooccurrence`, `pop_capped_cooccurrence`, `jaccard_itemknn`
-- Similar-person candidates remain excluded from offline metrics until a train-gated `similar_person_hobbies.csv` is available.
-
-`segment_popularity`, `bm25_itemknn`, and `pmi_itemknn` are still available for explicit ablation/history comparisons, but they are not part of the default Stage 1 recommendation path because they consistently degraded validation recall.
-
-## Evaluate Stage 2 ranking paths
-
-The repo currently keeps two Stage 2 paths:
-
-- **v1 deterministic reranker**: legacy fallback and historical comparison baseline
-- **v2 LightGBM learned ranker**: promoted default ranking strategy
-
-The deterministic evaluator still runs after Stage 1 candidate generation and does not train a new model or call Neo4j/FastAPI.
-
-```powershell
-.\.venv\Scripts\python.exe GNN_Neural_Network\scripts\evaluate_reranker.py --split validation
-```
-
-The evaluator treats the selected Stage 1 baseline (`popularity + cooccurrence`) as the promotion gate for Stage 2. Candidate recall is reported against the full `candidate_k` pool, and the output includes reranker weights plus Stage 2 fallback counts. Text fit is disabled by default for leakage safety.
-
-Evaluate the promoted LightGBM ranking path with:
-
-```powershell
-.\.venv\Scripts\python.exe GNN_Neural_Network\scripts\evaluate_ranker.py --split validation
-```
-
-**Status:** The Stage 2 reranker has evolved through two phases:
-
-1. **v1 Deterministic reranker** — weighted scoring, passed initial promotion gate.
-2. **v2 LightGBM learned ranker** — binary classifier (AUC=0.8890555966387075, best_iteration=84), **PASSED** the promotion gate on both validation and test splits. **Now the promoted default recommendation strategy.**
-
-   - Validation: recall@10=0.7391 (+0.029), ndcg@10=0.4580 (+0.0156) vs v1
-   - Test: recall@10=0.7097 (+0.0054), ndcg@10=0.4477 (+0.0074) vs v1
-   - Note: coverage@10=0.1556 and novelty@10=4.5843 are lower than v1 (0.517, 4.732) — diversity improvement is deferred to KURE dense embeddings.
-   - Negative sampling ablation: completed. `neg_ratio=4, hard_ratio=1.0` won validation but underperformed the current `hard_ratio=0.8` default on final test Recall/NDCG, so the default remains `neg_ratio=4, hard_ratio=0.8`.
-   - Source one-hot ablation: completed and rejected. `include_source_features=true` lowered validation Recall/NDCG and coverage, so the default remains `include_source_features=false`.
-   - Phase 2.5 default decision closure: completed. This config is the fixed baseline for KURE dense embedding MMR and leakage-safe text embedding experiments.
-
-3. **MMR diversity reordering** — **NO-GO**. Category one-hot embedding produces binary cosine similarity (0 or 1), making MMR a no-op within same-category items. All lambda values (0.1–0.9) produced effectively identical results to the baseline. MMR remains available as `--use-mmr` flag (default: false).
-4. **Phase 5-A KURE dense embedding MMR** — **NO-GO**. Lambda `0.5`, `0.7`, `0.8`, `0.9` 모두 validation 게이트에서 recall/ndcg accuracy 기준 미달해 모두 `blocked`. test는 winner 부재로 생략, 기본은 `MMR=false` 유지.
-
-**Current default pipeline:**
-
-```
-Stage 1 = popularity + cooccurrence (candidate generation)
-Stage 2 = LightGBM learned ranker (relevance scoring)
-MMR     = off (optional flag only)
-```
-
-**Next priorities:**
-
-1. Phase 5-A 정리: KURE dense embedding MMR 재평가는 `phase5_kure_mmr_summary.md`로 마무리되어 `NO-GO`; 기본 경로는 유지.
-2. Leakage-safe text embedding feature ablation after audit passes
-3. Maintain fixed comparison baseline from closed Phase 2.5 (`num_leaves=31`, `neg_ratio=4`, `hard_ratio=0.8`, `include_source_features=false`, `MMR=false`)
-
-## Evaluate Stage 1 ablation (including item-item providers)
+Stage 1 ablation:
 
 ```powershell
 .\.venv\Scripts\python.exe GNN_Neural_Network\scripts\evaluate_stage1_ablation.py --split validation
 ```
 
-This evaluates all Stage 1 providers (single and combination) against the selected baseline. Output includes delta vs baseline for each provider/combination.
+Train current LightGBM ranker:
 
-## Persistent experiment logs
+```powershell
+.\.venv\Scripts\python.exe GNN_Neural_Network\scripts\train_ranker.py
+```
 
-Key experiment outputs are persisted under `GNN_Neural_Network/artifacts/` rather than only printed to the console.
+Evaluate current LightGBM ranker:
 
-- `metrics.json`: LightGCN training history and best checkpoint metrics
-- `stage1_ablation_validation.json`, `stage1_ablation_test.json`: provider-only and provider-combination comparisons
-- `rerank_metrics.json`: selected Stage 1 baseline vs Stage 2 metrics and promotion decision
-- `artifacts/experiments/phase5_kure_mmr_summary.md`: Phase 5-A KURE dense embedding MMR validation sweep summary and NO-GO ruling
-- `recommendation_quality_audit.json`: coverage, entropy, popularity-bias, and segment audit
-- `sample_recommendations_review.json`: qualitative sample review payload
-- `experiment_decisions.json`: explicit accepted/rejected component decisions
-- `experiment_run_summary.md`: detailed narrative summary for later review, including architecture, row schema, negative sampling, feature policy, cache policy, metrics, and current diagnosis
+```powershell
+.\.venv\Scripts\python.exe GNN_Neural_Network\scripts\evaluate_ranker.py --split validation
+.\.venv\Scripts\python.exe GNN_Neural_Network\scripts\evaluate_ranker.py --split test
+```
 
-If a provider or model is rejected, record the reason in `experiment_decisions.json` and reflect the current default path in this README.
+Recommend for one persona:
+
+```powershell
+.\.venv\Scripts\python.exe GNN_Neural_Network\scripts\recommend_for_persona.py --uuid a5ad493e75e74e5cb4a81ac934a1db8f --top-k 10 --use-learned-ranker
+```
+
+## Artifact index
+
+Core:
+
+```text
+GNN_Neural_Network/artifacts/experiment_decisions.json
+GNN_Neural_Network/artifacts/experiment_run_summary.md
+GNN_Neural_Network/artifacts/experiments/phase2_5_num_leaves_31/
+```
+
+Important experiment folders:
+
+```text
+artifacts/experiments/phase2_5_neg_ratio_*/
+artifacts/experiments/phase2_5_source_onehot/
+artifacts/experiments/phase2_5_cold_start_baseline/
+artifacts/experiments/phase5_kure_mmr_lambda_*/
+artifacts/experiments/phase5_d_stage1_kure_semantic/
+artifacts/experiments/phase5_c_text_embedding/
+artifacts/experiments/phase5_taxonomy_overmerge/
+```
+
+## Future experiment rules
+
+- Compare against closed Phase 2.5 SOTA unless a newer default is explicitly recorded.
+- Select on validation only.
+- Run test only once for the validation-selected winner.
+- Keep progress bars visible for long-running training/evaluation.
+- Reuse caches only when data/config/split/model metadata matches.
+- Record metrics, status, config, runtime, device, and cache policy under `artifacts/experiments/<run_id>/`.
+- Do not promote KURE/text/MMR paths unless they beat the same accuracy and stability gates.

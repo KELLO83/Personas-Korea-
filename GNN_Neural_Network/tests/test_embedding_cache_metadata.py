@@ -19,6 +19,17 @@ def test_person_embedding_cache_rejects_revision_mismatch(tmp_path) -> None:
     assert different_revision_cache.get("persona text") is None
 
 
+def test_person_embedding_cache_treats_corrupt_npy_as_miss(tmp_path) -> None:
+    cache = PersonEmbeddingCache(tmp_path, model_name="model-a")
+    cache.set("persona text", np.array([1.0, 2.0], dtype=np.float32))
+    cache_path = cache._cache_path("persona text")
+    assert cache_path is not None
+    cache_path.write_bytes(b"not-a-valid-npy")
+
+    fresh_cache = PersonEmbeddingCache(tmp_path, model_name="model-a")
+    assert fresh_cache.get("persona text") is None
+
+
 def test_person_embedding_cache_skips_legacy_cache_for_non_default_identity(tmp_path) -> None:
     text = "persona text"
     legacy_key = hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
@@ -44,6 +55,17 @@ def test_hobby_embedding_cache_rejects_tampered_metadata(tmp_path) -> None:
 
     fresh_cache = HobbyEmbeddingCache(tmp_path, model_name="model-a")
     assert fresh_cache.get("등산") is None
+
+
+def test_hobby_embedding_cache_treats_corrupt_npy_as_miss(tmp_path) -> None:
+    cache = HobbyEmbeddingCache(tmp_path, model_name="model-a")
+    cache.set("hobby", np.array([0.1, 0.2, 0.3], dtype=np.float32))
+    cache_path = cache._cache_path("hobby")
+    assert cache_path is not None
+    cache_path.write_bytes(b"not-a-valid-npy")
+
+    fresh_cache = HobbyEmbeddingCache(tmp_path, model_name="model-a")
+    assert fresh_cache.get("hobby") is None
 
 
 def test_hobby_matrix_cache_rejects_preprocessing_mismatch(tmp_path) -> None:

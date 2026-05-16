@@ -78,6 +78,12 @@ evaluation:
   top_k: [5, 10]
   hybrid_alpha: [0.3, 0.5, 0.7, 0.9]
   manual_review_size: 200
+  diversity_rerank:
+    lambda: [0.05, 0.1, 0.2]
+    penalty_columns:
+      - target_occupation
+      - target_province
+      - target_community_id
 
 text_embedding:
   model_name: nlpai-lab/KURE-v1

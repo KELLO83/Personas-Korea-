@@ -1,7 +1,7 @@
 import pandas as pd
 
 from experiments.persona_similarity.scripts.common import cache_metadata_matches, mark_cache_hit, should_use_cache, write_json
-from experiments.persona_similarity.scripts.evaluation_utils import evaluate_score_column, topk_overlap_at_k
+from experiments.persona_similarity.scripts.evaluation_utils import add_diversity_rerank_score, evaluate_score_column, topk_overlap_at_k
 from experiments.persona_similarity.scripts.experiment_specs import FEATURE_EXCLUSION_SETS, structured_text_feature_columns, text_feature_columns, feature_columns
 from experiments.persona_similarity.scripts.text_feature_builder import build_domain_text, cosine_similarity
 
@@ -103,6 +103,21 @@ def test_topk_overlap_at_k_compares_target_sets_by_source() -> None:
 
     assert topk_overlap_at_k(frame, "left", "right", 1, progress=False) == 0.0
     assert topk_overlap_at_k(frame, "left", "right", 2, progress=False) == 1.0
+
+
+def test_diversity_rerank_penalizes_repeated_attributes() -> None:
+    frame = pd.DataFrame(
+        [
+            {"source_uuid": "s1", "target_uuid": "a", "score": 1.0, "target_occupation": "dev", "target_province": "seoul"},
+            {"source_uuid": "s1", "target_uuid": "b", "score": 0.9, "target_occupation": "dev", "target_province": "seoul"},
+            {"source_uuid": "s1", "target_uuid": "c", "score": 0.8, "target_occupation": "artist", "target_province": "busan"},
+        ]
+    )
+
+    reranked = add_diversity_rerank_score(frame, "score", "diverse_score", diversity_lambda=0.2, penalty_columns=["target_occupation", "target_province"])
+    ordered = reranked.sort_values("diverse_score", ascending=False)["target_uuid"].tolist()
+
+    assert ordered[:2] == ["a", "c"]
 
 
 def test_cache_helpers_detect_and_mark_cache_hits(tmp_path) -> None:

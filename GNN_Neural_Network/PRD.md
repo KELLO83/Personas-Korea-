@@ -4,6 +4,37 @@
 
 This section is the current source of truth for running experiments against the local `GNN_Neural_Network/data` files. It overrides older wording that assumes the local edge CSV already contains stable canonical hobby items.
 
+## Current SOTA And KURE-v1 Decision Update (2026-05-16)
+
+Current offline SOTA remains the closed Phase 2.5 LightGBM path:
+
+```text
+Stage 1 = popularity + cooccurrence
+Stage 2 = LightGBM learned ranker
+model = artifacts/experiments/phase2_5_num_leaves_31/ranker_model.txt
+include_text_embedding_feature = false
+MMR = false
+```
+
+Reference test metrics:
+
+| Metric | Closed Phase 2.5 SOTA |
+| --- | ---: |
+| Recall@10 | 0.709684 |
+| NDCG@10 | 0.447713 |
+| candidate_recall@50 | 0.977136 |
+| coverage@10 | 0.155556 |
+
+The latest KURE-v1 domain-tagged text-feature experiment showed a real Stage2 signal but did not beat the closed SOTA. On the current test run (`kure_text_feature_005_domain_tagged_20k_cpu10_test_matrix_retry`), KURE text improved its own Stage1 baseline by Recall@10 `+0.047711` and NDCG@10 `+0.029900`, but absolute test Recall@10 was only `0.617482` and NDCG@10 was `0.386258`.
+
+Decision:
+
+- KURE-v1 domain-tagged text feature is **not promoted** and is **not default**.
+- Current KURE text path is **NO-GO for default replacement** because it remains below the closed Phase 2.5 SOTA.
+- KURE-v1 remains **follow-up-only** as a Stage2 auxiliary feature because it has positive signal under matched weak-candidate conditions.
+- One final validation-only follow-up is allowed: compare `include_text_embedding_feature=true` against a no-text control under the same current code, same split, same seed, same candidate pool, and same known-hobby masking. Run test only if validation beats the fixed no-text control and is competitive with the closed Phase 2.5 SOTA gate.
+- Do not run another KURE Stage1 semantic candidate provider without a new PRD/TASKS reopening note.
+
 ### Local 50K Data Reality
 
 Current local files:

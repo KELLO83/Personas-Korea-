@@ -238,7 +238,7 @@ def _command_signature() -> str:
 
 def _resolve_system_resource_plan(args: argparse.Namespace) -> dict[str, object]:
     logical_cpus = os.cpu_count() or 1
-    default_cpu_threads = max(1, logical_cpus - 2)
+    default_cpu_threads = min(max(logical_cpus - 4, 1), 18)
     requested_threads = int(args.cpu_thread_count)
     cpu_threads = default_cpu_threads if requested_threads <= 0 else max(1, min(requested_threads, logical_cpus))
     memory_total_mb, memory_available_mb = _query_system_memory_mb()
@@ -253,7 +253,7 @@ def _resolve_system_resource_plan(args: argparse.Namespace) -> dict[str, object]
         "gpu_total_vram_mb": gpu_total_mb,
         "gpu_used_vram_mb": gpu_used_mb,
         "gpu_free_vram_mb": gpu_free_mb,
-        "feature_builder_parallelism": "process_pool_by_person",
+        "feature_builder_parallelism": "auto_process_or_thread_by_feature_policy",
         "lightgbm_predict_threads": cpu_threads,
         "torch_threads": cpu_threads,
     }
@@ -861,8 +861,8 @@ def main() -> None:
         fallback_person_ids = []
 
         feature_worker_count = max(1, int(system_resource_plan["cpu_threads"]))
-        use_threaded_feature_build = feature_worker_count > 1 and bool(text_similarity_lookup)
-        use_parallel_feature_build = feature_worker_count > 1 and text_similarity_fn is None and not use_threaded_feature_build
+        use_threaded_feature_build = feature_worker_count > 1 and text_similarity_fn is None
+        use_parallel_feature_build = feature_worker_count > 1 and text_similarity_fn is not None
         LOGGER.info(
             "Starting feature row build: persons=%s candidate_rows=%s feature_columns=%s text_lookup_pairs=%s process_parallel=%s thread_parallel=%s workers=%s",
             len(truth_person_ids),

@@ -129,7 +129,7 @@ def main() -> None:
     start_time = time.perf_counter()
     show_progress = args.progress_mode == "on" or (args.progress_mode == "auto" and sys.stderr.isatty())
     logical_cpus = os.cpu_count() or 1
-    default_cpu_threads = max(1, logical_cpus - 2)
+    default_cpu_threads = min(max(logical_cpus - 4, 1), 18)
     requested_cpu_threads = int(args.cpu_thread_count)
     cpu_threads = default_cpu_threads if requested_cpu_threads <= 0 else max(1, min(requested_cpu_threads, logical_cpus))
     data_split = "validation_internal_ranker_split"

@@ -132,6 +132,79 @@ KURE/text embedding = reranker feature
 
 즉 KURE/문장 임베딩은 사람 후보를 새로 찾는 주체가 아니라, 이미 확보한 후보쌍을 더 잘 정렬하기 위한 feature로 사용한다.
 
+## 실험 우선순위
+
+이 프로젝트의 실험은 모델을 많이 나열하는 것이 아니라, 현재 데이터꼴에서 실제 개선 가능성이 높은 순서로 실행한다.
+
+### 필수 실험
+
+1차 의사결정에 반드시 필요한 실험이다.
+
+```text
+E0. FastRP/KNN 후보생성 baseline
+E1. 구조화 deterministic baseline
+E2. 구조화 LightGBM LambdaRank / rank_xendcg
+E3. 문장 embedding cosine feature 생성
+E4. Text-only ablation
+E5. 구조화 + 문장 + FastRP 통합 LightGBM
+E6. FastRP score와 model score hybrid
+E7. Diversity / novelty final reranking
+```
+
+이 단계에서 판단할 질문은 다음과 같다.
+
+- FastRP/KNN 순서를 LightGBM reranker가 실제로 이기는가?
+- 구조화 feature만으로 충분한가, 문장 feature가 의미 있는 신호를 주는가?
+- 문장 feature가 성능을 올리는가, 아니면 노이즈만 늘리는가?
+- 최종 top-k가 같은 직업/지역/커뮤니티에 과도하게 몰리지 않는가?
+- 설명 가능한 추천 이유가 baseline보다 좋아지는가?
+
+### 후보생성 확장 실험
+
+필수 실험 이후 candidate recall이 부족하다고 판단되면 실행한다.
+
+```text
+E8. Personalized PageRank 후보생성 baseline
+E9. Node2Vec 후보생성 baseline
+```
+
+역할:
+
+- FastRP/KNN이 놓치는 후보가 있는지 비교한다.
+- LightGBM reranker의 입력 후보 pool을 넓히는 용도로만 사용한다.
+- PPR/Node2Vec 결과도 그대로 production으로 승격하지 않고, 같은 split/metric/manual review로 비교한다.
+
+### 대체 reranker 검증
+
+LightGBM이 충분히 강하지 않거나 범주형 feature 처리 방식이 유리한지 확인할 때만 실행한다.
+
+```text
+E10. CatBoost ranking
+```
+
+원칙:
+
+- 기본 reranker는 LightGBM이다.
+- CatBoost는 동일 feature, 동일 split, 동일 candidate pool에서만 비교한다.
+- 성능 차이가 작고 학습/운영 비용이 크면 LightGBM을 유지한다.
+
+### 장기 후보
+
+현재 5만 샘플과 weak label만으로는 우선순위가 낮다.
+
+```text
+GraphSAGE / PinSage
+Two-Tower persona encoder
+Cross-encoder reranker
+```
+
+실행 조건:
+
+- human labeled similar-person pair가 생긴다.
+- 실제 클릭/상세보기/선택 로그가 쌓인다.
+- 100만 전체 데이터에서 FastRP/KNN refresh 비용이 병목이 된다.
+- 신규 persona에 대한 inductive embedding이 필요해진다.
+
 ## 실험 계획
 
 ### E0. FastRP/KNN 후보생성 baseline
@@ -327,7 +400,126 @@ final_score = alpha * normalized_model_score
 alpha = 0.3, 0.5, 0.7, 0.9
 ```
 
-### E7. GraphSAGE / PinSage 계열
+### E7. Diversity / novelty final reranking
+
+목적:
+
+- 유사 페르소나 top-k가 같은 직업, 같은 지역, 같은 커뮤니티, broad demographic match로만 수축되는 것을 막는다.
+- 같은 target persona가 여러 source에서 과도하게 반복되는 hub 현상을 관찰한다.
+- ranking metric을 크게 잃지 않는 범위에서 설명가능성과 탐색 다양성을 높인다.
+
+취미추천의 category diversity를 그대로 쓰지는 않는다. 유사페르소나에서는 다음 축으로 바꿔 본다.
+
+```text
+occupation diversity
+location diversity
+community diversity
+text-domain similarity diversity
+low-information match penalty
+hub target / repeated target concentration
+```
+
+1차 실험:
+
+```text
+base_score = fastrp_score 또는 model_score
+final_score = base ranking에서 직업/지역/community 반복을 penalty로 조정한 rerank score
+```
+
+기본 penalty 후보:
+
+```text
+target_occupation 반복
+target_province 반복
+target_community_id 반복
+low-information-only match
+```
+
+실험값:
+
+```text
+diversity_lambda = 0.05, 0.1, 0.2
+```
+
+판단:
+
+- NDCG@5/10이 크게 떨어지면 reject.
+- occupation/location/community diversity가 개선되어야 한다.
+- demographic-only recommendation ratio가 낮아져야 한다.
+- manual review에서 억지 다양화가 아니라 의미 있는 유사성으로 보여야 한다.
+
+### E8. Personalized PageRank 후보생성 baseline
+
+현재 FastRP/KNN 후보 pool의 recall이 부족하다고 판단될 때 실행한다.
+
+목적:
+
+- 그래프에서 source persona 주변을 random-walk 관점으로 탐색한다.
+- FastRP embedding 기반 후보와 다른 후보가 나오는지 확인한다.
+- 설명 가능한 구조적 근접 후보를 추가로 확보할 수 있는지 본다.
+
+방식:
+
+```text
+source Person
+  -> PPR / random walk with restart
+  -> topK target Person 후보
+  -> 동일 pair feature builder
+  -> 동일 reranker/evaluation pipeline
+```
+
+판단:
+
+- FastRP/KNN 대비 새로운 strong-reason 후보가 늘어나는가?
+- candidate overlap이 너무 높으면 유지할 이유가 약하다.
+- 후보생성 시간이 FastRP/KNN 대비 감당 가능한가?
+- 최종 성능은 PPR 단독이 아니라 reranker 입력 후보 pool 개선으로 판단한다.
+
+### E9. Node2Vec 후보생성 baseline
+
+현재 FastRP embedding이 이질 그래프 구조를 충분히 담지 못한다고 판단될 때 실행한다.
+
+목적:
+
+- random-walk 기반 node embedding으로 Person 후보를 생성한다.
+- FastRP/KNN과 후보 다양성, ranking 성능, 설명가능성을 비교한다.
+
+방식:
+
+```text
+Neo4j graph export
+  -> Node2Vec embedding
+  -> approximate nearest neighbor / topK Person 후보
+  -> 동일 pair feature builder
+  -> 동일 reranker/evaluation pipeline
+```
+
+판단:
+
+- FastRP보다 NDCG/strong-reason/manual review가 좋아야 한다.
+- 학습/embedding refresh 비용이 과도하면 reject한다.
+- FastRP와 비슷한 결과라면 운영 단순성을 위해 FastRP를 유지한다.
+
+### E10. CatBoost ranking
+
+범주형 feature 처리 방식이 LightGBM보다 유리한지 확인하는 대체 reranker 실험이다.
+
+현재 feature는 대부분 pairwise binary/numeric이므로 우선순위는 LightGBM보다 낮다.
+
+원칙:
+
+- 동일 candidate pair dataset을 사용한다.
+- 동일 feature set과 동일 group split을 사용한다.
+- `source_uuid` 단위 group ranking으로 비교한다.
+- XGBoost는 실험 대상에서 제외한다.
+
+판단:
+
+- LightGBM 대비 ranking metric, 설명가능성, manual review가 동시에 개선되어야 한다.
+- categorical handling 이점이 관측되지 않으면 유지하지 않는다.
+- 성능 차이가 작거나 학습/운영 비용이 크면 LightGBM을 유지한다.
+
+### E11. GraphSAGE / PinSage / Two-Tower 계열
 
 현재는 후순위다.
 
@@ -336,6 +528,7 @@ alpha = 0.3, 0.5, 0.7, 0.9
 - 현재는 사람-사람 정답 라벨이 없다.
 - 5만 규모에서는 FastRP/KNN + reranker가 더 현실적이다.
 - GNN은 weak label을 복잡하게 외울 위험이 있다.
+- Two-Tower는 100만 전체 운영과 ANN 검색이 필요해질 때 의미가 커진다.
 
 나중에 다음 조건이 생기면 고려한다.
 
@@ -386,6 +579,9 @@ community만 같음
 - repeated target concentration
 - occupation diversity
 - location diversity
+- community diversity
+- demographic-only recommendation ratio
+- hub target rate
 - seed 고정 시 순위 안정성
 
 ### 효율
@@ -430,9 +626,14 @@ FastRP/KNN SIMILAR_TO + post-hoc explanation API
 7. evaluate_lambdarank.py
 8. train_rank_xendcg.py
 9. evaluate_rank_xendcg.py
-10. text embedding feature 실험 추가
-11. structured+text 통합 모델 비교
-12. hybrid score 비교
+10. hybrid score 비교
+11. diversity/final rerank 비교
+12. text embedding feature 실험 추가
+13. structured+text 통합 모델 비교
+14. 필요 시 PPR 후보생성 baseline 비교
+15. 필요 시 Node2Vec 후보생성 baseline 비교
+16. 필요 시 CatBoost ranking 대체 reranker 비교
+17. manual review와 decision artifact 갱신
 ```
 
 ## 결론

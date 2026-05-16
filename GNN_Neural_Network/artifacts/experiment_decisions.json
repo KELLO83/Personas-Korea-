@@ -963,5 +963,58 @@
       "artifacts/experiments/phase5_taxonomy_overmerge/overmerge_report.json"
     ],
     "next_step": "Run KURE/KRUE text embedding only as an explicit opt-in validation-first ablation with leakage audit and no default change unless gates pass."
+  },
+  "phase5_c_kure_domain_tagged_text_005": {
+    "experiment": "Phase5_C_KURE_Domain_Tagged_Text_Feature_005",
+    "timestamp": "2026-05-16",
+    "status": "rejected_below_sota",
+    "decision": "do_not_promote_current_kure_text_path",
+    "default_change": false,
+    "current_sota": {
+      "run_id": "phase2_5_num_leaves_31",
+      "model_path": "artifacts/experiments/phase2_5_num_leaves_31/ranker_model.txt",
+      "test_recall@10": 0.7096839752057718,
+      "test_ndcg@10": 0.447712669317698,
+      "test_candidate_recall@50": 0.977136469870948,
+      "include_text_embedding_feature": false
+    },
+    "kure_domain_tagged_test": {
+      "run_id": "kure_text_feature_005_domain_tagged_20k_cpu10_test_matrix_retry",
+      "model_path": "artifacts/experiments/phase5_c_text_embedding/kure_text_feature_005_domain_tagged_full_validation/ranker_model.txt",
+      "metrics_path": "artifacts/experiments/phase5_c_text_embedding/kure_text_feature_005_domain_tagged_20k_cpu10_test_matrix_retry/test_metrics.json",
+      "test_recall@10": 0.6174818089711707,
+      "test_ndcg@10": 0.386258213985051,
+      "test_candidate_recall@50": 0.8272082527401676,
+      "delta_vs_own_stage1_recall@10": 0.047711154094132846,
+      "delta_vs_own_stage1_ndcg@10": 0.029899774179631633,
+      "include_text_embedding_feature": true,
+      "text_builder": "build_domain_tagged_persona_text",
+      "preprocessing_version": "domain_tagged_masked_v1"
+    },
+    "matched_current_code_validation": {
+      "candidate_recall@50": 0.8276687851155936,
+      "no_text_control": {
+        "run_id": "control_no_text_current_code_validation_cpu10",
+        "metrics_path": "artifacts/experiments/phase5_c_text_embedding/control_no_text_current_code_validation_cpu10/validation_metrics.json",
+        "recall@10": 0.5916919959473151,
+        "ndcg@10": 0.3660545578621971
+      },
+      "kure_text": {
+        "run_id": "kure_text_feature_005_current_code_validation_cpu10",
+        "metrics_path": "artifacts/experiments/phase5_c_text_embedding/kure_text_feature_005_current_code_validation_cpu10/validation_metrics.json",
+        "recall@10": 0.6347057198121028,
+        "ndcg@10": 0.3965589149631506
+      },
+      "delta_kure_vs_no_text": {
+        "recall@10": 0.04301372386478775,
+        "ndcg@10": 0.030504357100953504
+      },
+      "resource_policy": {
+        "cpu_thread_count": 10,
+        "progress_mode": "on"
+      }
+    },
+    "reason": "KURE-v1 domain-tagged text features beat the matched no-text control under the same current code and candidate pool, but the current path remains below the closed Phase 2.5 SOTA on absolute Recall@10 and NDCG@10. Default remains include_text_embedding_feature=false.",
+    "next_step": "Do not promote KURE-v1. Move default/product integration forward with the closed Phase 2.5 SOTA; keep KURE text as non-default evidence unless a new stronger candidate-pool hypothesis is opened in PRD/TASKS."
   }
 }

@@ -84,10 +84,19 @@ Do not confuse this with the completed KURE dense MMR sweep.
 
 - [x] KURE-v1 embedding default-candidate paths are closed as rejected/no-go:
   - KURE dense MMR: NO-GO.
-  - KURE Stage2 text feature: signal exists, but below closed Phase 2.5 default.
+  - KURE Stage2 text feature: signal exists, but below closed Phase 2.5 default/SOTA.
   - KURE Stage1 semantic provider: validation failed because candidate_recall@50 regressed materially.
 - [x] Default remains `popularity + cooccurrence -> LightGBM`, with `MMR=false`, `include_text_embedding_feature=false`, `kure_semantic=false`.
 - [x] Other embedding models remain PRD-allowed but are now lower-priority follow-up only.
+- [x] `kure_text_feature_005_domain_tagged_20k_cpu10_test_matrix_retry` completed on test with progress enabled and CPU thread count 10.
+  - [x] Test Recall@10 `0.617482`, NDCG@10 `0.386258`.
+  - [x] Delta vs its Stage1 baseline: Recall@10 `+0.047711`, NDCG@10 `+0.029900`.
+  - [x] Decision: positive feature signal, but **not SOTA** and **not default**.
+- [x] Final KURE follow-up: run a validation-only matched-control experiment under the same current code/split/candidate pool:
+  - [x] no-text control: validation Recall@10 `0.591692`, NDCG@10 `0.366055`
+  - [x] `include_text_embedding_feature=true`: validation Recall@10 `0.634706`, NDCG@10 `0.396559`
+  - [x] CPU thread count explicitly set to `10` and progress visible (`--progress-mode on`)
+  - [x] KURE selected vs matched no-text control, but not promoted because it remains below the closed Phase 2.5 SOTA absolute test reference.
 - [ ] Optional future probe: `dragonkue/snowflake-arctic-embed-l-v2.0-ko` as a single validation-only Stage2 text feature ablation, only after higher-priority default integration or accuracy-safe diversity work.
 - [ ] Optional future probe: `dragonkue/multilingual-e5-small-ko-v2` as a lightweight Stage2 feature ablation only if runtime/cost reduction becomes important.
 - [ ] Do not run another Stage1 semantic candidate generator experiment without a new PRD/TASKS reopening note, because KURE Stage1 reduced candidate_recall@50 from `0.977645` to `0.794971`.
@@ -333,6 +342,11 @@ Follow-up-only backbone probes:
 - [x] Run fast KURE-v1 2K pilot after governance hardening.
   - [x] `kure_text_feature_005_domain_tagged_fast_gpu_pilot_2k` showed same-sample validation Recall@10/NDCG@10 gains over the no-text pilot.
   - [x] Decision recorded as `needs_full_validation_followup`, not promoted.
+- [x] Run full validation/test follow-up for KURE-v1 domain-tagged text feature after governance hardening.
+  - [x] Full validation KURE text Recall@10 `0.634706`, NDCG@10 `0.396559`.
+  - [x] Full validation matched no-text control Recall@10 `0.591692`, NDCG@10 `0.366055`.
+  - [x] Test KURE text Recall@10 `0.617482`, NDCG@10 `0.386258`.
+  - [x] Decision: feature signal confirmed, but below closed Phase 2.5 SOTA; default remains off.
 
 ### Step 3: Remaining Ranking-Collapse Implementation Plan
 

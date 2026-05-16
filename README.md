@@ -16,7 +16,10 @@ NVIDIA `Nemotron-Personas-Korea` 데이터셋을 Neo4j 지식 그래프로 구�
 - `README.md`: 설치/실행 방법, 현재 상태, 참고 자료를 정리하는 운영 안내서입니다.
 - 충돌이 있을 경우 우선순위는 **`PRD.md` → `TASKS.md` → `README.md`** 입니다.
 
-이 규칙은 하위 실험 문서(`docs/` 및 GNN 보조 문서)에도 동일하게 적용됩니다.
+추천시스템 실험은 루트 문서에 섞지 않고 각 실험 폴더 문서를 기준으로 관리합니다.
+
+- 취미 추천(`Person -> Hobby`): `GNN_Neural_Network/`
+- 유사 페르소나 추천(`Person -> Person`): `experiments/persona_similarity/`
 
 ---
 
@@ -64,10 +67,10 @@ Cypher 쿼리를 직접 작성하지 않아도 문장 형태의 질문으로 데
 - “서울 거주자 중 개발자 비율은?”
 - “특정 UUID와 비슷한 사람을 찾아줘”
 
-### 5. 유사 페르소나 및 추천
-특정 페르소나를 기준으로 유사한 사람을 찾고, 유사 그룹에서 자주 나타나는 취미나 기술을 추천합니다.
+### 5. 유사 페르소나 조회
+특정 페르소나를 기준으로 그래프 구조상 가까운 사람을 찾고, 왜 비슷한지 설명 가능한 공통 속성을 제공합니다.
 
-추천은 실시간 LLM 호출이 아니라 그래프에 저장된 유사도 관계와 속성 빈도를 기반으로 계산합니다.
+유사 페르소나는 실시간 LLM 호출이 아니라 Neo4j GDS가 만든 `SIMILAR_TO` 관계와 후처리 설명 API를 기반으로 계산합니다.
 
 ### 6. 커뮤니티 및 관계 경로 분석
 비슷한 속성을 공유하는 페르소나 그룹을 확인하고, 두 페르소나가 어떤 속성으로 연결되는지 경로를 조회합니다.
@@ -87,9 +90,20 @@ Cypher 쿼리를 직접 작성하지 않아도 문장 형태의 질문으로 데
 
 기본 설정에서는 전체 데이터를 사용할 수 있습니다. 개발 또는 테스트 환경에서는 `.env`의 `DATA_SAMPLE_SIZE` 값을 지정해 일부 데이터만 로드할 수 있습니다.
 
-# Personas-Korea-
+현재 로컬 실험 DB는 원본 전체가 아니라 10대/20대/30대 중심 5만 페르소나 샘플을 기준으로 운영될 수 있습니다. 샘플링 조건은 그래프 빌드 명령과 실험 문서에서 별도로 확인합니다.
 
 ---
+
+## 추천시스템 실험 구분
+
+이 저장소에는 추천 관련 실험이 두 개 있습니다. 데이터셋, 라벨, metric, artifact, 모델 결정을 섞지 않습니다.
+
+| 실험 | 위치 | 추천 대상 | 현재 기본 방향 |
+|---|---|---|---|
+| 취미 추천 | `GNN_Neural_Network/` | `Person -> Hobby` | popularity/co-occurrence 후보생성 + LightGBM reranker |
+| 유사 페르소나 추천 | `experiments/persona_similarity/` | `Person -> Person` | FastRP/KNN 후보생성 + LightGBM/CatBoost 후보 reranker 실험 |
+
+루트 API/프론트엔드/그래프 빌드 동작이 바뀌는 경우에만 루트 `PRD.md`, `TASKS.md`, `README.md`를 함께 갱신합니다.
 
 ## 현재 구현 상태
 
@@ -231,6 +245,12 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 
 - `PRD.md`: 제품 요구사항과 기능 설계
 - `TASKS.md`: 구현 진행 상황
+- `AGENTS.md`: 코딩 에이전트 공통 작업 지침
+- `GNN_Neural_Network/PRD.md`: 취미 추천 실험 계획
+- `GNN_Neural_Network/TASKS.md`: 취미 추천 실험 진행 상태
+- `experiments/persona_similarity/PRD.md`: 유사 페르소나 추천 실험 계획
+- `experiments/persona_similarity/TASKS.md`: 유사 페르소나 추천 실험 진행 상태
+- `experiments/persona_similarity/DATASET_EXPLAIN.md`: 유사 페르소나 학습 데이터 형태 설명
 - `docs/embedding-storage-workflow.md`: 임베딩 저장 및 적재 절차
 - `docs/centrality-batch-operations.md`: F10 중심성 배치 실행 및 외부 스케줄러 운영 절차
 - `docs/usage-guide.md`: 사용자/운영 사용 가이드(요약)

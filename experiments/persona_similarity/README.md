@@ -40,6 +40,9 @@ Most long-running scripts reuse valid artifacts by default. Pass `--force` only 
 # Hybrid score based on a trained model
 .\.venv\Scripts\python.exe experiments\persona_similarity\scripts\evaluate_hybrid_score.py --config experiments\persona_similarity\configs\lightgbm_reranker.yaml --source-experiment lambdarank
 
+# Final reranking / diversity probes
+.\.venv\Scripts\python.exe experiments\persona_similarity\scripts\evaluate_diversity_rerank.py --config experiments\persona_similarity\configs\lightgbm_reranker.yaml --base-score fastrp_score --experiment-name diversity_rerank_fastrp
+
 # Ablations
 .\.venv\Scripts\python.exe experiments\persona_similarity\scripts\ablation_without_fastrp.py --config experiments\persona_similarity\configs\lightgbm_reranker.yaml
 .\.venv\Scripts\python.exe experiments\persona_similarity\scripts\evaluate_ablation_without_fastrp.py --config experiments\persona_similarity\configs\lightgbm_reranker.yaml

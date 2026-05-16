@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import time
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -93,6 +94,36 @@ def unique_target_rate_at_k(frame: pd.DataFrame, score_column: str, k: int, prog
     return len(targets) / total if total else 0.0
 
 
+def attribute_diversity_at_k(frame: pd.DataFrame, score_column: str, attribute_column: str, k: int, progress: bool = False) -> float:
+    if attribute_column not in frame.columns:
+        return 0.0
+    values: list[float] = []
+    for _, group in iter_groups(frame, f"{attribute_column}_diversity@{k}:{score_column}", progress):
+        top = group.sort_values(score_column, ascending=False).head(k)
+        if not top.empty:
+            values.append(float(top[attribute_column].fillna("").astype(str).nunique() / len(top)))
+    return float(sum(values) / len(values)) if values else 0.0
+
+
+def demographic_only_rate_at_k(frame: pd.DataFrame, score_column: str, k: int, progress: bool = False) -> float:
+    low_columns = ["same_sex", "same_marital", "same_province", "same_community"]
+    strong_columns = ["same_occupation", "same_district", "same_education", "same_field", "shared_hobby_count", "shared_skill_count"]
+    text_columns = [column for column in frame.columns if column.endswith("_text_cosine")]
+    count = 0
+    total = 0
+    for _, group in iter_groups(frame, f"demographic_only@{k}:{score_column}", progress):
+        top = group.sort_values(score_column, ascending=False).head(k)
+        low_signal = top[low_columns].sum(axis=1) > 0
+        strong_signal = top[strong_columns].sum(axis=1) > 0
+        if text_columns:
+            text_signal = top[text_columns].max(axis=1) >= 0.5
+        else:
+            text_signal = pd.Series([False] * len(top), index=top.index)
+        count += int((low_signal & ~strong_signal & ~text_signal).sum())
+        total += len(top)
+    return count / total if total else 0.0
+
+
 def topk_overlap_at_k(frame: pd.DataFrame, left_score: str, right_score: str, k: int, progress: bool = False) -> float:
     overlaps: list[float] = []
     for _, group in iter_groups(frame, f"overlap@{k}:{left_score}->{right_score}", progress):
@@ -112,6 +143,10 @@ def evaluate_score_column(frame: pd.DataFrame, score_column: str, top_k_values: 
         metrics[f"low_information_dominance@{k}"] = low_information_dominance_at_k(frame, score_column, k, progress=progress)
         metrics[f"average_reason_count@{k}"] = average_reason_count_at_k(frame, score_column, k, progress=progress)
         metrics[f"unique_target_rate@{k}"] = unique_target_rate_at_k(frame, score_column, k, progress=progress)
+        metrics[f"occupation_diversity@{k}"] = attribute_diversity_at_k(frame, score_column, "target_occupation", k, progress=progress)
+        metrics[f"province_diversity@{k}"] = attribute_diversity_at_k(frame, score_column, "target_province", k, progress=progress)
+        metrics[f"community_diversity@{k}"] = attribute_diversity_at_k(frame, score_column, "target_community_id", k, progress=progress)
+        metrics[f"demographic_only_rate@{k}"] = demographic_only_rate_at_k(frame, score_column, k, progress=progress)
     return metrics
 
 
@@ -256,6 +291,51 @@ def min_max_normalize(series: pd.Series) -> pd.Series:
     if max_value <= min_value:
         return pd.Series([0.0] * len(series), index=series.index)
     return (series - min_value) / (max_value - min_value)
+
+
+def add_diversity_rerank_score(
+    frame: pd.DataFrame,
+    base_score: str,
+    output_score: str,
+    diversity_lambda: float,
+    penalty_columns: list[str] | None = None,
+) -> pd.DataFrame:
+    penalties = penalty_columns or ["target_occupation", "target_province", "target_community_id"]
+    reranked_groups: list[pd.DataFrame] = []
+    for _, group in frame.groupby("source_uuid", sort=False):
+        remaining = group.copy()
+        selected_rows: list[pd.Series] = []
+        seen: dict[str, set[str]] = {column: set() for column in penalties if column in remaining.columns}
+        while not remaining.empty:
+            best_index = None
+            best_score = -float("inf")
+            for index, row in remaining.iterrows():
+                duplicate_penalty = 0.0
+                for column, seen_values in seen.items():
+                    value = str(row.get(column, ""))
+                    if value and value in seen_values:
+                        duplicate_penalty += 1.0
+                adjusted_score = float(row[base_score]) - (diversity_lambda * duplicate_penalty)
+                if adjusted_score > best_score:
+                    best_score = adjusted_score
+                    best_index = index
+            if best_index is None:
+                break
+            selected = remaining.loc[best_index].copy()
+            selected[output_score] = len(group) - len(selected_rows)
+            selected_rows.append(selected)
+            for column, seen_values in seen.items():
+                value = str(selected.get(column, ""))
+                if value:
+                    seen_values.add(value)
+            remaining = remaining.drop(index=best_index)
+        if selected_rows:
+            reranked_groups.append(pd.DataFrame(selected_rows))
+    if not reranked_groups:
+        result = frame.copy()
+        result[output_score] = result[base_score]
+        return result
+    return pd.concat(reranked_groups, ignore_index=True)
 
 
 def evaluate_hybrid(
