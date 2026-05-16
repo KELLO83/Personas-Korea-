@@ -60,13 +60,15 @@ Rationale:
 
 Use the spelling `KURE-v1` for the model (`nlpai-lab/KURE-v1`). Older notes that say `KRUE` are historical aliases and must be treated as KURE-v1, not as a separate model family.
 
+Embedding-related experiments are now considered **low-priority, opt-in follow-up work** unless a later PRD update explicitly reopens them as default-promotion candidates. KURE-v1 produced useful semantic signals in some places, but every default-candidate embedding path tested so far lost to the closed Phase 2.5 accuracy baseline. This means other embedding models may still be evaluated, but they start with a reduced prior probability of improving the default path and must not displace higher-priority product integration or accuracy-safe diversity work.
+
 Two KURE-related experiment families must stay separate:
 
 | Experiment family | Status | Default impact |
 | --- | --- | --- |
 | KURE dense MMR reranking | completed, NO-GO | `MMR=false` remains default |
-| KURE text embedding feature ablation | completed/rejected after full-context rerun; may remain as Stage2-only signal analysis | `include_text_embedding_feature=false` remains default |
-| KURE semantic Stage1 candidate provider | newly approved gated opt-in experiment | no default impact unless it beats the closed Phase 2.5 gates |
+| KURE text embedding feature ablation | completed/rejected after corrected audit and fallback reruns; may remain as Stage2-only signal analysis | `include_text_embedding_feature=false` remains default |
+| KURE semantic Stage1 candidate provider | completed/rejected after `kure_stage1_semantic_001_fast_gpu` validation | `kure_semantic` remains opt-in only; default Stage1 unchanged |
 
 The initial KURE text feature run set `include_text_embedding_feature=true`, but the post-mask leakage audit failed above the 5% threshold and the run was excluded before LightGBM fitting:
 
@@ -95,30 +97,28 @@ validation_delta_ndcg@10_vs_stage1: +0.000197
 decision: rejected_recall_regression
 ```
 
-The next KURE work is not another MMR sweep and not another blind KURE rerank. The next KURE work is repairing or regenerating split-aligned `person_context.csv` coverage for the current person mapping, then re-running leakage-safe text embedding feature injection into the LightGBM ranker.
+The corrected audit and fallback reruns showed that KURE-v1 can carry semantic signal, but it still did not beat the closed Phase 2.5 default. Therefore, the next recommended work is no longer another blind KURE rerun. Any future embedding work must be justified as a low-priority follow-up after product/default integration or accuracy-safe diversity work, and must remain opt-in until it beats the same gates.
 
 ### Mandatory Blockers Before KURE Text Feature Ablation
 
-Do not run promotion-grade KURE text embedding feature experiments until these blockers are closed:
+Status as of 2026-05-15: these pre-KURE blockers are closed with a taxonomy warning and no default-path change. Future KURE text feature experiments may run only as explicit opt-in, validation-first follow-up work; they still must preserve cache provenance and pass the gates below before any default discussion.
 
 1. **50K canonical/fallback baseline closure**
-   - Rebuild or verify the stable item vocabulary from raw hobby phrases.
-   - Confirm `rare_item_policy=keep_with_fallback` does not reduce `candidate_recall@50` by more than `0.01`.
-   - Re-run the closed Phase 2.5 config on the local 50K slice and record validation metrics.
+   - Closed by prepare-only artifact refresh.
+   - `raw_edges=50000`, `retained_edges=48811`, `rare_item_policy=keep_with_fallback`, `dropped_edges=0`.
 
 2. **Phase 5-B2 feature-balance closure**
-   - Complete the `feature_fraction=0.7` validation artifact, not just `candidates_done` status.
-   - Run the planned `feature_fraction=0.8` probe only if it is still needed under the same baseline.
-   - Compare against the closed Phase 2.5 baseline and record a decision.
+   - Closed for `feature_fraction=0.7` and `feature_fraction=0.8`.
+   - Neither run is promoted because both were only marginally above Stage 1 and retained a large fallback count.
 
 3. **Taxonomy over-merge risk closure**
-   - Record whether over-merged canonical/category mappings contribute to top-k ranking collapse.
-   - Keep this as a data-quality decision even if no model default changes.
+   - Closed as `warning_closed_for_pre_kure`.
+   - Taxonomy/category balance remains a review warning, not a default-changing blocker.
 
 4. **Cold-start baseline metrics**
-   - Define cold-start as `known_hobbies <= 1`.
-   - Record cold-start Recall@10, NDCG@10, Coverage@10, Novelty@10, and ILD@10 for the closed Phase 2.5 default.
-   - Use this as the comparison baseline for KURE text feature experiments.
+   - Closed for `known_hobbies <= 1`.
+   - Validation V2 Recall@10 `0.592199`, NDCG@10 `0.367798`; test V2 Recall@10 `0.589513`, NDCG@10 `0.368271`.
+   - Use these artifacts as the fixed sparse-user comparison baseline for KURE text feature experiments.
 
 ### KURE Text Feature Gate
 
@@ -168,19 +168,33 @@ Decision gate:
 - Default promotion requires `delta_recall@10 >= -0.002`, `delta_ndcg@10 >= -0.002`, `v2_fallback_count=0`, and no candidate-recall regression beyond tolerance.
 - If it improves Stage1 but remains below the closed Phase 2.5 default, record it as rejected/experimental and keep the default unchanged.
 
+Outcome recorded for `kure_stage1_semantic_001_fast_gpu`:
+
+- Validation only; test skipped because the promotion gate failed.
+- Stage1 provider path: `popularity + cooccurrence + kure_semantic`.
+- Validation v2 Recall@10 `0.599705`, NDCG@10 `0.370891`, candidate_recall@50 `0.794971`.
+- Closed Phase 2.5 validation baseline: Recall@10 `0.739051`, NDCG@10 `0.457970`, candidate_recall@50 `0.977645`.
+- Decision: rejected; default remains `popularity + cooccurrence -> LightGBM`, with `kure_semantic` opt-in only.
+
 ### Text Embedding Backbone Follow-Up Candidates
 
-KURE-v1 remains the current reference backbone for leakage-safe text embedding feature experiments. Two additional
-backbones may be evaluated only as Phase 5-C follow-up ablations under the same masking, leakage-audit, cache,
-validation-first, and winner-only-test rules:
+KURE-v1 remains the current reference backbone for leakage-safe text embedding feature experiments, but its observed results lower the priority of additional embedding probes. Other embedding backbones are allowed by this PRD, but they are now **deferred follow-up work**, not the next default-track activity. Run them only when there is an explicit need to test semantic quality after higher-value work is complete.
+
+Two additional backbones may be evaluated only as Phase 5-C follow-up ablations under the same masking, leakage-audit, cache, validation-first, and winner-only-test rules:
 
 | Candidate | Role | Rationale | Promotion impact |
 | --- | --- | --- | --- |
 | `dragonkue/snowflake-arctic-embed-l-v2.0-ko` | accuracy-ceiling probe | Korean retrieval benchmarks suggest it can exceed KURE-v1 quality, but it is not expected to be materially lighter | no default change unless it beats the closed baseline gates |
 | `dragonkue/multilingual-e5-small-ko-v2` | lightweight probe | 118M parameter / 384-dim class model; useful if validation quality is close enough while reducing VRAM, cache, and runtime cost | may become a lightweight candidate only after validation gate and cold-start review |
 
-These runs must not reuse incompatible KURE feature caches. Cache metadata and feature-cache keys must include the
-embedding model name or revision so KURE-v1, Snowflake-ko, and E5-small-ko vectors cannot mix.
+These runs must not reuse incompatible KURE feature caches. Cache metadata and feature-cache keys must include the embedding model name or revision so KURE-v1, Snowflake-ko, and E5-small-ko vectors cannot mix.
+
+Caution from completed KURE-v1 experiments:
+
+- Do not use semantic embeddings as a Stage1 candidate generator by default. `kure_stage1_semantic_001_fast_gpu` reduced validation candidate_recall@50 from `0.977645` to `0.794971`, which lowered the maximum possible Stage2 accuracy.
+- Do not assume a stronger embedding backbone will fix the current ranking-collapse problem. Stage2 text features showed signal, but the closed Phase 2.5 default still won on Recall@10 and NDCG@10.
+- If Snowflake-ko or E5-small-ko is tested, prefer a single validation-only Stage2 feature probe first. Stage1 semantic retrieval with another embedding model is lower priority and requires a separate PRD/TASKS reopening note.
+- A future embedding run must be stopped at validation if Recall@10/NDCG@10 miss the default promotion gate or if candidate_recall@50 regresses materially.
 
 ## 문서 계층 및 우선순위
 
@@ -216,7 +230,7 @@ Completed result:
 - `kure_text_feature_003_full_ranker_fallback`: rejected because validation Recall@10 regressed and stayed below the closed Phase 2.5 default.
 - No winner was selected for test; no default path changed.
 
-Follow-up may resume only after the blockers in `Mandatory Blockers Before KURE Text Feature Ablation` are closed. Follow-up work must be implementation/governance first: context coverage repair, cold-start metric reporting, model/revision-safe cache keys, and artifact metadata. Do not treat KURE text features as a live promotion candidate without new validation artifacts.
+Follow-up may resume because the pre-KURE blockers above are closed, but it must be implementation/governance first: context coverage repair, model/revision-safe cache keys, and artifact metadata. Do not treat KURE text features as a live promotion candidate without new validation artifacts.
 
 ## 6. 현재 승인 기준 (프로젝트 내부 SOTA 경로) 및 Feature Policy
 

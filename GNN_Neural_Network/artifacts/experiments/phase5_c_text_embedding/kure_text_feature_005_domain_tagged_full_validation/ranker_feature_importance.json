@@ -1,0 +1,16 @@
+{
+  "lightgcn_score": 0.0,
+  "cooccurrence_score": 2200.526013612747,
+  "segment_popularity_score": 0.0,
+  "known_hobby_compatibility": 1704.7133340835571,
+  "age_group_fit": 4294.773219823837,
+  "occupation_fit": 1839.1652855873108,
+  "region_fit": 2313.878758907318,
+  "popularity_prior": 115786.67275214195,
+  "mismatch_penalty": 3772.5338143110275,
+  "popularity_penalty": 0.0,
+  "novelty_bonus": 89.63614058494568,
+  "category_diversity_reward": 0.0,
+  "is_cold_start": 295.25895857810974,
+  "text_embedding_similarity": 14059.65566790104
+}

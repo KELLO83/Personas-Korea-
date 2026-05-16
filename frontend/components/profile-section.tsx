@@ -1,8 +1,10 @@
-import { FormEvent } from "react";
-import type { PersonaProfileResponse } from "@/lib/api-types";
+import { FormEvent, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import type { PersonaProfileResponse, SimilarPreview, SimilarityExplanationResponse } from "@/lib/api-types";
 import type { Loadable } from "@/hooks/use-loadable";
+import { personaApi } from "@/lib/api-client";
 import { lowPriorityLabel, profileExposurePolicy } from "@/lib/exposure-policy";
 import { joinDefined, percent, shortUuid } from "@/lib/formatters";
+import { SearchDetailProfile, type SimilarityContext } from "@/components/search-section";
 
 interface ProfileSectionProps {
   profile: Loadable<PersonaProfileResponse>;
@@ -12,11 +14,78 @@ interface ProfileSectionProps {
 }
 
 export function ProfileSection({ profile, selectedUuid, onUuidChange, onSelectPersona }: ProfileSectionProps) {
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailProfile, setDetailProfile] = useState<PersonaProfileResponse | null>(null);
+  const [detailSimilarityContext, setDetailSimilarityContext] = useState<SimilarityContext | null>(null);
+  const [detailSimilarityExplanation, setDetailSimilarityExplanation] = useState<SimilarityExplanationResponse | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const modalRef = useRef<HTMLDivElement | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const detailTriggerRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (detailOpen) closeButtonRef.current?.focus();
+  }, [detailOpen]);
+
   function submitUuid(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     const uuid = String(data.get("profileUuid") ?? "").trim();
     if (uuid) onUuidChange(uuid);
+  }
+
+  async function openDetail(uuid: string, trigger: HTMLButtonElement, similarityContext: SimilarityContext | null = null) {
+    detailTriggerRef.current = trigger;
+    setDetailOpen(true);
+    setDetailProfile(null);
+    setDetailSimilarityContext(similarityContext);
+    setDetailSimilarityExplanation(null);
+    setDetailError(null);
+    setDetailLoading(true);
+    try {
+      const [profileResult, explanationResult] = await Promise.all([
+        personaApi.profile(uuid),
+        similarityContext ? personaApi.similarityExplanation(similarityContext.sourceProfile.uuid, uuid) : Promise.resolve(null),
+      ]);
+      setDetailProfile(profileResult);
+      setDetailSimilarityExplanation(explanationResult);
+    } catch (error) {
+      setDetailError(error instanceof Error ? error.message : "상세 정보를 불러오지 못했습니다.");
+    } finally {
+      setDetailLoading(false);
+    }
+  }
+
+  function closeDetail() {
+    setDetailOpen(false);
+    detailTriggerRef.current?.focus();
+  }
+
+  function handleModalKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key === "Escape") {
+      closeDetail();
+      return;
+    }
+    if (event.key !== "Tab" || !modalRef.current) return;
+
+    const focusableElements = modalRef.current.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    );
+    if (focusableElements.length === 0) {
+      event.preventDefault();
+      return;
+    }
+
+    const firstElement = focusableElements[0];
+    const lastElement = focusableElements[focusableElements.length - 1];
+    if (event.shiftKey && document.activeElement === firstElement) {
+      event.preventDefault();
+      lastElement.focus();
+    } else if (!event.shiftKey && document.activeElement === lastElement) {
+      event.preventDefault();
+      firstElement.focus();
+    }
   }
 
   return (
@@ -29,7 +98,23 @@ export function ProfileSection({ profile, selectedUuid, onUuidChange, onSelectPe
         </form>
       </div>
       {profile.error && <div className="card error-box">{profile.error}</div>}
-      {profile.data ? <ProfileDetailBody profile={profile.data} onSelectPersona={onSelectPersona} /> : <div className="card muted">{profile.loading ? "프로필을 불러오는 중" : "프로필을 불러오세요."}</div>}
+      {profile.data ? <ProfileDetailBody profile={profile.data} onSelectPersona={onSelectPersona} onOpenDetail={openDetail} /> : <div className="card muted">{profile.loading ? "프로필을 불러오는 중" : "프로필을 불러오세요."}</div>}
+      {detailOpen && (
+        <div className="modal-backdrop" role="presentation" onClick={closeDetail}>
+          <div ref={modalRef} className="modal-card" role="dialog" aria-modal="true" aria-labelledby="profile-detail-title" onClick={(event) => event.stopPropagation()} onKeyDown={handleModalKeyDown}>
+            <div className="modal-header">
+              <div>
+                <p className="eyebrow">Persona Detail</p>
+                <h2 id="profile-detail-title">{detailProfile?.display_name ?? "상세 정보"}</h2>
+              </div>
+              <button ref={closeButtonRef} className="ghost-button" onClick={closeDetail} aria-label="상세보기 닫기">닫기</button>
+            </div>
+            {detailLoading && <p className="muted">상세 정보를 불러오는 중입니다.</p>}
+            {detailError && <div className="error-box modal-error">{detailError}</div>}
+            {detailProfile && <SearchDetailProfile profile={detailProfile} onSelect={onSelectPersona} similarityContext={detailSimilarityContext} similarityExplanation={detailSimilarityExplanation} />}
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -37,9 +122,11 @@ export function ProfileSection({ profile, selectedUuid, onUuidChange, onSelectPe
 function ProfileDetailBody({
   profile,
   onSelectPersona,
+  onOpenDetail,
 }: {
   profile: PersonaProfileResponse;
   onSelectPersona: (uuid: string, label: string | null) => void;
+  onOpenDetail: (uuid: string, trigger: HTMLButtonElement, similarityContext: SimilarityContext | null) => Promise<void>;
 }) {
   const personaSections = [
     ["직업/전문성", profile.personas.professional],
@@ -136,6 +223,13 @@ function ProfileDetailBody({
               </div>
               <div className="card-actions">
                 <button className="ghost-button" type="button" onClick={() => onSelectPersona(persona.uuid, persona.display_name)}>이 사람 선택</button>
+                <button
+                  className="ghost-button"
+                  type="button"
+                  onClick={(event) => void onOpenDetail(persona.uuid, event.currentTarget, buildSimilarityContext(profile, persona))}
+                >
+                  상세보기
+                </button>
               </div>
             </div>
           ))}
@@ -144,4 +238,13 @@ function ProfileDetailBody({
       </div>
     </div>
   );
+}
+
+function buildSimilarityContext(profile: PersonaProfileResponse, persona: SimilarPreview): SimilarityContext {
+  return {
+    sourceLabel: profile.display_name ?? shortUuid(profile.uuid),
+    similarity: persona.similarity,
+    sharedHobbies: persona.shared_hobbies,
+    sourceProfile: profile,
+  };
 }

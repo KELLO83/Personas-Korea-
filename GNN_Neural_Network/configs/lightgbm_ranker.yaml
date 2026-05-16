@@ -23,6 +23,13 @@ rerank:
     novelty_bonus: 0.00
     category_diversity_reward: 0.00
 
+experimental:
+  allow_kure_mmr: true
+  allow_text_embedding_feature: true
+  allow_stage1_kure_provider: true
+  allow_xsimgcl: true
+  allow_source_features: true
+
 paths:
   artifact_dir: ../artifacts
   train_edges: ../artifacts/train_edges.csv

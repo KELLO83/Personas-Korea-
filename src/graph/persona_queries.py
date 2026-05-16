@@ -8,7 +8,7 @@ OPTIONAL MATCH (p)-[:MARITAL_STATUS]->(ms:MaritalStatus)
 OPTIONAL MATCH (p)-[:MILITARY_STATUS]->(mil:MilitaryStatus)
 OPTIONAL MATCH (p)-[:LIVES_WITH]->(ft:FamilyType)
 OPTIONAL MATCH (p)-[:LIVES_IN_HOUSING]->(ht:HousingType)
-OPTIONAL MATCH (p)-[:HAS_SKILL]->(s:Skill)
+OPTIONAL MATCH (p)-->(s:Skill)
 OPTIONAL MATCH (p)-[:ENJOYS_HOBBY|LIKES]->(h:Hobby)
 RETURN p,
        d.name AS district_name, d.key AS district_key,
@@ -37,7 +37,7 @@ GRAPH_STATS_QUERY = """
 MATCH (p:Person {uuid: $uuid})
 OPTIONAL MATCH (p)-[r]-()
 OPTIONAL MATCH (p)-[:ENJOYS_HOBBY|LIKES]->(h:Hobby)
-OPTIONAL MATCH (p)-[:HAS_SKILL]->(s:Skill)
+OPTIONAL MATCH (p)-->(s:Skill)
 RETURN count(DISTINCT r) AS total_connections,
        count(DISTINCT h) AS hobby_count,
        count(DISTINCT s) AS skill_count

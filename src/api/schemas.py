@@ -106,6 +106,25 @@ class SimilarPreview(BaseModel):
     shared_hobbies: list[str] = Field(default_factory=list)
 
 
+class SimilarityReason(BaseModel):
+    feature: str
+    label: str
+    value: str
+    contribution: float
+    raw_score: float
+
+
+class SimilarityExplanationResponse(BaseModel):
+    source_uuid: str
+    target_uuid: str
+    similarity_score: float | None = None
+    method: str = "FastRP_KNN_with_posthoc_feature_overlap"
+    top_reasons: list[SimilarityReason] = Field(default_factory=list)
+    shared_hobbies: list[str] = Field(default_factory=list)
+    shared_skills: list[str] = Field(default_factory=list)
+    note: str = ""
+
+
 class CommunityInfo(BaseModel):
     community_id: int | None = None
     label: str | None = None

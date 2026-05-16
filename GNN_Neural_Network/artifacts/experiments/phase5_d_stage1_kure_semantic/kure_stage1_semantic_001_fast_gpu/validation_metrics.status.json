@@ -1,8 +1,8 @@
 {
   "experiment_id": "kure_stage1_semantic_001_fast_gpu",
   "split": "validation",
-  "status": "started",
-  "event_timestamp": "2026-05-15T15:26:20Z",
+  "status": "validation_evaluated",
+  "event_timestamp": "2026-05-15T15:34:37Z",
   "command_signature": "evaluate_ranker.py --config 'GNN_Neural_Network\\configs\\kure_text_optin_ranker.yaml' --split validation --model-path 'GNN_Neural_Network\\artifacts\\experiments\\phase5_d_stage1_kure_semantic\\kure_stage1_semantic_001_fast_gpu\\ranker_model.txt' --output 'GNN_Neural_Network\\artifacts\\experiments\\phase5_d_stage1_kure_semantic\\kure_stage1_semantic_001_fast_gpu\\validation_metrics.json' --experiment-id kure_stage1_semantic_001_fast_gpu --stage1-kure-semantic-provider --embedding-batch-size 0 --embedding-vram-utilization 0.85 --stage1-kure-score-batch-size 128 --progress-mode on --skip-v1",
   "log_policy": {
     "progress_mode": "on",
@@ -12,15 +12,21 @@
     "tqdm_enabled": true
   },
   "artifact_path": "GNN_Neural_Network\\artifacts\\experiments\\phase5_d_stage1_kure_semantic\\kure_stage1_semantic_001_fast_gpu\\validation_metrics.status.json",
-  "runtime_seconds": 0.0,
+  "runtime_seconds": 678.0398424000014,
   "input_config_summary": {
     "config_path": "GNN_Neural_Network\\configs\\kure_text_optin_ranker.yaml",
     "candidate_pool_size": 50,
     "score_normalization": "rank_percentile"
   },
   "summary": {
-    "phase": "started",
+    "phase": "metrics_done",
     "split": "validation",
-    "total_persons": 10857
+    "v2_recall@10": 0.5997052592797274,
+    "v2_ndcg@10": 0.37089053979698977,
+    "coverage@10": 0.0034689793195463643,
+    "novelty@10": 4.593575537082905,
+    "candidate_recall@50": 0.7949709864603481,
+    "v2_fallback_count": 0,
+    "promotion_status": "test_only"
   }
 }

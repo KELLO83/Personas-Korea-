@@ -83,6 +83,52 @@ The completed Phase 5-C text feature reruns did not produce a validation winner:
 - `kure_text_feature_003_full_ranker_fallback`: rejected because validation Recall@10 regressed and remained below the closed Phase 2.5 default.
 - No KURE text test run was selected.
 
+## Phase 5-D KURE semantic Stage1 candidate provider
+
+`kure_stage1_semantic_001_fast_gpu` tested the proposed Stage1 path `popularity + cooccurrence + kure_semantic -> LightGBM` as an opt-in experiment. It used KURE-v1 semantic scoring with visible progress, CUDA embedding when available, and evaluation feature building with the `os.cpu_count() - 2` policy (`22 -> 20` workers).
+
+Validation outcome vs closed Phase 2.5 baseline:
+
+| Metric | Closed Phase 2.5 validation | KURE Stage1 validation | Delta |
+| --- | ---: | ---: | ---: |
+| V2 Recall@10 | 0.739051 | 0.599705 | -0.139346 |
+| V2 NDCG@10 | 0.457970 | 0.370891 | -0.087080 |
+| Candidate Recall@50 | 0.977645 | 0.794971 | -0.182674 |
+| V2 Fallback | 0 | 0 | 0 |
+
+Decision: rejected on validation; test was skipped. KURE semantic Stage1 increased candidate diversity but removed too many held-out positives from the candidate pool, so it is not a promotion candidate. The default remains unchanged.
+
+Artifacts:
+
+- `artifacts/experiments/phase5_d_stage1_kure_semantic/kure_stage1_semantic_001_fast_gpu/ranker_model.txt`
+- `artifacts/experiments/phase5_d_stage1_kure_semantic/kure_stage1_semantic_001_fast_gpu/validation_metrics.json`
+- `artifacts/experiments/phase5_d_stage1_kure_semantic/kure_stage1_semantic_001_fast_gpu/validation_metrics.status.json`
+
 ## Next follow-up
 
-Before another text embedding ablation, repair or regenerate split-aligned `person_context.csv` coverage and preserve cache provenance by embedding model name/revision. Until then, the default remains `popularity + cooccurrence -> LightGBM learned ranker` with text/source/MMR features disabled by default.
+Before another text embedding ablation, preserve cache provenance by embedding model name/revision and avoid replacing strong cooccurrence candidate recall with semantic-only retrieval. Until then, the default remains `popularity + cooccurrence -> LightGBM learned ranker` with text/source/MMR/KURE Stage1 features disabled by default.
+
+## 2026-05-16 governance hardening and 2K pilot
+
+Implemented text-embedding governance hardening:
+
+- Train/eval text embedding input now uses `build_domain_tagged_persona_text`.
+- Empty or missing domain text is treated as a coverage miss, not a leakage failure.
+- Text/feature cache provenance includes model name, model revision, and preprocessing version.
+- `embedding_model_metadata.json` is persisted for train/eval runs.
+- `context_coverage_report.py` records split-aligned context coverage.
+
+Current context coverage artifact:
+
+- `artifacts/experiments/phase5_context_coverage/context_coverage_report.json`
+- train/validation/test domain-text coverage: `1.0`
+
+Fast KURE-v1 2K validation pilot:
+
+| Run | Recall@10 | NDCG@10 | Coverage@10 | Novelty@10 |
+| --- | ---: | ---: | ---: | ---: |
+| Stage1 baseline | 0.576500 | 0.358540 | 0.002935 | 4.538293 |
+| No-text LightGBM pilot | 0.620000 | 0.380264 | 0.002802 | 4.603208 |
+| KURE text LightGBM pilot | 0.636500 | 0.390696 | 0.004003 | 4.688600 |
+
+Decision: `needs_full_validation_followup`. The same-sample pilot signal is positive, but this is not promotion-grade and ranking-collapse diversity is still unresolved.

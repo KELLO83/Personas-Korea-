@@ -228,11 +228,12 @@ class TestBuildRankerDataset:
             assert r1.hobby_id == r2.hobby_id
             assert r1.label == r2.label
 
-    def test_skips_persons_without_context(self) -> None:
+    def test_uses_empty_context_fallback_without_context(self) -> None:
         args = list(self._make_fixtures())
         args[5] = {}
         ds = build_ranker_dataset(*args, neg_ratio=2, seed=42)
-        assert len(ds.rows) == 0
+        assert len(ds.rows) > 0
+        assert all(row.features["age_group_fit"] == 0.0 for row in ds.rows)
 
     def test_source_features_added_when_enabled(self) -> None:
         args = self._make_fixtures()

@@ -65,7 +65,9 @@ class PersonEmbeddingCache:
             return self._memory[text]
         cache_path = self._cache_path(text)
         if cache_path and cache_path.exists():
-            arr = np.load(cache_path)
+            arr = _safe_load_embedding(cache_path)
+            if arr is None:
+                return None
             if _metadata_matches(
                 _metadata_path(cache_path),
                 model_name=self.model_name,
@@ -77,7 +79,9 @@ class PersonEmbeddingCache:
                 return arr
         legacy_path = self._legacy_cache_path(text, "person_emb")
         if legacy_path and legacy_path.exists():
-            arr = np.load(legacy_path)
+            arr = _safe_load_embedding(legacy_path)
+            if arr is None:
+                return None
             self.set(text, arr)
             return arr
         return None
@@ -226,7 +230,9 @@ class HobbyEmbeddingCache:
             return self._memory[hobby_name]
         cache_path = self._cache_path(hobby_name)
         if cache_path and cache_path.exists():
-            arr = np.load(cache_path)
+            arr = _safe_load_embedding(cache_path)
+            if arr is None:
+                return None
             if _metadata_matches(
                 _metadata_path(cache_path),
                 model_name=self.model_name,
@@ -238,7 +244,9 @@ class HobbyEmbeddingCache:
                 return arr
         legacy_path = self._legacy_cache_path(hobby_name, "hobby_emb")
         if legacy_path and legacy_path.exists():
-            arr = np.load(legacy_path)
+            arr = _safe_load_embedding(legacy_path)
+            if arr is None:
+                return None
             self.set(hobby_name, arr)
             return arr
         return None
@@ -490,6 +498,13 @@ def _embedding_cache_key(
 
 def _metadata_path(cache_path: Path) -> Path:
     return cache_path.with_suffix(".json")
+
+
+def _safe_load_embedding(cache_path: Path) -> np.ndarray | None:
+    try:
+        return np.load(cache_path)
+    except (OSError, ValueError):
+        return None
 
 
 def _embedding_dim(embedding: np.ndarray) -> int:

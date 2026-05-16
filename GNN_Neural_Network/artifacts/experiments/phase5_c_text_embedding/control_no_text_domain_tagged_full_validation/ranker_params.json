@@ -1,0 +1,108 @@
+{
+  "best_iteration": 68,
+  "best_score": 0.8464245151755645,
+  "best_metric": "auc",
+  "params": {
+    "objective": "binary",
+    "metric": "auc",
+    "num_leaves": 31,
+    "min_data_in_leaf": 50,
+    "learning_rate": 0.05,
+    "reg_alpha": 0.1,
+    "reg_lambda": 0.1,
+    "verbose": -1,
+    "seed": 42,
+    "num_threads": 20
+  },
+  "neg_ratio": 4,
+  "hard_ratio": 0.8,
+  "ranker_val_ratio": 0.2,
+  "seed": 42,
+  "ranker_train_persons": 8685,
+  "ranker_val_persons": 2172,
+  "train_rows": 43425,
+  "val_rows": 10860,
+  "feature_columns": [
+    "lightgcn_score",
+    "cooccurrence_score",
+    "segment_popularity_score",
+    "known_hobby_compatibility",
+    "age_group_fit",
+    "occupation_fit",
+    "region_fit",
+    "popularity_prior",
+    "mismatch_penalty",
+    "popularity_penalty",
+    "novelty_bonus",
+    "category_diversity_reward",
+    "is_cold_start"
+  ],
+  "include_source_features": false,
+  "experiment_id": "control_no_text_domain_tagged_full_validation",
+  "status": "trained",
+  "runtime_seconds": 201.91197269997792,
+  "data_split": "validation_internal_ranker_split",
+  "input_config_summary": {
+    "config_path": "GNN_Neural_Network\\configs\\lightgbm_ranker.yaml",
+    "candidate_pool_size": 50,
+    "score_normalization": "rank_percentile"
+  },
+  "max_persons": 0,
+  "model_path": "GNN_Neural_Network\\artifacts\\experiments\\phase5_c_text_embedding\\control_no_text_domain_tagged_full_validation\\ranker_model.txt",
+  "lightgbm_params": {
+    "objective": "binary",
+    "metric": "auc",
+    "num_leaves": 31,
+    "min_data_in_leaf": 50,
+    "learning_rate": 0.05,
+    "reg_alpha": 0.1,
+    "reg_lambda": 0.1,
+    "verbose": -1,
+    "seed": 42,
+    "num_threads": 20
+  },
+  "text_leakage_audit_path": "GNN_Neural_Network\\artifacts\\experiments\\phase5_c_text_embedding\\control_no_text_domain_tagged_full_validation\\text_leakage_audit.json",
+  "text_leakage_audit": {
+    "enabled": false,
+    "pass": true,
+    "failed_person_count": 0,
+    "passed_person_count": 0
+  },
+  "feature_policy": {
+    "include_source_features": false,
+    "include_text_embedding_feature": false
+  },
+  "candidate_pool_policy": {
+    "providers": [
+      "popularity",
+      "cooccurrence"
+    ],
+    "candidate_k": 50,
+    "normalization_method": "rank_percentile",
+    "cache_key": "pool_validation_internal_ranker_split_popularity-cooccurrence_k50_rank_percentile_e57c285844b28_h47c1d017_p791de66f",
+    "cache_path": "C:\\Users\\Kello\\Nemotron-Personas-Korea\\GNN_Neural_Network\\artifacts\\cache\\pool_validation_internal_ranker_split_popularity-cooccurrence_k50_rank_percentile_e57c285844b28_h47c1d017_p791de66f.json"
+  },
+  "stage1_kure_semantic_provider": {
+    "enabled": false
+  },
+  "resource_policy": {
+    "logical_cpus": 22,
+    "default_cpu_threads": 20,
+    "requested_cpu_threads": 0,
+    "cpu_threads": 20,
+    "lightgbm_train_threads": 20
+  },
+  "embedding_model_metadata_path": "GNN_Neural_Network\\artifacts\\experiments\\phase5_c_text_embedding\\control_no_text_domain_tagged_full_validation\\embedding_model_metadata.json",
+  "embedding_model_metadata": {
+    "enabled": false,
+    "model_name": "",
+    "model_revision": "",
+    "preprocessing_version": "",
+    "text_builder": "",
+    "cache_dir": "",
+    "batch_size": 0,
+    "device": "",
+    "resource_plan": {},
+    "cache_key_policy": "model_name|model_revision|preprocessing_version|text"
+  }
+}

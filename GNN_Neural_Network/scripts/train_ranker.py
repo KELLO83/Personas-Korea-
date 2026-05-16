@@ -28,6 +28,7 @@ from GNN_Neural_Network.gnn_recommender.baseline import (  # noqa: E402
 from GNN_Neural_Network.gnn_recommender.config import load_config, validate_experimental_feature_policy  # noqa: E402
 from GNN_Neural_Network.gnn_recommender.data import (
     LEAKAGE_TEXT_FIELDS,
+    build_domain_tagged_persona_text,
     load_alias_map,
     normalize_hobby_name,
     load_json,
@@ -46,6 +47,8 @@ from GNN_Neural_Network.gnn_recommender.ranker import (
 from GNN_Neural_Network.gnn_recommender.rerank import HobbyCandidate, build_reranker_config  # noqa: E402
 from GNN_Neural_Network.gnn_recommender.text_embedding import KURE_MODEL_NAME, mask_holdout_hobbies, post_mask_leakage_audit  # noqa: E402
 
+TEXT_EMBEDDING_PREPROCESSING_VERSION = "domain_tagged_masked_v1"
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train LightGBM learned ranker with a single config.")
@@ -56,6 +59,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--num-boost-round", type=int, default=500)
     parser.add_argument("--early-stopping", type=int, default=50)
     parser.add_argument("--ranker-val-ratio", type=float, default=0.2)
+    parser.add_argument("--max-persons", type=int, default=0, help="Optional validation-person cap for fast pilot runs")
     parser.add_argument("--include-source-features", action="store_true")
     parser.add_argument("--include-text-embedding-feature", action="store_true", help="Enable leakage-safe text embedding similarity feature")
     parser.add_argument("--stage1-kure-semantic-provider", action="store_true", help="Enable opt-in KURE-v1 Stage1 semantic candidate provider")
@@ -150,6 +154,11 @@ def main() -> None:
     val_edges = _read_indexed_edges(config.paths.validation_edges)
     train_known = _known_from_edges(train_edges)
     val_person_ids = sorted({pid for pid, _ in val_edges})
+    if args.max_persons > 0 and len(val_person_ids) > args.max_persons:
+        pilot_rng = random.Random(args.seed)
+        val_person_ids = sorted(pilot_rng.sample(val_person_ids, args.max_persons))
+        pilot_person_set = set(val_person_ids)
+        val_edges = [(pid, hid) for pid, hid in val_edges if pid in pilot_person_set]
     normalization_method = _normalization_method(config.paths.score_normalization)
 
     input_config_summary = _input_config_summary(
@@ -183,6 +192,9 @@ def main() -> None:
     hobby_embedding_cache: HobbyEmbeddingCache | None = None
     person_masked_text: dict[int, str] = {}
     person_audit_pass: dict[int, bool] = {}
+    kure_device = ""
+    embedding_resource_plan: dict[str, object] = {}
+    effective_text_batch_size = 0
     text_leakage_audit = {
         "enabled": args.include_text_embedding_feature,
         "include_text_embedding_feature": args.include_text_embedding_feature,
@@ -216,6 +228,8 @@ def main() -> None:
         )
         person_embedding_cache = PersonEmbeddingCache(
             text_embedding_cache_dir,
+            model_name=KURE_MODEL_NAME,
+            preprocessing_version=TEXT_EMBEDDING_PREPROCESSING_VERSION,
             batch_size=effective_text_batch_size,
             device=kure_device,
         )
@@ -229,6 +243,7 @@ def main() -> None:
         hobby_embedding_cache = HobbyEmbeddingCache(
             text_embedding_cache_dir,
             model_name=KURE_MODEL_NAME,
+            preprocessing_version=TEXT_EMBEDDING_PREPROCESSING_VERSION,
             batch_size=effective_text_batch_size,
             device=kure_device,
         )
@@ -270,6 +285,14 @@ def main() -> None:
             "passed_person_count": int(text_leakage_audit.get("passed_person_count", 0)),
             "failed_person_count": int(text_leakage_audit.get("failed_person_count", 0)),
         }
+        embedding_model_metadata = _embedding_model_metadata(
+            enabled=True,
+            cache_dir=text_embedding_cache_dir,
+            batch_size=effective_text_batch_size,
+            device=kure_device,
+            resource_plan=embedding_resource_plan,
+        )
+        save_json(args.output_dir / "embedding_model_metadata.json", embedding_model_metadata)
         save_json(args.output_dir / "ranker_params.json", {
             "experiment_id": args.experiment_id,
             "status": "disabled",
@@ -282,6 +305,8 @@ def main() -> None:
             },
             "text_leakage_audit_path": str(text_leakage_audit_path),
             "text_leakage_audit": disabled_summary,
+            "embedding_model_metadata_path": str(args.output_dir / "embedding_model_metadata.json"),
+            "embedding_model_metadata": embedding_model_metadata,
         })
         _write_status(
             args,
@@ -327,6 +352,8 @@ def main() -> None:
         if person_embedding_cache is None:
             person_embedding_cache = PersonEmbeddingCache(
                 text_embedding_cache_dir,
+                model_name=KURE_MODEL_NAME,
+                preprocessing_version=TEXT_EMBEDDING_PREPROCESSING_VERSION,
                 batch_size=effective_text_batch_size,
                 device=kure_device,
             )
@@ -334,6 +361,7 @@ def main() -> None:
             hobby_embedding_cache = HobbyEmbeddingCache(
                 text_embedding_cache_dir,
                 model_name=KURE_MODEL_NAME,
+                preprocessing_version=TEXT_EMBEDDING_PREPROCESSING_VERSION,
                 batch_size=effective_text_batch_size,
                 device=kure_device,
             )
@@ -405,6 +433,19 @@ def main() -> None:
             candidate_pools=pools,
             show_progress_bar=show_progress,
         )
+        if person_embedding_cache is not None and hobby_embedding_cache is not None:
+            text_similarity_lookup = _build_text_similarity_lookup(
+                person_masked_text=person_masked_text,
+                person_audit_pass=person_audit_pass,
+                person_embedding_cache=person_embedding_cache,
+                hobby_embedding_cache=hobby_embedding_cache,
+                candidate_pools=pools,
+            )
+
+            def _lookup_text_similarity(person_id: int, candidate: HobbyCandidate) -> float:
+                return text_similarity_lookup.get(person_id, {}).get(candidate.hobby_id, 0.0)
+
+            text_similarity_fn = _lookup_text_similarity
 
     candidate_pool_policy = _candidate_pool_policy(
         pools,
@@ -482,6 +523,14 @@ def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     ranker.save(output_dir / "ranker_model.txt")
     runtime_seconds = time.perf_counter() - start_time
+    embedding_model_metadata = _embedding_model_metadata(
+        enabled=args.include_text_embedding_feature or args.stage1_kure_semantic_provider,
+        cache_dir=text_embedding_cache_dir,
+        batch_size=effective_text_batch_size if (args.include_text_embedding_feature or args.stage1_kure_semantic_provider) else 0,
+        device=kure_device if (args.include_text_embedding_feature or args.stage1_kure_semantic_provider) else "",
+        resource_plan=embedding_resource_plan if (args.include_text_embedding_feature or args.stage1_kure_semantic_provider) else {},
+    )
+    save_json(output_dir / "embedding_model_metadata.json", embedding_model_metadata)
 
     save_json(output_dir / "ranker_params.json", {
         "best_iteration": metadata["best_iteration"],
@@ -503,6 +552,7 @@ def main() -> None:
         "runtime_seconds": runtime_seconds,
         "data_split": data_split,
         "input_config_summary": input_config_summary,
+        "max_persons": args.max_persons,
         "model_path": str(output_dir / "ranker_model.txt"),
         "lightgbm_params": params,
         "text_leakage_audit_path": str(text_leakage_audit_path),
@@ -525,6 +575,8 @@ def main() -> None:
             "cpu_threads": cpu_threads,
             "lightgbm_train_threads": cpu_threads,
         },
+        "embedding_model_metadata_path": str(output_dir / "embedding_model_metadata.json"),
+        "embedding_model_metadata": embedding_model_metadata,
     })
     save_json(output_dir / "ranker_feature_importance.json", metadata["feature_importance"])
     _write_status(
@@ -595,6 +647,28 @@ def _candidate_pool_policy(
         "normalization_method": normalization_method,
         "cache_key": cache_key,
         "cache_path": str(cache_path),
+    }
+
+
+def _embedding_model_metadata(
+    *,
+    enabled: bool,
+    cache_dir: Path,
+    batch_size: int,
+    device: str,
+    resource_plan: dict[str, object],
+) -> dict[str, object]:
+    return {
+        "enabled": enabled,
+        "model_name": KURE_MODEL_NAME if enabled else "",
+        "model_revision": "",
+        "preprocessing_version": TEXT_EMBEDDING_PREPROCESSING_VERSION if enabled else "",
+        "text_builder": "build_domain_tagged_persona_text" if enabled else "",
+        "cache_dir": str(cache_dir) if enabled else "",
+        "batch_size": batch_size,
+        "device": device,
+        "resource_plan": resource_plan,
+        "cache_key_policy": "model_name|model_revision|preprocessing_version|text",
     }
 
 
@@ -839,6 +913,67 @@ def _prewarm_text_embedding_caches(
         )
 
 
+def _build_text_similarity_lookup(
+    *,
+    person_masked_text: dict[int, str],
+    person_audit_pass: dict[int, bool],
+    person_embedding_cache: PersonEmbeddingCache,
+    hobby_embedding_cache: HobbyEmbeddingCache,
+    candidate_pools: dict[int, list[HobbyCandidate]],
+) -> dict[int, dict[int, float]]:
+    start_time = time.perf_counter()
+    lookup: dict[int, dict[int, float]] = {}
+    person_vectors: dict[int, np.ndarray] = {}
+    hobby_vectors: dict[int, np.ndarray] = {}
+
+    for person_id, person_text in person_masked_text.items():
+        if person_audit_pass.get(person_id, False) and person_text:
+            vector = person_embedding_cache.get(person_text)
+            if vector is not None:
+                person_vectors[person_id] = _normalize_vector_np(vector)
+
+    for candidates in candidate_pools.values():
+        for candidate in candidates:
+            candidate_name = (candidate.hobby_name or "").strip()
+            if candidate.hobby_id in hobby_vectors or not candidate_name:
+                continue
+            vector = hobby_embedding_cache.get(candidate_name)
+            if vector is not None:
+                hobby_vectors[candidate.hobby_id] = _normalize_vector_np(vector)
+
+    pair_count = 0
+    for person_id, candidates in candidate_pools.items():
+        person_vector = person_vectors.get(person_id)
+        if person_vector is None:
+            continue
+        person_lookup: dict[int, float] = {}
+        for candidate in candidates:
+            hobby_vector = hobby_vectors.get(candidate.hobby_id)
+            if hobby_vector is None:
+                continue
+            person_lookup[candidate.hobby_id] = max(0.0, min(1.0, float(np.dot(person_vector, hobby_vector))))
+        if person_lookup:
+            pair_count += len(person_lookup)
+            lookup[person_id] = person_lookup
+
+    LOGGER.info(
+        "Built KURE training similarity lookup: persons=%s hobbies=%s pairs=%s seconds=%.3f",
+        len(lookup),
+        len(hobby_vectors),
+        pair_count,
+        time.perf_counter() - start_time,
+    )
+    return lookup
+
+
+def _normalize_vector_np(vector: Any) -> np.ndarray:
+    array = np.asarray(vector, dtype=np.float32).reshape(-1)
+    norm = float(np.linalg.norm(array))
+    if norm <= 0.0:
+        return array
+    return array / norm
+
+
 def _prepare_text_leakage_context(
     person_ids: list[int],
     split_edges: list[tuple[int, int]],
@@ -871,18 +1006,23 @@ def _prepare_text_leakage_context(
             if hobby_id in id_to_hobby
         }
 
-        field_texts: list[str] = []
+        masked_field_values: dict[str, str] = {}
         for field in LEAKAGE_TEXT_FIELDS:
             try:
                 value = str(getattr(context, field, "") or "").strip()
             except Exception:
                 value = ""
             if value:
-                field_texts.append(value)
+                masked_field_values[field] = (
+                    mask_holdout_hobbies(value, holdout_hobby_names, alias_map=alias_map)
+                    if holdout_hobby_names else value
+                )
 
-        masked = " ".join(field_texts)
-        if holdout_hobby_names:
-            masked = mask_holdout_hobbies(masked, holdout_hobby_names, alias_map=alias_map)
+        masked = build_domain_tagged_persona_text(context, masked_field_values)
+        if not masked:
+            person_audit_pass[person_id] = True
+            missing_context.append(person_id)
+            continue
 
         audit_ok = post_mask_leakage_audit(masked, holdout_hobby_names, alias_map=alias_map)
         person_audit_pass[person_id] = bool(audit_ok)
@@ -898,6 +1038,8 @@ def _prepare_text_leakage_context(
         "person_audit_pass": person_audit_pass,
         "summary": {
             "pass": not failed,
+            "text_builder": "build_domain_tagged_persona_text",
+            "preprocessing_version": TEXT_EMBEDDING_PREPROCESSING_VERSION,
             "passed_person_count": len(passed),
             "failed_person_count": len(failed),
             "missing_context_person_count": len(missing_context),

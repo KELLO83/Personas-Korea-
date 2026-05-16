@@ -52,7 +52,7 @@ This section is the executable blocker list before any `include_text_embedding_f
 Do not confuse this with the completed KURE dense MMR sweep.
 
 - [x] KURE dense MMR sweep status: completed, NO-GO, default `MMR=false` unchanged
-- [x] KURE text embedding feature ablation status: completed as `rejected_needs_followup` after corrected audit/fallback reruns (`kure_text_feature_002`, `kure_text_feature_003`)
+- [x] KURE text embedding feature ablation status: completed/rejected after corrected audit and fallback reruns. `kure_text_feature_001` was disabled by leakage gate, `kure_text_feature_002_context_coverage_gate` was not promoted due low mapped context coverage, and `kure_text_feature_003_full_ranker_fallback` regressed on validation Recall@10 below the closed Phase 2.5 default.
 - [x] KURE text feature run must set `include_text_embedding_feature=true`
 - [x] KURE text feature run must record `persona_hobby_semantic_sim` or `text_embedding_similarity` in the ranker feature policy
 - [x] `mask_holdout_hobbies()` must run before encoding persona text
@@ -69,16 +69,29 @@ Do not confuse this with the completed KURE dense MMR sweep.
 
 - [x] Scope approved as a new gated experiment; it is not part of the current default path.
 - [x] Default remains `popularity + cooccurrence -> LightGBM`, `MMR=false`, `include_text_embedding_feature=false`.
-- [ ] Add explicit guardrail config/CLI opt-in for `allow_stage1_kure_provider=true`.
-- [ ] Implement Stage1 `kure_semantic` provider without changing existing provider defaults.
-- [ ] Ensure candidate-pool cache keys include provider list and KURE model/revision/fingerprint metadata.
-- [ ] Use leakage-safe masked persona text before semantic candidate scoring.
-- [ ] Use CUDA automatically when available and CPU fallback otherwise.
-- [ ] Keep evaluation CPU default at `max(1, os.cpu_count() - 2)` and show progress during embedding/scoring/features/ranking.
-- [ ] Train a separate opt-in LightGBM artifact for the KURE Stage1 candidate pool.
-- [ ] Run validation first and compare against closed Phase 2.5 SOTA.
-- [ ] Run test only if validation passes the documented promotion gate.
-- [ ] Record final decision in `experiment_decisions.json` and `experiment_run_summary.md`.
+- [x] Add explicit guardrail config/CLI opt-in for `allow_stage1_kure_provider=true`.
+- [x] Implement Stage1 `kure_semantic` provider without changing existing provider defaults.
+- [x] Ensure candidate-pool cache keys include provider list and KURE model/revision/fingerprint metadata.
+- [x] Use leakage-safe masked persona text before semantic candidate scoring.
+- [x] Use CUDA automatically when available and CPU fallback otherwise.
+- [x] Keep evaluation CPU default at `max(1, os.cpu_count() - 2)` and show progress during embedding/scoring/features/ranking.
+- [x] Train a separate opt-in LightGBM artifact for the KURE Stage1 candidate pool.
+- [x] Run validation first and compare against closed Phase 2.5 SOTA.
+- [x] Run test only if validation passes the documented promotion gate. Result: validation failed, so test was skipped.
+- [x] Record final decision in `experiment_decisions.json` and `experiment_run_summary.md`.
+
+### Embedding Follow-Up Priority
+
+- [x] KURE-v1 embedding default-candidate paths are closed as rejected/no-go:
+  - KURE dense MMR: NO-GO.
+  - KURE Stage2 text feature: signal exists, but below closed Phase 2.5 default.
+  - KURE Stage1 semantic provider: validation failed because candidate_recall@50 regressed materially.
+- [x] Default remains `popularity + cooccurrence -> LightGBM`, with `MMR=false`, `include_text_embedding_feature=false`, `kure_semantic=false`.
+- [x] Other embedding models remain PRD-allowed but are now lower-priority follow-up only.
+- [ ] Optional future probe: `dragonkue/snowflake-arctic-embed-l-v2.0-ko` as a single validation-only Stage2 text feature ablation, only after higher-priority default integration or accuracy-safe diversity work.
+- [ ] Optional future probe: `dragonkue/multilingual-e5-small-ko-v2` as a lightweight Stage2 feature ablation only if runtime/cost reduction becomes important.
+- [ ] Do not run another Stage1 semantic candidate generator experiment without a new PRD/TASKS reopening note, because KURE Stage1 reduced candidate_recall@50 from `0.977645` to `0.794971`.
+- [ ] Stop any future embedding run at validation if Recall@10/NDCG@10 miss the closed Phase 2.5 promotion gate or candidate_recall@50 regresses materially.
 
 ## Global Execution Policy
 
@@ -302,11 +315,12 @@ Closed experiment status:
 
 Remaining implementation work before any future text embedding ablation:
 
-- [ ] Repair or regenerate split-aligned `person_context.csv` coverage for the current person mapping.
+- [x] Repair or regenerate split-aligned `person_context.csv` coverage for the current person mapping.
+  - [x] `phase5_context_coverage/context_coverage_report.json` records train/validation/test domain-text coverage as `1.0`.
 - [ ] Add/verify embedding model selection in train/eval config or CLI without changing the default KURE-v1 path.
-- [ ] Ensure text embedding cache and feature cache keys include embedding model name and revision, not just model family.
-- [ ] Persist `embedding_model_metadata.json` per run.
-- [ ] Verify KURE-v1, `dragonkue/snowflake-arctic-embed-l-v2.0-ko`, and `dragonkue/multilingual-e5-small-ko-v2` caches cannot collide.
+- [x] Ensure text embedding cache and feature cache keys include embedding model name and revision, not just model family.
+- [x] Persist `embedding_model_metadata.json` per run.
+- [x] Verify KURE-v1, `dragonkue/snowflake-arctic-embed-l-v2.0-ko`, and `dragonkue/multilingual-e5-small-ko-v2` caches cannot collide.
 - [x] Add cold-start metrics to the ranker evaluation artifacts before using text embedding results for follow-up decisions.
   - [x] closed Phase 2.5 validation/test artifacts recorded under `artifacts/experiments/phase2_5_cold_start_baseline/`
 
@@ -316,6 +330,9 @@ Follow-up-only backbone probes:
 - [ ] Run `dragonkue/multilingual-e5-small-ko-v2` only after the same blockers are closed.
 - [ ] Compare any future backbone against KURE-v1 and the closed Phase 2.5 default on overall and cold-start metrics.
 - [ ] Record each future result as `rejected`, `experimental`, `needs_followup`, or selected for winner-only test.
+- [x] Run fast KURE-v1 2K pilot after governance hardening.
+  - [x] `kure_text_feature_005_domain_tagged_fast_gpu_pilot_2k` showed same-sample validation Recall@10/NDCG@10 gains over the no-text pilot.
+  - [x] Decision recorded as `needs_full_validation_followup`, not promoted.
 
 ### Step 3: Remaining Ranking-Collapse Implementation Plan
 
@@ -404,9 +421,9 @@ Do not run experiments as part of this planning step. Implement or verify the fo
 
 Current implementation evidence shows `[ACT]` masking and domain-tagged persona text scaffolding already exist. The remaining work is governance and hardening, not another immediate experiment run.
 
-- [ ] Verify `build_domain_tagged_persona_text()` is the single train/eval input builder for text embedding features.
+- [x] Verify `build_domain_tagged_persona_text()` is the single train/eval input builder for text embedding features.
 - [ ] Strengthen `mask_holdout_hobbies()` only if tests reveal grammar loss after `[ACT]` replacement; do not change masking semantics without leakage-audit tests.
-- [ ] Persist masking policy metadata in every future text-embedding run artifact.
-- [ ] Persist embedding model metadata including model name, revision/hash when available, device, batch size, embedding dimension, and cache key.
-- [ ] Add tests proving feature/cache keys differ across KURE-v1, Snowflake-ko, and E5-small-ko candidates.
+- [x] Persist masking policy metadata in every future text-embedding run artifact.
+- [x] Persist embedding model metadata including model name, revision/hash when available, device, batch size, embedding dimension, and cache key.
+- [x] Add tests proving feature/cache keys differ across KURE-v1, Snowflake-ko, and E5-small-ko candidates.
 - [ ] Keep all text embedding, KURE, MMR, and XSimGCL paths opt-in and non-default until a validation winner plus decision artifact exists.

@@ -20,6 +20,11 @@ YIELD nodesCompared, relationshipsWritten, similarityDistribution
 RETURN nodesCompared, relationshipsWritten, similarityDistribution
 """
 
+CLEAR_SIMILAR_TO_QUERY = """
+MATCH (:Person)-[relationship:SIMILAR_TO]->(:Person)
+DELETE relationship
+"""
+
 SIMILAR_PERSONAS_QUERY = """
 MATCH (:Person {uuid: $uuid})-[relationship:SIMILAR_TO]->(target:Person)
 RETURN target.uuid AS uuid,
@@ -90,6 +95,7 @@ class SimilarityService:
 
     def write_knn_relationships(self, top_k: int = settings.GDS_KNN_TOP_K) -> dict[str, Any]:
         with self.driver.session(database=self.database) as session:
+            session.run(CLEAR_SIMILAR_TO_QUERY).consume()
             result = session.run(KNN_WRITE_QUERY, graph_name=self.graph_name, top_k=top_k)
             record = result.single()
             return dict(record) if record else {}

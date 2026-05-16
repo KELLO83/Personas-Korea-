@@ -1,0 +1,15 @@
+{
+  "experiment_id": "kure_text_feature_005_domain_tagged_fast_gpu",
+  "status": "started",
+  "data_split": "validation_internal_ranker_split",
+  "input_config_summary": {
+    "config_path": "GNN_Neural_Network\\configs\\lightgbm_ranker.yaml",
+    "candidate_pool_size": 50,
+    "score_normalization": "rank_percentile"
+  },
+  "summary": {
+    "text_embedding_enabled": true,
+    "text_embedding_audit_path": "GNN_Neural_Network\\artifacts\\experiments\\phase5_c_text_embedding\\kure_text_feature_005_domain_tagged_fast_gpu\\text_leakage_audit.json"
+  },
+  "runtime_seconds": 0.0
+}

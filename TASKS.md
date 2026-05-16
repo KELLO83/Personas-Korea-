@@ -480,7 +480,12 @@
 
 > PRD §2.1 F11, §11.4 — `GNN_Neural_Network/` 오프라인 추천 PoC 결과를 루트 추천 기능과 연동할지 검수한다. 코드 구현은 GNN 실험 결과 확정 이후에만 진행한다.
 
-- [x] Phase 2.5 실험 결과 확인 (50K 데이터 재학습 포함, AUC=0.9996, feature_balance_probe 완료)\n  - [x] LightGBM regularization tuning 결과 확인
+- [x] Phase 2.5 및 최신 GNN decision artifact 결과 확인 (closed default: `popularity + cooccurrence -> LightGBM`, text/source/MMR/KURE Stage1 기본 비활성)
+  - [x] closed Phase 2.5 default test Recall@10 `0.709684`, NDCG@10 `0.447713` 확인
+  - [x] 50K canonical/fallback prepare-only refresh 확인 (`rare_item_policy=keep_with_fallback`, dropped_edges=0)
+  - [x] Phase 5-B2 feature-balance 결과 확인 (feature_fraction 0.7/0.8 모두 blocked, default change 없음)
+  - [x] KURE dense MMR, KURE text feature, KURE semantic Stage1 provider rejected/NO-GO 상태 확인
+  - [x] LightGBM regularization tuning 결과 확인
   - [x] negative sampling ablation 결과 확인
   - [x] source one-hot ablation 결과 확인
   - [x] ranking collapse 완화 여부 확인 (coverage/novelty/recall 동시 검토)

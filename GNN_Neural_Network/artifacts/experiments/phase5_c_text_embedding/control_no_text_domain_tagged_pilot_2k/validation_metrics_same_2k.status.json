@@ -1,0 +1,32 @@
+{
+  "experiment_id": "control_no_text_domain_tagged_pilot_2k_same_sample",
+  "split": "validation",
+  "status": "validation_evaluated",
+  "event_timestamp": "2026-05-15T18:28:45Z",
+  "command_signature": "evaluate_ranker.py --config 'GNN_Neural_Network\\configs\\lightgbm_ranker.yaml' --split validation --model-path 'GNN_Neural_Network\\artifacts\\experiments\\phase5_c_text_embedding\\control_no_text_domain_tagged_pilot_2k\\ranker_model.txt' --output 'GNN_Neural_Network\\artifacts\\experiments\\phase5_c_text_embedding\\control_no_text_domain_tagged_pilot_2k\\validation_metrics_same_2k.json' --experiment-id control_no_text_domain_tagged_pilot_2k_same_sample --max-persons 2000 --skip-v1 --cpu-thread-count 0 --progress-mode off",
+  "log_policy": {
+    "progress_mode": "off",
+    "progress_mininterval": 5.0,
+    "progress_maxinterval": 30.0,
+    "progress_miniters": 200,
+    "tqdm_enabled": false
+  },
+  "artifact_path": "GNN_Neural_Network\\artifacts\\experiments\\phase5_c_text_embedding\\control_no_text_domain_tagged_pilot_2k\\validation_metrics_same_2k.status.json",
+  "runtime_seconds": 114.7970970000024,
+  "input_config_summary": {
+    "config_path": "GNN_Neural_Network\\configs\\lightgbm_ranker.yaml",
+    "candidate_pool_size": 50,
+    "score_normalization": "rank_percentile"
+  },
+  "summary": {
+    "phase": "metrics_done",
+    "split": "validation",
+    "v2_recall@10": 0.62,
+    "v2_ndcg@10": 0.38026413087598415,
+    "coverage@10": 0.002801867911941294,
+    "novelty@10": 4.603208264415334,
+    "candidate_recall@50": 0.826,
+    "v2_fallback_count": 0,
+    "promotion_status": "test_only"
+  }
+}

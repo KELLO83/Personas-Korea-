@@ -21,8 +21,7 @@ WHERE entity:Hobby
    OR entity:MilitaryStatus
    OR entity:District
 WITH DISTINCT p, entity
-CALL {
-    WITH p, entity
+CALL (p, entity) {
     MATCH (entity)-[r2]-(other:Person)
     WHERE other.uuid <> p.uuid
     WITH DISTINCT other, type(r2) AS rel2_type, coalesce(other.display_name, other.uuid) AS other_sort

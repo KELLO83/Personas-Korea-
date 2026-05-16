@@ -206,10 +206,11 @@ class CentralityBatchJob:
 - **성공 지표**:
    - API 응답 시간 < 500ms (템플릿 기반 reasoning)
    - 추천 정확도: 유사 페르소나의 70%+가 해당 속성 보유
-- **대체 접근**: 오프라인 GNN 기반 취미 추천이 `GNN_Neural_Network/PRD.md`에서 PoC 진행 중. Phase 2.5 튜닝 완료 후 F11 Cypher 기반 추천과 GNN 기반 추천의 A/B 테스트 예정.
-- **최신 검증**: Phase 2.5 설정을 바탕으로 한 50K 데이터 재학습 완료 (AUC 0.9996, feature_fraction 0.85 vs 0.8 비교 검증 완료) - `artifacts/experiments/phase5_pre_50k_baseline/`
-- **Taxonomy Over-merge 분석**: 희귀 취미의 카테고리 집중도 확인 (스포츠/레저 73.1% 편중) - `artifacts/experiments/phase5_taxonomy_overmerge/`
-- **Leakage 검증**: 텍스트 임베딩 누수 가능성 최소화 확인 (WARNING 상태, 추가 조치 필요) - `artifacts/experiments/phase5_text_embedding_leakage/`
+- **오프라인 GNN 추천 PoC 상태**: `GNN_Neural_Network/`의 최신 decision artifact 기준, 기본 추천 경로는 `Stage 1 = popularity + cooccurrence`, `Stage 2 = LightGBM learned ranker`, `include_source_features=false`, `include_text_embedding_feature=false`, `MMR=false`로 닫혀 있다.
+- **현재 내부 SOTA 기준**: closed Phase 2.5 default는 `GNN_Neural_Network/artifacts/experiments/phase2_5_num_leaves_31/ranker_model.txt`이며, test 기준 Recall@10 `0.709684`, NDCG@10 `0.447713`을 기록했다. 이는 LightGCN 단독 및 Stage1 baseline보다 높다.
+- **F11 연동 상태**: root `/api/recommend/{uuid}`는 현재 Cypher/SIMILAR_TO 기반 템플릿 추천 API로 유지한다. GNN 기반 추천의 root F11 기본 경로 승격 여부는 `TASKS.md` Phase 23의 A/B 연동 계획과 fallback 정책을 먼저 확정한 뒤 결정한다.
+- **KURE/semantic 실험 상태**: KURE dense MMR, KURE text embedding feature, KURE semantic Stage1 provider는 모두 기본 승격에 실패했거나 NO-GO로 기록되어 있다. 향후 embedding 실험은 opt-in, validation-first, leakage-audit, cold-start 비교를 통과해야 하며 기본 경로를 변경하지 않는다.
+- **데이터 품질 상태**: 50K local slice는 `rare_item_policy=keep_with_fallback` 기준으로 prepare-only artifact가 갱신되었고, taxonomy over-merge는 warning으로 기록되었으나 default-changing blocker는 아니다. 세부 결정은 `GNN_Neural_Network/artifacts/experiment_decisions.json` 및 `experiment_run_summary.md`를 따른다.
 
 ### 4.2 아키텍처 결정 (ADR-002 반영)
 ⚠️ **추천 사유(Reasoning)는 LLM 동기 호출 금지 → 템플릿 기반**
@@ -638,7 +639,7 @@ CREATE INDEX person_degree IF NOT EXISTS FOR (p:Person) ON (p.degree);
 | P2 | 고급 추천 스코어링 | 중심성/커뮤니티/유사도 가중치 혼합 | F10/F11 교차 검증 |
 | P2 | 비동기 장기 작업 | removal simulation/Betweenness를 job queue로 분리 | job status API 설계 |
 | P2 | 관측성 강화 | metrics, structured logs, alerting | 운영 로그 표준 |
-| P2 | GNN Phase 2.5 연동 | GNN 오프라인 추천 실험 결과와 default decision closure는 `GNN_Neural_Network/PRD.md` 및 `GNN_Neural_Network/TASKS.md`에서 관리 | GNN 문서 참조 |
+| P2 | GNN Phase 2.5 연동 | GNN closed default(`popularity + cooccurrence -> LightGBM`)는 `GNN_Neural_Network/` decision artifacts를 source of truth로 유지한다. Root F11 기본 경로 승격은 `TASKS.md` Phase 23에서 A/B 지표, artifact 조회 방식, fallback 정책을 확정한 뒤 검토한다. | GNN 문서 및 Phase 23 참조 |
 | P2 | Country 노드 제거 | `Country` 노드는 1개 값(`대한민국`)으로 정보량 0. 그래프에서 제거하고 District→Province 직접 연결로 단순화 | Schema 협의 |
 | P2 | MilitaryStatus/bachelors_field 노드 검토 | `MilitaryStatus`(분산 낮음), `bachelors_field`(`해당없음` 비중 높음) 불필요한 노드 정리 | 데이터 분포 분석 |
 | P3 | Target Persona Generator | 입력 조건(연령/지역/직업 등)과 일치하는 페르소나 5~10명의 텍스트를 KURE 검색 + LLM 합성으로 대표 프로필 생성 | `similar.py`, KURE vector index |
@@ -1033,4 +1034,4 @@ docs/
 **작성일**: 2026-04-28  
 **버전**: v2.4-f16-f18-expansion  
 **상태**: Phase 3 핵심 구현 완료 / Phase 4 계획 검수 대기 / F16-F18 확장 계획 추가  
-**다음 단계**: F16-F18 구현 계획 검수 → Country/MilitaryStatus/bachelors_field 그래프 정리 검수 → GNN Phase 2.5 결과 기반 F11 연동 검토
+**다음 단계**: F16-F18 구현 계획 검수 → Country/MilitaryStatus/bachelors_field 그래프 정리 검수 → GNN closed default 기반 F11 A/B 연동 계획 확정

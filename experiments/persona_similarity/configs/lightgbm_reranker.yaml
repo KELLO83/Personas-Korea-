@@ -1,0 +1,87 @@
+paths:
+  candidate_pairs: experiments/persona_similarity/artifacts/datasets/candidate_pairs.parquet
+  features: experiments/persona_similarity/artifacts/datasets/pair_features.parquet
+  features_with_text: experiments/persona_similarity/artifacts/datasets/pair_features_with_text.parquet
+  splits: experiments/persona_similarity/artifacts/datasets/splits.json
+  persona_texts: experiments/persona_similarity/artifacts/datasets/persona_texts.parquet
+  text_embeddings: experiments/persona_similarity/artifacts/datasets/persona_text_embeddings.npz
+  model: experiments/persona_similarity/artifacts/models/lightgbm_reranker.txt
+  metrics: experiments/persona_similarity/artifacts/metrics/evaluation_metrics.json
+  manual_review: experiments/persona_similarity/artifacts/metrics/manual_review_sample.csv
+  train_metadata: experiments/persona_similarity/artifacts/metrics/train_metadata.json
+  export_status: experiments/persona_similarity/artifacts/metrics/export_status.json
+  feature_status: experiments/persona_similarity/artifacts/metrics/feature_status.json
+  persona_texts_status: experiments/persona_similarity/artifacts/metrics/persona_texts_status.json
+  text_embedding_metadata: experiments/persona_similarity/artifacts/metrics/text_embedding_metadata.json
+  text_feature_status: experiments/persona_similarity/artifacts/metrics/text_feature_status.json
+  text_leakage_audit: experiments/persona_similarity/artifacts/metrics/text_leakage_audit.json
+  decision: experiments/persona_similarity/artifacts/experiment_decisions.json
+  run_summary: experiments/persona_similarity/artifacts/experiment_run_summary.md
+
+neo4j:
+  database: neo4j
+  candidate_top_n: 50
+  export_limit: null
+  text_export_limit: null
+
+split:
+  seed: 42
+  train_ratio: 0.8
+  valid_ratio: 0.1
+  test_ratio: 0.1
+
+weak_label:
+  same_occupation: 0.25
+  same_province: 0.15
+  same_district: 0.10
+  same_age_group: 0.10
+  same_education: 0.10
+  same_community: 0.10
+  shared_hobby: 0.12
+  shared_skill: 0.08
+  fastrp_score: 0.10
+  max_shared_hobbies: 5
+  max_shared_skills: 5
+
+deterministic_score:
+  same_occupation: 0.24
+  same_district: 0.14
+  same_province: 0.08
+  same_education: 0.10
+  same_field: 0.10
+  same_age_group: 0.08
+  same_family: 0.06
+  same_housing: 0.04
+  same_community: 0.04
+  shared_hobby: 0.08
+  shared_skill: 0.04
+  fastrp_score: 0.10
+  max_shared_hobbies: 5
+  max_shared_skills: 5
+
+lightgbm:
+  objective: lambdarank
+  metric: ndcg
+  ndcg_eval_at: [5, 10]
+  num_threads: 18
+  learning_rate: 0.05
+  num_leaves: 31
+  min_data_in_leaf: 20
+  feature_fraction: 0.9
+  bagging_fraction: 0.9
+  bagging_freq: 1
+  num_boost_round: 300
+  early_stopping_rounds: 30
+  log_period: 10
+
+evaluation:
+  top_k: [5, 10]
+  hybrid_alpha: [0.3, 0.5, 0.7, 0.9]
+  manual_review_size: 200
+
+text_embedding:
+  model_name: nlpai-lab/KURE-v1
+  device: auto
+  batch_size: 128
+  progress: true
+  preprocessing_version: persona_similarity_text_v1

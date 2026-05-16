@@ -1,0 +1,32 @@
+{
+  "experiment_id": "kure_text_feature_005_domain_tagged_fast_gpu_pilot_2k",
+  "split": "validation",
+  "status": "validation_evaluated",
+  "event_timestamp": "2026-05-15T18:16:18Z",
+  "command_signature": "evaluate_ranker.py --config 'GNN_Neural_Network\\configs\\lightgbm_ranker.yaml' --split validation --model-path 'GNN_Neural_Network\\artifacts\\experiments\\phase5_c_text_embedding\\kure_text_feature_005_domain_tagged_fast_gpu_pilot_2k\\ranker_model.txt' --output 'GNN_Neural_Network\\artifacts\\experiments\\phase5_c_text_embedding\\kure_text_feature_005_domain_tagged_fast_gpu_pilot_2k\\validation_metrics.json' --experiment-id kure_text_feature_005_domain_tagged_fast_gpu_pilot_2k --max-persons 2000 --embedding-cache-dir 'GNN_Neural_Network\\artifacts\\text_embedding_cache' --embedding-batch-size 0 --embedding-vram-utilization 0.85 --cpu-thread-count 0 --progress-mode on",
+  "log_policy": {
+    "progress_mode": "on",
+    "progress_mininterval": 5.0,
+    "progress_maxinterval": 30.0,
+    "progress_miniters": 200,
+    "tqdm_enabled": true
+  },
+  "artifact_path": "GNN_Neural_Network\\artifacts\\experiments\\phase5_c_text_embedding\\kure_text_feature_005_domain_tagged_fast_gpu_pilot_2k\\validation_metrics.status.json",
+  "runtime_seconds": 501.79002169999876,
+  "input_config_summary": {
+    "config_path": "GNN_Neural_Network\\configs\\lightgbm_ranker.yaml",
+    "candidate_pool_size": 50,
+    "score_normalization": "rank_percentile"
+  },
+  "summary": {
+    "phase": "metrics_done",
+    "split": "validation",
+    "v2_recall@10": 0.597,
+    "v2_ndcg@10": 0.3582536629281728,
+    "coverage@10": 0.0038692461641094064,
+    "novelty@10": 4.692718613434544,
+    "candidate_recall@50": 0.822,
+    "v2_fallback_count": 0,
+    "promotion_status": "eligible_for_test"
+  }
+}

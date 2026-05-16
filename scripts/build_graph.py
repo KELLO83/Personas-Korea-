@@ -8,6 +8,10 @@ import subprocess
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
 from src.data.loader import load_dataset
 from src.data.preprocessor import preprocess
 from src.data.sampling import normalize_age_group_tokens, sample_age_groups
@@ -59,6 +63,17 @@ def _parse_args() -> argparse.Namespace:
         type=int,
         default=os.cpu_count(),
         help="Number of parallel workers for preprocessing. Default: CPU count.",
+    )
+    parser.add_argument(
+        "--gds-top-k",
+        type=int,
+        default=5,
+        help="Top-K similar personas to persist with the GDS KNN pipeline after graph loading.",
+    )
+    parser.add_argument(
+        "--skip-gds",
+        action="store_true",
+        help="Skip FastRP, KNN SIMILAR_TO, and community writes after graph loading.",
     )
     return parser.parse_args()
 
@@ -189,10 +204,23 @@ def _create_hobby_relationships(reset: bool) -> None:
 
 
 def _export_gnn_person_hobby_edges() -> None:
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    script_path = os.path.join(project_root, "GNN_Neural_Network", "scripts", "export_person_hobby_edges.py")
+    script_path = os.path.join(PROJECT_ROOT, "GNN_Neural_Network", "scripts", "export_person_hobby_edges.py")
     logger.info("GNN Person-Hobby edge/context CSV export를 시작합니다...")
-    subprocess.run([sys.executable, script_path], check=True, cwd=project_root)
+    subprocess.run([sys.executable, script_path], check=True, cwd=PROJECT_ROOT)
+
+
+def _run_gds_pipeline(top_k: int) -> None:
+    script_path = os.path.join(PROJECT_ROOT, "scripts", "build_gds.py")
+    logger.info("Running GDS pipeline: FastRP embeddings, SIMILAR_TO KNN, and communities (top_k=%d)", top_k)
+    subprocess.run([sys.executable, script_path, "--top-k", str(top_k)], check=True, cwd=PROJECT_ROOT)
+
+
+def _finalize_graph_outputs(skip_gds: bool, gds_top_k: int) -> None:
+    _export_gnn_person_hobby_edges()
+    if skip_gds:
+        logger.info("Skipping GDS pipeline because --skip-gds was set.")
+        return
+    _run_gds_pipeline(top_k=gds_top_k)
 
 
 def _preprocess_single_chunk(chunk_df: pl.DataFrame, fast_mode: bool) -> pl.DataFrame:
@@ -260,6 +288,7 @@ def main() -> None:
 
         if after_rows == 0:
             logger.info("🎉 신규 추가할 데이터가 없습니다. 안전하게 종료합니다.")
+            _finalize_graph_outputs(skip_gds=args.skip_gds, gds_top_k=args.gds_top_k)
             return
 
     # ===== 🚀 [핵심 변경] 병렬 전처리 및 GPU 배치 파이프라인 =====
@@ -292,8 +321,8 @@ def main() -> None:
     # 9. Person-Hobby 관계(Edge) 생성 (그래프 구조 복구)
     _create_hobby_relationships(reset=args.reset)
 
-    # 10. GNN 학습용 Person-Hobby edge/context CSV export
-    _export_gnn_person_hobby_edges()
+    # 10. GNN export and GDS-derived graph outputs
+    _finalize_graph_outputs(skip_gds=args.skip_gds, gds_top_k=args.gds_top_k)
 
 
 if __name__ == "__main__":

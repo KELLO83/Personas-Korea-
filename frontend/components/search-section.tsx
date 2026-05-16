@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import type { PersonaProfileResponse, SearchResponse } from "@/lib/api-types";
+import type { PersonaProfileResponse, SearchResponse, SimilarityExplanationResponse } from "@/lib/api-types";
 import type { Loadable } from "@/hooks/use-loadable";
 import { personaApi } from "@/lib/api-client";
 import { lowPriorityLabel, profileExposurePolicy } from "@/lib/exposure-policy";
-import { fullNumber, joinDefined, shortUuid } from "@/lib/formatters";
+import { fullNumber, joinDefined, percent, shortUuid } from "@/lib/formatters";
 
 export interface SearchFilters {
   province: string;
@@ -21,6 +21,13 @@ interface SearchSectionProps {
   onFilterChange: (key: keyof SearchFilters, value: string) => void;
   onSearch: (page: number) => Promise<void>;
   onSelect: (uuid: string, label: string | null) => void;
+}
+
+export interface SimilarityContext {
+  sourceLabel: string;
+  similarity: number | null;
+  sharedHobbies: string[];
+  sourceProfile: PersonaProfileResponse;
 }
 
 export function SearchSection({ filters, page, search, onFilterChange, onSearch, onSelect }: SearchSectionProps) {
@@ -148,7 +155,17 @@ export function SearchSection({ filters, page, search, onFilterChange, onSearch,
   );
 }
 
-function SearchDetailProfile({ profile, onSelect }: { profile: PersonaProfileResponse; onSelect: (uuid: string, label: string | null) => void }) {
+export function SearchDetailProfile({
+  profile,
+  onSelect,
+  similarityContext,
+  similarityExplanation,
+}: {
+  profile: PersonaProfileResponse;
+  onSelect: (uuid: string, label: string | null) => void;
+  similarityContext?: SimilarityContext | null;
+  similarityExplanation?: SimilarityExplanationResponse | null;
+}) {
   const personaSections = [
     ["직업/전문성", profile.personas.professional],
     ["운동/건강", profile.personas.sports],
@@ -157,9 +174,33 @@ function SearchDetailProfile({ profile, onSelect }: { profile: PersonaProfileRes
     ["음식", profile.personas.culinary],
     ["가족", profile.personas.family],
   ].filter((entry): entry is [string, string] => Boolean(entry[1]));
+  const similarityEvidence = similarityExplanation?.top_reasons ?? [];
+  const fallbackEvidence = similarityContext && !similarityExplanation ? buildSimilarityEvidence(similarityContext.sourceProfile, profile, similarityContext.sharedHobbies) : [];
 
   return (
     <div className="modal-body">
+      {similarityContext && (
+        <div className="detail-panel">
+          <h3>유사하다고 판단한 근거</h3>
+          <div className="pill-row">
+            <span className="pill">기준 {similarityContext.sourceLabel}</span>
+            {similarityContext.similarity !== null && <span className="pill">유사도 {percent(similarityContext.similarity)}</span>}
+            <span className="pill">FastRP/KNN 구조 유사도</span>
+          </div>
+          {similarityEvidence.length > 0 ? (
+            <div className="pill-row" style={{ marginTop: 10 }}>
+              {similarityEvidence.map((evidence) => <span className="pill" key={`${evidence.feature}-${evidence.value}`}>{evidence.label} {evidence.value} {Math.round(evidence.contribution * 100)}%</span>)}
+            </div>
+          ) : fallbackEvidence.length > 0 ? (
+            <div className="pill-row" style={{ marginTop: 10 }}>
+              {fallbackEvidence.map((evidence) => <span className="pill" key={`${evidence.label}-${evidence.value}`}>{evidence.label} {evidence.value}</span>)}
+            </div>
+          ) : (
+            <p className="muted small">{similarityExplanation?.note ?? "현재 조회 가능한 공통 속성을 찾지 못했습니다."}</p>
+          )}
+          {similarityExplanation?.note && <p className="muted small" style={{ marginTop: 10 }}>{similarityExplanation.note}</p>}
+        </div>
+      )}
       <div className="grid two">
         <div className="detail-panel">
           <p className="small muted">UUID {shortUuid(profile.uuid)}</p>
@@ -254,4 +295,38 @@ function SearchDetailProfile({ profile, onSelect }: { profile: PersonaProfileRes
       </div>
     </div>
   );
+}
+
+function buildSimilarityEvidence(source: PersonaProfileResponse, target: PersonaProfileResponse, sharedHobbies: string[]) {
+  const evidence: Array<{ label: string; value: string }> = [];
+  const addSame = (label: string, sourceValue: string | number | null | undefined, targetValue: string | number | null | undefined) => {
+    if (sourceValue !== null && sourceValue !== undefined && sourceValue !== "" && sourceValue === targetValue) {
+      evidence.push({ label, value: String(sourceValue) });
+    }
+  };
+
+  addSame("지역", source.location.province, target.location.province);
+  addSame("시군구", source.location.district, target.location.district);
+  addSame("직업", source.occupation, target.occupation);
+  addSame("연령대", source.demographics.age_group, target.demographics.age_group);
+  addSame("성별", source.demographics.sex, target.demographics.sex);
+  addSame("학력", source.demographics.education_level, target.demographics.education_level);
+  addSame("전공", source.demographics.bachelors_field, target.demographics.bachelors_field);
+  addSame("혼인", source.demographics.marital_status, target.demographics.marital_status);
+  addSame("가구", source.demographics.family_type, target.demographics.family_type);
+  addSame("주거", source.demographics.housing_type, target.demographics.housing_type);
+  addSame("커뮤니티", source.community.community_id, target.community.community_id);
+
+  const hobbyOverlap = intersectValues(sharedHobbies.length > 0 ? sharedHobbies : source.hobbies, target.hobbies);
+  evidence.push(...hobbyOverlap.slice(0, 8).map((hobby) => ({ label: "공유 취미", value: hobby })));
+
+  const skillOverlap = intersectValues(source.skills, target.skills);
+  evidence.push(...skillOverlap.slice(0, 5).map((skill) => ({ label: "공유 스킬", value: skill })));
+
+  return evidence.slice(0, 18);
+}
+
+function intersectValues(left: string[], right: string[]) {
+  const rightSet = new Set(right.filter(Boolean));
+  return [...new Set(left.filter((value) => value && rightSet.has(value)))];
 }

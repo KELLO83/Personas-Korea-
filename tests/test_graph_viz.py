@@ -289,7 +289,7 @@ def test_subgraph_depth2_uses_district_key_for_node_identity(monkeypatch) -> Non
 
 
 def test_subgraph_depth2_query_caps_each_expansion_entity() -> None:
-    assert "CALL {" in SUBGRAPH_DEPTH2_QUERY
+    assert "CALL (p, entity) {" in SUBGRAPH_DEPTH2_QUERY
     assert "WITH DISTINCT p, entity" in SUBGRAPH_DEPTH2_QUERY
     assert "WITH DISTINCT other, type(r2) AS rel2_type" in SUBGRAPH_DEPTH2_QUERY
     assert "LIMIT $max_per_entity" in SUBGRAPH_DEPTH2_QUERY

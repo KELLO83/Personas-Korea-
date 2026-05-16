@@ -1,0 +1,606 @@
+{
+  "split": "validation",
+  "experiment_id": "kure_text_feature_005_domain_tagged_fast_gpu_pilot_2k",
+  "phase5_mode": false,
+  "status": "validation_evaluated",
+  "runtime_seconds": 501.78688210001565,
+  "model_path": "GNN_Neural_Network\\artifacts\\experiments\\phase5_c_text_embedding\\kure_text_feature_005_domain_tagged_fast_gpu_pilot_2k\\ranker_model.txt",
+  "feature_policy": {
+    "feature_columns": [
+      "lightgcn_score",
+      "cooccurrence_score",
+      "segment_popularity_score",
+      "known_hobby_compatibility",
+      "age_group_fit",
+      "occupation_fit",
+      "region_fit",
+      "popularity_prior",
+      "mismatch_penalty",
+      "popularity_penalty",
+      "novelty_bonus",
+      "category_diversity_reward",
+      "is_cold_start",
+      "text_embedding_similarity"
+    ],
+    "include_source_features": false,
+    "include_text_embedding_feature": true
+  },
+  "input_config_summary": {
+    "config_path": "GNN_Neural_Network\\configs\\lightgbm_ranker.yaml",
+    "candidate_pool_size": 50,
+    "score_normalization": "rank_percentile"
+  },
+  "max_persons": 2000,
+  "candidate_pool_policy": {
+    "providers": [
+      "popularity",
+      "cooccurrence"
+    ],
+    "candidate_k": 50,
+    "normalization_method": "rank_percentile",
+    "cache_key": "pool_validation_popularity-cooccurrence_k50_rank_percentile_e57c285844b28_h47c1d017_p88b2592c",
+    "cache_path": "C:\\Users\\Kello\\Nemotron-Personas-Korea\\GNN_Neural_Network\\artifacts\\cache\\pool_validation_popularity-cooccurrence_k50_rank_percentile_e57c285844b28_h47c1d017_p88b2592c.json"
+  },
+  "feature_cache_policy": {
+    "cache_key": "54304787cab8205a",
+    "cache_path": "GNN_Neural_Network\\artifacts\\experiments\\phase5_c_text_embedding\\kure_text_feature_005_domain_tagged_fast_gpu_pilot_2k\\feature_cache\\cache\\features_54304787cab8205a.npz",
+    "metadata_path": "GNN_Neural_Network\\artifacts\\experiments\\phase5_c_text_embedding\\kure_text_feature_005_domain_tagged_fast_gpu_pilot_2k\\feature_cache\\cache\\features_54304787cab8205a.json",
+    "cache_hit": false
+  },
+  "resource_policy": {
+    "logical_cpus": 22,
+    "default_cpu_threads": 20,
+    "requested_cpu_threads": 0,
+    "cpu_threads": 20,
+    "system_memory_total_mb": 0,
+    "system_memory_available_mb": 0,
+    "gpu_total_vram_mb": 8188,
+    "gpu_used_vram_mb": 310,
+    "gpu_free_vram_mb": 7648,
+    "feature_builder_parallelism": "process_pool_by_person",
+    "lightgbm_predict_threads": 20,
+    "torch_threads": 20
+  },
+  "v2_fallback_count": 0,
+  "stage1_baseline": {
+    "providers": [
+      "popularity",
+      "cooccurrence"
+    ],
+    "metrics": {
+      "recall@5": 0.4065,
+      "ndcg@5": 0.28914019448545264,
+      "hit_rate@5": 0.4065,
+      "catalog_coverage@5": 0.002134756504336224,
+      "novelty@5": 3.957219044078744,
+      "intra_list_diversity@5": 1.0,
+      "recall@10": 0.5495,
+      "ndcg@10": 0.33484612678160003,
+      "hit_rate@10": 0.5495,
+      "catalog_coverage@10": 0.0029352901934623084,
+      "novelty@10": 4.544620725091556,
+      "intra_list_diversity@10": 0.9535666666666872,
+      "recall@20": 0.717,
+      "ndcg@20": 0.3776681048146655,
+      "hit_rate@20": 0.717,
+      "catalog_coverage@20": 0.005070046697798532,
+      "novelty@20": 5.337579313260967,
+      "intra_list_diversity@20": 0.969028947368426,
+      "per_segment": {
+        "age_group": {
+          "10대": {
+            "recall": 0.7661691542288557,
+            "count": 402
+          },
+          "30대": {
+            "recall": 0.6717095310136157,
+            "count": 661
+          },
+          "20대": {
+            "recall": 0.727854855923159,
+            "count": 937
+          }
+        },
+        "sex": {
+          "남자": {
+            "recall": 0.6987607244995233,
+            "count": 1049
+          },
+          "여자": {
+            "recall": 0.7371188222923238,
+            "count": 951
+          }
+        },
+        "recall_gap": {
+          "age_group": 0.09445962321523993,
+          "sex": 0.03835809779280053
+        }
+      }
+    },
+    "kure_semantic_provider": {
+      "enabled": false
+    }
+  },
+  "v2_lightgbm_ranker": {
+    "metrics": {
+      "recall@5": 0.4295,
+      "ndcg@5": 0.30404500843802773,
+      "hit_rate@5": 0.4295,
+      "catalog_coverage@5": 0.0032021347565043363,
+      "novelty@5": 4.064040408937585,
+      "intra_list_diversity@5": 0.9887500000000039,
+      "oracle_recall@5": 0.822,
+      "recall@10": 0.597,
+      "ndcg@10": 0.3582536629281728,
+      "hit_rate@10": 0.597,
+      "catalog_coverage@10": 0.0038692461641094064,
+      "novelty@10": 4.692718613434544,
+      "intra_list_diversity@10": 0.9629444444444542,
+      "oracle_recall@10": 0.822,
+      "recall@20": 0.7305,
+      "ndcg@20": 0.39215849870284053,
+      "hit_rate@20": 0.7305,
+      "catalog_coverage@20": 0.0062708472314876584,
+      "novelty@20": 5.460392888421302,
+      "intra_list_diversity@20": 0.9611684210526367,
+      "oracle_recall@20": 0.822,
+      "per_segment": {
+        "age_group": {
+          "10대": {
+            "recall": 0.7661691542288557,
+            "count": 402
+          },
+          "30대": {
+            "recall": 0.6928895612708018,
+            "count": 661
+          },
+          "20대": {
+            "recall": 0.7417289220917823,
+            "count": 937
+          }
+        },
+        "sex": {
+          "남자": {
+            "recall": 0.7159199237368923,
+            "count": 1049
+          },
+          "여자": {
+            "recall": 0.7465825446898002,
+            "count": 951
+          }
+        },
+        "recall_gap": {
+          "age_group": 0.07327959295805386,
+          "sex": 0.03066262095290795
+        }
+      }
+    },
+    "delta_vs_v1_reranker": {
+      "recall@10": 0.1195,
+      "ndcg@10": 0.11702947247516313,
+      "hit_rate@10": 0.1195
+    },
+    "delta_vs_stage1": {
+      "recall@10": 0.04749999999999999,
+      "ndcg@10": 0.02340753614657276,
+      "hit_rate@10": 0.04749999999999999
+    },
+    "phase5_kure_mmr_gates": null,
+    "use_mmr": false,
+    "use_dpp": false,
+    "mmr_lambda": null,
+    "dpp_theta": null,
+    "mmr_embedding_method": null,
+    "dpp_embedding_method": null,
+    "mmr_embedding_meta": null,
+    "mmr_embedding_batch_size": null,
+    "text_embedding_feature": {
+      "enabled": true,
+      "effective_embedding_batch_size": 361,
+      "audit": {
+        "enabled": true,
+        "cache_dir": "GNN_Neural_Network\\artifacts\\text_embedding_cache",
+        "resource_plan": {
+          "device": "cuda",
+          "requested_batch_size": 0,
+          "effective_batch_size": 361,
+          "gpu_total_vram_mb": 8188,
+          "gpu_used_vram_mb": 310,
+          "gpu_free_vram_mb": 7648,
+          "vram_utilization_target": 0.85,
+          "requested_target_vram_mb": 0,
+          "target_vram_mb": 6500,
+          "estimated_mb_per_text": 18,
+          "estimated_vram_mb": 6498,
+          "mode": "auto_vram"
+        },
+        "known_hobbies_masked": true,
+        "audit_pass": true,
+        "skipped_due_to_feature_cache_hit": false,
+        "passed_person_count": 2000,
+        "failed_person_count": 0,
+        "text_builder": "build_domain_tagged_persona_text",
+        "preprocessing_version": "domain_tagged_masked_v1",
+        "missing_context_person_count": 0,
+        "audit_eligible_person_count": 2000,
+        "passed_person_id_sample": [
+          16,
+          23,
+          41,
+          48,
+          50,
+          76,
+          77,
+          103,
+          134,
+          137,
+          138,
+          140,
+          152,
+          175,
+          182,
+          191,
+          209,
+          217,
+          242,
+          265,
+          266,
+          277,
+          285,
+          296,
+          319,
+          325,
+          356,
+          366,
+          380,
+          392,
+          405,
+          416,
+          418,
+          435,
+          438,
+          441,
+          445,
+          462,
+          463,
+          464,
+          469,
+          473,
+          489,
+          490,
+          495,
+          508,
+          518,
+          519,
+          521,
+          537,
+          540,
+          548,
+          551,
+          558,
+          566,
+          569,
+          583,
+          627,
+          632,
+          639,
+          646,
+          652,
+          653,
+          658,
+          675,
+          678,
+          691,
+          694,
+          698,
+          714,
+          719,
+          722,
+          734,
+          735,
+          743,
+          745,
+          750,
+          756,
+          760,
+          776,
+          779,
+          781,
+          783,
+          785,
+          789,
+          791,
+          826,
+          838,
+          845,
+          847,
+          857,
+          870,
+          885,
+          895,
+          898,
+          902,
+          914,
+          920,
+          923,
+          925
+        ],
+        "failed_person_id_sample": [],
+        "missing_context_person_id_sample": [],
+        "similarity_lookup_person_count": 2000,
+        "similarity_lookup_pair_count": 100000
+      }
+    },
+    "cold_start_subset": {
+      "person_count": 1575,
+      "known_hobbies_leq": 1,
+      "v2_metrics": {
+        "recall@5": 0.43936507936507935,
+        "ndcg@5": 0.3119649230375384,
+        "hit_rate@5": 0.43936507936507935,
+        "catalog_coverage@5": 0.002801867911941294,
+        "novelty@5": 4.044814443981611,
+        "intra_list_diversity@5": 0.9887619047619066,
+        "recall@10": 0.6152380952380953,
+        "ndcg@10": 0.3689192972021149,
+        "hit_rate@10": 0.6152380952380953,
+        "catalog_coverage@10": 0.0038692461641094064,
+        "novelty@10": 4.675651869478372,
+        "intra_list_diversity@10": 0.9631746031746065,
+        "recall@20": 0.7415873015873016,
+        "ndcg@20": 0.40107429909613407,
+        "hit_rate@20": 0.7415873015873016,
+        "catalog_coverage@20": 0.0062708472314876584,
+        "novelty@20": 5.442489856386313,
+        "intra_list_diversity@20": 0.9627067669172996,
+        "per_segment": {
+          "age_group": {
+            "20대": {
+              "recall": 0.7573221757322176,
+              "count": 717
+            },
+            "30대": {
+              "recall": 0.7069943289224953,
+              "count": 529
+            },
+            "10대": {
+              "recall": 0.7629179331306991,
+              "count": 329
+            }
+          },
+          "sex": {
+            "여자": {
+              "recall": 0.7486979166666666,
+              "count": 768
+            },
+            "남자": {
+              "recall": 0.734820322180917,
+              "count": 807
+            }
+          },
+          "recall_gap": {
+            "age_group": 0.05592360420820386,
+            "sex": 0.013877594485749656
+          }
+        }
+      },
+      "stage1_metrics": {
+        "recall@5": 0.4126984126984127,
+        "ndcg@5": 0.2970869290512274,
+        "hit_rate@5": 0.4126984126984127,
+        "catalog_coverage@5": 0.0020013342228152103,
+        "novelty@5": 3.937845558000521,
+        "intra_list_diversity@5": 1.0,
+        "recall@10": 0.5625396825396826,
+        "ndcg@10": 0.34504791743439106,
+        "hit_rate@10": 0.5625396825396826,
+        "catalog_coverage@10": 0.0029352901934623084,
+        "novelty@10": 4.533201092116758,
+        "intra_list_diversity@10": 0.9540881834215251,
+        "recall@20": 0.7314285714285714,
+        "ndcg@20": 0.3882121123202393,
+        "hit_rate@20": 0.7314285714285714,
+        "catalog_coverage@20": 0.005070046697798532,
+        "novelty@20": 5.323743822256501,
+        "intra_list_diversity@20": 0.9689089390142078,
+        "per_segment": {
+          "age_group": {
+            "20대": {
+              "recall": 0.7461645746164575,
+              "count": 717
+            },
+            "30대": {
+              "recall": 0.6899810964083176,
+              "count": 529
+            },
+            "10대": {
+              "recall": 0.7659574468085106,
+              "count": 329
+            }
+          },
+          "sex": {
+            "여자": {
+              "recall": 0.7408854166666666,
+              "count": 768
+            },
+            "남자": {
+              "recall": 0.7224287484510533,
+              "count": 807
+            }
+          },
+          "recall_gap": {
+            "age_group": 0.07597635040019302,
+            "sex": 0.018456668215613314
+          }
+        }
+      },
+      "v1_metrics": {
+        "recall@5": 0.30984126984126986,
+        "ndcg@5": 0.19131297558202548,
+        "hit_rate@5": 0.30984126984126986,
+        "catalog_coverage@5": 0.04122748498999333,
+        "novelty@5": 7.444005950580549,
+        "intra_list_diversity@5": 0.8390476190476251,
+        "recall@10": 0.48507936507936505,
+        "ndcg@10": 0.24741235124620567,
+        "hit_rate@10": 0.48507936507936505,
+        "catalog_coverage@10": 0.04256170780520347,
+        "novelty@10": 6.635588212888231,
+        "intra_list_diversity@10": 0.9036895943562573,
+        "recall@20": 0.6850793650793651,
+        "ndcg@20": 0.2984710671124032,
+        "hit_rate@20": 0.6850793650793651,
+        "catalog_coverage@20": 0.04389593062041361,
+        "novelty@20": 6.514087277655619,
+        "intra_list_diversity@20": 0.9213065998329206,
+        "per_segment": {
+          "age_group": {
+            "20대": {
+              "recall": 0.705718270571827,
+              "count": 717
+            },
+            "30대": {
+              "recall": 0.6162570888468809,
+              "count": 529
+            },
+            "10대": {
+              "recall": 0.7507598784194529,
+              "count": 329
+            }
+          },
+          "sex": {
+            "여자": {
+              "recall": 0.7005208333333334,
+              "count": 768
+            },
+            "남자": {
+              "recall": 0.6703841387856257,
+              "count": 807
+            }
+          },
+          "recall_gap": {
+            "age_group": 0.134502789572572,
+            "sex": 0.03013669454770762
+          }
+        }
+      }
+    }
+  },
+  "candidate_recall": {
+    "recall@50": 0.822,
+    "ndcg@50": 0.3993275439985596,
+    "hit_rate@50": 0.822,
+    "catalog_coverage@50": 0.049099399599733154,
+    "novelty@50": 7.802979996922678,
+    "intra_list_diversity@50": 0.8136775510204066
+  },
+  "metrics_summary": {
+    "stage1_recall@10": 0.5495,
+    "v2_recall@10": 0.597,
+    "stage1_ndcg@10": 0.33484612678160003,
+    "v2_ndcg@10": 0.3582536629281728,
+    "delta_vs_stage1_recall@10": 0.04749999999999999,
+    "delta_vs_stage1_ndcg@10": 0.02340753614657276,
+    "v2_fallback_count": 0,
+    "candidate_recall@50": 0.822,
+    "cold_start_recall@10": 0.6152380952380953,
+    "cold_start_ndcg@10": 0.3689192972021149,
+    "cold_start_coverage@10": 0.0038692461641094064,
+    "cold_start_novelty@10": 4.675651869478372,
+    "cold_start_intra_list_diversity@10": 0.9631746031746065
+  },
+  "promotion_decision": {
+    "status": "eligible_for_test",
+    "gates": {
+      "recall@10": {
+        "threshold": -0.002,
+        "actual": 0.1195,
+        "pass": true
+      },
+      "ndcg@10": {
+        "threshold": 0.005,
+        "actual": 0.11702947247516313,
+        "pass": true
+      }
+    },
+    "reason": "v2 passes both gates on validation (recall@10 delta=+0.119500 >= -0.002, ndcg@10 delta=+0.117029 >= 0.005)"
+  },
+  "embedding_model_metadata": {
+    "enabled": true,
+    "model_name": "nlpai-lab/KURE-v1",
+    "model_revision": "",
+    "preprocessing_version": "domain_tagged_masked_v1",
+    "text_builder": "build_domain_tagged_persona_text",
+    "cache_dir": "GNN_Neural_Network\\artifacts\\text_embedding_cache",
+    "batch_size": 361,
+    "device": "cuda",
+    "resource_plan": {
+      "device": "cuda",
+      "requested_batch_size": 0,
+      "effective_batch_size": 361,
+      "gpu_total_vram_mb": 8188,
+      "gpu_used_vram_mb": 310,
+      "gpu_free_vram_mb": 7648,
+      "vram_utilization_target": 0.85,
+      "requested_target_vram_mb": 0,
+      "target_vram_mb": 6500,
+      "estimated_mb_per_text": 18,
+      "estimated_vram_mb": 6498,
+      "mode": "auto_vram"
+    },
+    "cache_key_policy": "model_name|model_revision|preprocessing_version|text"
+  },
+  "v1_deterministic_reranker": {
+    "metrics": {
+      "recall@5": 0.3035,
+      "ndcg@5": 0.1853556855620972,
+      "hit_rate@5": 0.3035,
+      "catalog_coverage@5": 0.044429619746497666,
+      "novelty@5": 7.323801550693326,
+      "intra_list_diversity@5": 0.847650000000013,
+      "recall@10": 0.4775,
+      "ndcg@10": 0.24122419045300966,
+      "hit_rate@10": 0.4775,
+      "catalog_coverage@10": 0.04536357571714476,
+      "novelty@10": 6.5646612929142325,
+      "intra_list_diversity@10": 0.9073000000000001,
+      "recall@20": 0.675,
+      "ndcg@20": 0.29161693037216513,
+      "hit_rate@20": 0.675,
+      "catalog_coverage@20": 0.0466977985323549,
+      "novelty@20": 6.487445186103728,
+      "intra_list_diversity@20": 0.9230210526315855,
+      "per_segment": {
+        "age_group": {
+          "10대": {
+            "recall": 0.7562189054726368,
+            "count": 402
+          },
+          "30대": {
+            "recall": 0.6081694402420574,
+            "count": 661
+          },
+          "20대": {
+            "recall": 0.687299893276414,
+            "count": 937
+          }
+        },
+        "sex": {
+          "남자": {
+            "recall": 0.6530028598665396,
+            "count": 1049
+          },
+          "여자": {
+            "recall": 0.6992639327024185,
+            "count": 951
+          }
+        },
+        "recall_gap": {
+          "age_group": 0.14804946523057938,
+          "sex": 0.04626107283587888
+        }
+      }
+    }
+  },
+  "embedding_model_metadata_path": "GNN_Neural_Network\\artifacts\\experiments\\phase5_c_text_embedding\\kure_text_feature_005_domain_tagged_fast_gpu_pilot_2k\\embedding_model_metadata.json"
+}

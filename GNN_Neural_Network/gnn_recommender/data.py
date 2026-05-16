@@ -11,7 +11,7 @@ import unicodedata
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import cast
+from typing import Mapping, cast
 
 
 LOGGER = logging.getLogger(__name__)
@@ -23,7 +23,10 @@ class HobbyEdge:
     hobby_name: str
 
 
-def build_domain_tagged_persona_text(context: PersonContext) -> str:
+def build_domain_tagged_persona_text(
+    context: PersonContext,
+    field_values: Mapping[str, str] | None = None,
+) -> str:
     """
     [TASK 5-E] PRD 패치 반영: Persona의 7개 도메인 텍스트를 구조화된 태그로 결합.
     
@@ -33,14 +36,15 @@ def build_domain_tagged_persona_text(context: PersonContext) -> str:
     Returns:
         예: "[PROF] ... [SPORT] ... [ART] ... [CULT] ... [TRAV] ... [FOOD] ... [FAM] ..."
     """
+    values = field_values or {}
     domain_blocks = [
-        f"[PROF] {context.professional_text.strip()}",
-        f"[SPORT] {context.sports_text.strip()}",
-        f"[ART] {context.arts_text.strip()}",
-        f"[CULT] {context.cultural_background.strip()}",
-        f"[TRAV] {context.travel_text.strip()}",
-        f"[FOOD] {context.culinary_text.strip()}",
-        f"[FAM] {context.family_text.strip()}"
+        f"[PROF] {values.get('professional_text', context.professional_text).strip()}",
+        f"[SPORT] {values.get('sports_text', context.sports_text).strip()}",
+        f"[ART] {values.get('arts_text', context.arts_text).strip()}",
+        f"[CULT] {values.get('persona_text', context.persona_text).strip()}",
+        f"[TRAV] {values.get('travel_text', context.travel_text).strip()}",
+        f"[FOOD] {values.get('culinary_text', context.culinary_text).strip()}",
+        f"[FAM] {values.get('family_text', context.family_text).strip()}"
     ]
     filtered_blocks = [block for block in domain_blocks if len(block.split("] ", 1)) > 1 and block.split("] ", 1)[1].strip()]
     return " ".join(filtered_blocks)

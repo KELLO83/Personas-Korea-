@@ -1,7 +1,7 @@
 {
   "snapshot_date": "2026-05-01",
   "scope": "GNN_Neural_Network offline recommender snapshot",
-      "source_artifacts": [
+  "source_artifacts": [
     "artifacts/metrics.json",
     "artifacts/stage1_ablation_validation.json",
     "artifacts/stage1_ablation_test.json",
@@ -10,7 +10,9 @@
     "artifacts/vocabulary_report.json",
     "artifacts/experiments/phase5_kure_mmr_summary.md",
     "artifacts/experiments/phase2_5_cold_start_baseline/validation_metrics.json",
-    "artifacts/experiments/phase2_5_cold_start_baseline/test_metrics.json"
+    "artifacts/experiments/phase2_5_cold_start_baseline/test_metrics.json",
+    "artifacts/experiments/phase5_d_stage1_kure_semantic/kure_stage1_semantic_001_fast_gpu/validation_metrics.json",
+    "artifacts/experiments/phase5_d_stage1_kure_semantic/kure_stage1_semantic_001_fast_gpu/validation_metrics.status.json"
   ],
   "current_system": {
     "stage1": {
@@ -64,6 +66,30 @@
         "mmr": false
       },
       "reason": "Regularization tuning promoted num_leaves=31. Negative sampling and source one-hot ablations did not beat the current default. Category one-hot MMR remains no-go."
+    },
+    "phase5_d_stage1_kure_semantic": {
+      "status": "rejected",
+      "default_enabled": false,
+      "run_id": "kure_stage1_semantic_001_fast_gpu",
+      "stage1": [
+        "popularity",
+        "cooccurrence",
+        "kure_semantic"
+      ],
+      "stage2": "LightGBM learned ranker",
+      "validation_metrics": {
+        "v2_recall@10": 0.5997052592797274,
+        "v2_ndcg@10": 0.37089053979698977,
+        "candidate_recall@50": 0.7949709864603481,
+        "v2_fallback_count": 0
+      },
+      "delta_vs_closed_phase2_5_validation": {
+        "recall@10": -0.13934565018069334,
+        "ndcg@10": -0.0870797489898526,
+        "candidate_recall@50": -0.18267356185791217
+      },
+      "decision": "validation failed promotion gate; test skipped; default unchanged",
+      "reason": "KURE semantic Stage1 greatly reduced candidate recall versus the closed Phase 2.5 candidate pool, causing v2 Recall@10 and NDCG@10 to miss the accuracy gate."
     }
   },
   "final_metrics": {
@@ -191,6 +217,13 @@
       "name": "source_onehot_features",
       "status": "rejected",
       "reason": "Validation recall and ndcg were below the current no-source-feature default, so test evaluation was skipped. source_count had gain, but individual source flags had zero gain under the current popularity+cooccurrence candidate pool."
+    },
+    {
+      "name": "kure_semantic_stage1_provider",
+      "status": "rejected",
+      "run_id": "kure_stage1_semantic_001_fast_gpu",
+      "reason": "Opt-in Stage1 provider path popularity+cooccurrence+kure_semantic reduced validation candidate_recall@50 to 0.794971 and v2 Recall@10/NDCG@10 to 0.599705/0.370891, below the closed Phase 2.5 validation baseline 0.739051/0.457970. Test skipped by validation-first gate.",
+      "available_as": "explicit opt-in only; default remains popularity+cooccurrence"
     }
   ],
   "data_findings": [
