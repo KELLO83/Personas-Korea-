@@ -10,7 +10,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+/lib/
 lib64/
 parts/
 sdist/
@@ -45,7 +45,7 @@ config.json
 secrets.json
 
 # Data / Databases
-data/
+/data/
 artifacts/
 GNN_Neural_Network/data/
 experiments/**/artifacts/datasets/

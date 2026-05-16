@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import type { ChatMessage, PersonaProfileResponse, RagTraceListResponse, RecommendationStatusResponse, SearchResponse, StatsResponse, SubgraphResponse } from "@/lib/api-types";
 import { personaApi } from "@/lib/api-client";
 import { DEFAULT_PERSONA_UUID } from "@/lib/constants";
-import { shortUuid } from "@/lib/formatters";
+import { shortUuid, uuidWithName } from "@/lib/formatters";
 import { chatSessionId, resetChatSessionId } from "@/lib/chat-session";
 import { useLoadable } from "@/hooks/use-loadable";
 import { DashboardSection } from "@/components/dashboard-section";
@@ -160,7 +160,7 @@ export default function Home() {
             <div className="card status-card">
               <span className="status-dot" /> <span className="small muted">현재 선택</span>
               <h2>{selectedDisplayName}</h2>
-              <p className="muted small">UUID {selectedUuid}</p>
+              <p className="muted small">UUID {uuidWithName(selectedUuid, selectedDisplayName)}</p>
               <button className="ghost-button" onClick={() => setActiveView("graph")}>관계 그래프로 보기</button>
             </div>
           </section>
@@ -169,7 +169,7 @@ export default function Home() {
             <span className="status-dot" />
             <div>
               <div className="eyebrow">현재 선택</div>
-              <h2>{selectedDisplayName} <span className="muted">({selectedUuid})</span></h2>
+              <h2>{selectedDisplayName} <span className="muted">({uuidWithName(selectedUuid, selectedDisplayName)})</span></h2>
             </div>
             <button className="ghost-button" onClick={() => setActiveView("graph")} style={{ marginLeft: "auto" }}>관계 그래프</button>
           </div>

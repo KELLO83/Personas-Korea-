@@ -129,6 +129,57 @@
 - [ ] Implement PPR candidate-generation comparison only if FastRP/KNN candidate recall is insufficient.
 - [ ] Implement Node2Vec candidate-generation comparison only if FastRP/KNN candidate recall is insufficient.
 
+## Phase 8-B - Lessons From Hobby Recommender
+
+Apply the same controlled 2-stage policy learned from `GNN_Neural_Network/`.
+
+- [ ] Keep Stage1 as `FastRP/KNN topK >= 50` until a decision artifact says candidate recall is insufficient.
+- [ ] Treat KURE/Snowflake text embeddings as Stage2 reranker features first, not as a new Stage1 candidate generator.
+- [ ] Do not change candidate pool, split, label policy, LightGBM config, embedding backbone, and persona text builder in the same experiment.
+- [ ] Record exactly one changed variable in every decision artifact.
+
+### Track A - Embedding Backbone Swap
+
+- [ ] Define KURE-v1 as the reference persona-pair text embedding backbone.
+- [ ] Run `dragonkue/snowflake-arctic-embed-l-v2.0-ko` as a validation-only backbone swap with the same candidate pool, split, text builder, labels, and LightGBM config.
+- [ ] Run `dragonkue/multilingual-e5-small-ko-v2` only as an optional speed/cost probe after the Snowflake result is known.
+- [ ] Persist `model_name`, `model_revision`, embedding dimension, pooling behavior when known, device, batch size, runtime, cache hit/miss, and preprocessing version.
+- [ ] Verify KURE-v1, Snowflake-ko, and E5-small-ko embedding caches cannot collide.
+- [ ] Promote to test only if validation NDCG@5/10 improves without reducing explanation coverage or strong-reason rate.
+
+### Track D - Persona Text Builder Ablation
+
+- [ ] Keep the embedding backbone fixed to KURE-v1 for Track D.
+- [ ] Define and version the persona text builder interface.
+- [ ] Evaluate `persona_text_structured_only`.
+- [ ] Evaluate `persona_text_narrative_only`.
+- [ ] Evaluate `persona_text_structured_plus_narrative`.
+- [ ] Evaluate `persona_text_domain_tagged_blocks`.
+- [ ] Evaluate `persona_text_summary_style` only if the summary source is reproducible and leakage-audited.
+- [ ] Persist 20 source/target text examples for manual review per builder.
+- [ ] Run leakage audit for every builder before training.
+- [ ] Do not combine Track D with Track A until both isolated effects have validation artifacts.
+
+### Track B - Domain-Specific Text Cosine
+
+- [ ] Keep the candidate pool and embedding backbone fixed.
+- [ ] Add or verify domain-specific cosine columns:
+  - `professional_text_cosine`
+  - `hobbies_text_cosine`
+  - `skills_text_cosine`
+  - `career_text_cosine`
+  - `family_text_cosine`
+  - `lifestyle_text_cosine`
+  - `persona_text_cosine`
+- [ ] Compare domain-specific text features against the single `all_text_cosine` baseline.
+- [ ] Persist feature importance and explanation-card coverage for domain text features.
+
+### Final Rerank - Diversity And Explanation
+
+- [ ] Run diversity/final rerank only after the structured+text reranker baseline is known.
+- [ ] Track same-occupation, same-region, same-community, and low-information overconcentration.
+- [ ] Require manual review samples before any promotion decision.
+
 ## Phase 9 - Promotion Gate
 
 - [ ] Confirm candidate generation uses `topK >= 50`, not smoke-test `topK=5`.
@@ -164,10 +215,14 @@ Run one experiment-purpose script at a time.
 14. experiments/persona_similarity/scripts/build_text_embeddings.py
 15. experiments/persona_similarity/scripts/build_text_features.py
 16. text-only / structured+text / hybrid text experiments
-17. optional CatBoost ranking comparison
-18. optional PPR/Node2Vec candidate-generation comparison only if needed
-19. manual review
-20. decision artifact update
+17. Snowflake-ko backbone swap, validation-only, same pool/split/text builder
+18. persona text builder ablation with KURE-v1 fixed
+19. domain-specific text cosine ablation
+20. diversity / explanation-aware final rerank
+21. optional CatBoost ranking comparison
+22. optional PPR/Node2Vec candidate-generation comparison only if needed
+23. manual review
+24. decision artifact update
 ```
 
 ## Current Decision

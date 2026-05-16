@@ -654,3 +654,127 @@ FastRP/KNN candidate generation
   -> KURE/text embedding cosine features
   -> LightGBM LambdaRank/rank_xendcg reranker
 ```
+
+## 취미추천 실험에서 가져온 유사페르소나 추천 원칙
+
+`GNN_Neural_Network/`의 취미추천 실험에서 확인한 핵심 교훈은 유사페르소나 추천에도 그대로 적용한다.
+
+```text
+임베딩/그래프 기반 후보생성 점수를 바로 최종 추천으로 믿지 않는다.
+Stage1은 넓은 후보 pool을 안정적으로 만든다.
+Stage2 reranker가 구조 feature, 텍스트 feature, 설명 feature를 함께 보고 최종 순서를 정한다.
+```
+
+따라서 유사페르소나 추천의 기본 실험 구조는 다음으로 고정한다.
+
+```text
+Stage1 = FastRP/KNN topK >= 50 candidate generation
+Stage2 = LightGBM LambdaRank / rank_xendcg reranker
+Text embedding = Stage2 pair feature
+Final rerank = diversity / explanation-aware rerank, only after accuracy baseline is known
+```
+
+중요한 금지 사항:
+
+- KURE/Snowflake 같은 텍스트 임베딩을 곧바로 Stage1 후보생성기로 승격하지 않는다.
+- Stage1 후보 pool, split, label, LightGBM 설정, text builder를 동시에 바꾸지 않는다.
+- 한 실험에서는 하나의 변수만 바꾼다.
+- `source_uuid`, `target_uuid`, `display_name` 같은 식별자는 feature로 사용하지 않는다.
+
+### 유사페르소나 추천 실험 우선순위
+
+| 우선순위 | Track | 실험 | 목적 |
+| ---: | --- | --- | --- |
+| 1 | Candidate Lock | FastRP/KNN `topK >= 50` 후보 pool 재생성 | reranker가 학습할 충분한 후보 폭을 확보한다. |
+| 2 | Structured Baseline | 구조 feature 기반 deterministic / LightGBM baseline | FastRP 순서를 reranker가 실제로 개선하는지 확인한다. |
+| 3 | Text Feature Baseline | KURE-v1 pair text cosine feature 추가 | 서술형 persona text가 유사도 판단에 주는 신호를 검증한다. |
+| 4 | Track A | Snowflake-ko embedding backbone swap | KURE-v1보다 강한 한국어 임베딩 백본이 있는지 비교한다. |
+| 5 | Track D | persona text builder ablation | 어떤 persona text 구성이 유사도 추천에 가장 유효한지 검증한다. |
+| 6 | Track B | domain-specific text cosine feature | 직업/취미/가족/생활방식 등 어떤 영역이 유사도를 설명하는지 분리한다. |
+| 7 | Final Rerank | diversity / explanation-aware rerank | 너무 뻔한 같은 직업/지역 추천으로 수축되는지 완화한다. |
+| 8 | Optional Reranker | CatBoost ranking | LightGBM이 명확히 부족할 때만 동일 split/pool에서 비교한다. |
+
+이 순서는 decision artifact 없이 임의로 바꾸지 않는다.
+
+### Track A: Embedding Backbone Swap
+
+Track A는 텍스트 임베딩 모델만 교체하는 실험이다.
+
+기준 모델:
+
+```text
+nlpai-lab/KURE-v1
+```
+
+후보 모델:
+
+```text
+dragonkue/snowflake-arctic-embed-l-v2.0-ko
+dragonkue/multilingual-e5-small-ko-v2
+```
+
+고정해야 할 항목:
+
+- FastRP/KNN candidate pool
+- `source_uuid` 기준 split
+- weak label generation policy
+- LightGBM config
+- pair feature schema
+- persona text builder
+- leakage audit
+
+기록해야 할 항목:
+
+- `model_name`, `model_revision`
+- embedding dimension
+- pooling behavior, 알 수 있는 경우
+- device, batch size, runtime
+- cache hit/miss
+- text preprocessing version
+- validation NDCG@5/10, explanation coverage, strong-reason rate
+
+### Track D: Persona Text Builder Ablation
+
+Track D는 임베딩 모델을 고정하고 persona text 구성만 바꾸는 실험이다. 기본 백본은 KURE-v1로 둔다.
+
+실험 후보:
+
+```text
+persona_text_structured_only
+persona_text_narrative_only
+persona_text_structured_plus_narrative
+persona_text_domain_tagged_blocks
+persona_text_summary_style
+```
+
+목적은 나이/지역/직업 같은 구조 feature보다 성격, 퇴근 후 행동, 생활방식, 가치관 같은 서술형 정보가 유사페르소나 추천에 얼마나 유효한지 확인하는 것이다.
+
+Track D는 Track A와 동시에 실행하지 않는다. 임베딩 백본과 text builder를 함께 바꾸면 성능 변화 원인을 분해할 수 없다.
+
+### Track B: Domain-Specific Text Cosine
+
+Track B는 단일 `all_text_cosine` 대신 영역별 cosine feature를 만든다.
+
+```text
+professional_text_cosine
+hobbies_text_cosine
+skills_text_cosine
+career_text_cosine
+family_text_cosine
+lifestyle_text_cosine
+persona_text_cosine
+```
+
+이 실험은 LightGBM이 "왜 비슷한지"를 더 잘 학습하고, API 설명 카드에도 연결 가능한 feature를 만들기 위한 것이다.
+
+### Promotion Gate
+
+어떤 reranker도 다음 조건을 통과하기 전에는 production 기본값으로 승격하지 않는다.
+
+- FastRP/KNN baseline과 같은 candidate pool, 같은 split에서 비교한다.
+- validation-first, test는 winner-only로 실행한다.
+- NDCG@5/10이 개선되어야 한다.
+- explanation coverage 또는 strong-reason rate가 악화되면 수동 검토가 필요하다.
+- low-information recommendation rate가 증가하면 promotion 보류한다.
+- 같은 직업/지역/커뮤니티로 과도하게 몰리는지 diversity metric을 기록한다.
+- rollback 경로는 항상 raw `SIMILAR_TO` ordering이다.

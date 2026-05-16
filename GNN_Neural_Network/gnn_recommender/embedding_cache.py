@@ -118,7 +118,11 @@ class PersonEmbeddingCache:
         cached = self.get(text)
         if cached is not None:
             return cached
-        model = _load_kure_model(self.device, model_name=self.model_name)
+        model = _load_kure_model(
+            self.device,
+            model_name=self.model_name,
+            model_revision=self.model_revision,
+        )
         emb = model.encode(
             text,
             convert_to_numpy=True,
@@ -138,7 +142,11 @@ class PersonEmbeddingCache:
         unique_texts = list(dict.fromkeys(text for text in texts if text))
         missing = [text for text in unique_texts if self.get(text) is None]
         if missing:
-            model = _load_kure_model(self.device, model_name=self.model_name)
+            model = _load_kure_model(
+                self.device,
+                model_name=self.model_name,
+                model_revision=self.model_revision,
+            )
             chunks = list(_iter_encode_chunks(missing, self.batch_size))
             iterator = tqdm(
                 chunks,
@@ -283,7 +291,11 @@ class HobbyEmbeddingCache:
         cached = self.get(hobby_name)
         if cached is not None:
             return cached
-        model = _load_kure_model(self.device, model_name=self.model_name)
+        model = _load_kure_model(
+            self.device,
+            model_name=self.model_name,
+            model_revision=self.model_revision,
+        )
         emb = model.encode(hobby_name, convert_to_numpy=True, show_progress_bar=False)
         self.set(hobby_name, emb)
         return emb
@@ -297,7 +309,11 @@ class HobbyEmbeddingCache:
     ) -> dict[str, np.ndarray]:
         missing = [name for name in hobby_names if self.get(name) is None]
         if missing:
-            model = _load_kure_model(self.device, model_name=self.model_name)
+            model = _load_kure_model(
+                self.device,
+                model_name=self.model_name,
+                model_revision=self.model_revision,
+            )
             chunks = list(_iter_encode_chunks(missing, self.batch_size))
             iterator = tqdm(
                 chunks,

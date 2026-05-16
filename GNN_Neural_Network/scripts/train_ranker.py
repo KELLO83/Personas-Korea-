@@ -66,6 +66,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--stage1-kure-score-batch-size", type=int, default=128, help="Person batch size for KURE Stage1 semantic scoring")
     parser.add_argument("--text-embedding-cache-dir", type=Path, default=None, help="Directory for persona/hobby KURE embedding cache")
     parser.add_argument(
+        "--text-embedding-model-name",
+        type=str,
+        default=KURE_MODEL_NAME,
+        help="SentenceTransformer model name for Stage2 text embedding features.",
+    )
+    parser.add_argument(
+        "--text-embedding-model-revision",
+        type=str,
+        default="",
+        help="Optional model revision recorded in embedding cache metadata.",
+    )
+    parser.add_argument(
         "--text-embedding-batch-size",
         type=int,
         default=32,
@@ -127,6 +139,8 @@ def main() -> None:
     _configure_third_party_logging()
     args = parse_args()
     start_time = time.perf_counter()
+    text_embedding_model_name = str(args.text_embedding_model_name or KURE_MODEL_NAME).strip() or KURE_MODEL_NAME
+    text_embedding_model_revision = str(args.text_embedding_model_revision or "").strip()
     show_progress = args.progress_mode == "on" or (args.progress_mode == "auto" and sys.stderr.isatty())
     logical_cpus = os.cpu_count() or 1
     default_cpu_threads = min(max(logical_cpus - 4, 1), 18)
@@ -175,6 +189,8 @@ def main() -> None:
         input_config_summary=input_config_summary,
         summary={
             "text_embedding_enabled": args.include_text_embedding_feature,
+            "text_embedding_model_name": text_embedding_model_name if args.include_text_embedding_feature else "",
+            "text_embedding_model_revision": text_embedding_model_revision if args.include_text_embedding_feature else "",
             "text_embedding_audit_path": str(args.output_dir / "text_leakage_audit.json"),
         },
     )
@@ -205,6 +221,8 @@ def main() -> None:
         "masked_text_fields": LEAKAGE_TEXT_FIELDS,
         "alias_map_path": str(config.paths.hobby_aliases) if config.paths.hobby_aliases is not None else "",
         "text_embedding_cache_dir": str(text_embedding_cache_dir),
+        "text_embedding_model_name": text_embedding_model_name if args.include_text_embedding_feature else "",
+        "text_embedding_model_revision": text_embedding_model_revision if args.include_text_embedding_feature else "",
     }
 
     if args.include_text_embedding_feature:
@@ -215,9 +233,11 @@ def main() -> None:
         embedding_resource_plan = _resolve_text_embedding_resource_plan(args, kure_device)
         effective_text_batch_size = int(embedding_resource_plan["effective_batch_size"])
         LOGGER.info(
-            "KURE training embedding resource plan: device=%s, requested_batch_size=%s, "
+            "Text embedding resource plan: model=%s revision=%s device=%s, requested_batch_size=%s, "
             "effective_batch_size=%s, gpu_total_vram_mb=%s, gpu_free_vram_mb=%s, "
             "target_vram_mb=%s, estimated_vram_mb=%s",
+            text_embedding_model_name,
+            text_embedding_model_revision,
             embedding_resource_plan["device"],
             embedding_resource_plan["requested_batch_size"],
             embedding_resource_plan["effective_batch_size"],
@@ -228,21 +248,24 @@ def main() -> None:
         )
         person_embedding_cache = PersonEmbeddingCache(
             text_embedding_cache_dir,
-            model_name=KURE_MODEL_NAME,
+            model_name=text_embedding_model_name,
+            model_revision=text_embedding_model_revision,
             preprocessing_version=TEXT_EMBEDDING_PREPROCESSING_VERSION,
             batch_size=effective_text_batch_size,
             device=kure_device,
         )
         LOGGER.info(
-            "KURE model source prepared: model=%s device=%s embedding_cache_dir=%s huggingface_cache=%s",
-            KURE_MODEL_NAME,
+            "Text embedding model source prepared: model=%s revision=%s device=%s embedding_cache_dir=%s huggingface_cache=%s",
+            text_embedding_model_name,
+            text_embedding_model_revision,
             kure_device,
-            text_embedding_cache_dir / _safe_model_cache_name(KURE_MODEL_NAME),
-            _huggingface_model_cache_status(KURE_MODEL_NAME),
+            text_embedding_cache_dir / _safe_model_cache_name(text_embedding_model_name),
+            _huggingface_model_cache_status(text_embedding_model_name),
         )
         hobby_embedding_cache = HobbyEmbeddingCache(
             text_embedding_cache_dir,
-            model_name=KURE_MODEL_NAME,
+            model_name=text_embedding_model_name,
+            model_revision=text_embedding_model_revision,
             preprocessing_version=TEXT_EMBEDDING_PREPROCESSING_VERSION,
             batch_size=effective_text_batch_size,
             device=kure_device,
@@ -287,6 +310,8 @@ def main() -> None:
         }
         embedding_model_metadata = _embedding_model_metadata(
             enabled=True,
+            model_name=text_embedding_model_name,
+            model_revision=text_embedding_model_revision,
             cache_dir=text_embedding_cache_dir,
             batch_size=effective_text_batch_size,
             device=kure_device,
@@ -352,7 +377,8 @@ def main() -> None:
         if person_embedding_cache is None:
             person_embedding_cache = PersonEmbeddingCache(
                 text_embedding_cache_dir,
-                model_name=KURE_MODEL_NAME,
+                model_name=text_embedding_model_name,
+                model_revision=text_embedding_model_revision,
                 preprocessing_version=TEXT_EMBEDDING_PREPROCESSING_VERSION,
                 batch_size=effective_text_batch_size,
                 device=kure_device,
@@ -360,7 +386,8 @@ def main() -> None:
         if hobby_embedding_cache is None:
             hobby_embedding_cache = HobbyEmbeddingCache(
                 text_embedding_cache_dir,
-                model_name=KURE_MODEL_NAME,
+                model_name=text_embedding_model_name,
+                model_revision=text_embedding_model_revision,
                 preprocessing_version=TEXT_EMBEDDING_PREPROCESSING_VERSION,
                 batch_size=effective_text_batch_size,
                 device=kure_device,
@@ -525,6 +552,8 @@ def main() -> None:
     runtime_seconds = time.perf_counter() - start_time
     embedding_model_metadata = _embedding_model_metadata(
         enabled=args.include_text_embedding_feature or args.stage1_kure_semantic_provider,
+        model_name=text_embedding_model_name,
+        model_revision=text_embedding_model_revision,
         cache_dir=text_embedding_cache_dir,
         batch_size=effective_text_batch_size if (args.include_text_embedding_feature or args.stage1_kure_semantic_provider) else 0,
         device=kure_device if (args.include_text_embedding_feature or args.stage1_kure_semantic_provider) else "",
@@ -653,6 +682,8 @@ def _candidate_pool_policy(
 def _embedding_model_metadata(
     *,
     enabled: bool,
+    model_name: str,
+    model_revision: str,
     cache_dir: Path,
     batch_size: int,
     device: str,
@@ -660,8 +691,8 @@ def _embedding_model_metadata(
 ) -> dict[str, object]:
     return {
         "enabled": enabled,
-        "model_name": KURE_MODEL_NAME if enabled else "",
-        "model_revision": "",
+        "model_name": model_name if enabled else "",
+        "model_revision": model_revision if enabled else "",
         "preprocessing_version": TEXT_EMBEDDING_PREPROCESSING_VERSION if enabled else "",
         "text_builder": "build_domain_tagged_persona_text" if enabled else "",
         "cache_dir": str(cache_dir) if enabled else "",
@@ -892,11 +923,11 @@ def _prewarm_text_embedding_caches(
 ) -> None:
     person_texts = list(person_masked_text.values())
     if person_texts:
-        LOGGER.info("Prewarming KURE persona embeddings: %s unique texts", len(set(person_texts)))
+        LOGGER.info("Prewarming text persona embeddings: %s unique texts", len(set(person_texts)))
         person_embedding_cache.encode_batch(
             person_texts,
             show_progress_bar=show_progress_bar,
-            progress_desc="KURE persona embeddings (train)",
+            progress_desc="Text persona embeddings (train)",
         )
 
     hobby_names = set(id_to_hobby.values())
@@ -905,11 +936,11 @@ def _prewarm_text_embedding_caches(
             if candidate.hobby_name:
                 hobby_names.add(candidate.hobby_name)
     if hobby_names:
-        LOGGER.info("Prewarming KURE hobby embeddings: %s unique hobbies", len(hobby_names))
+        LOGGER.info("Prewarming text hobby embeddings: %s unique hobbies", len(hobby_names))
         hobby_embedding_cache.encode_batch(
             sorted(hobby_names),
             show_progress_bar=show_progress_bar,
-            progress_desc="KURE hobby embeddings (train)",
+            progress_desc="Text hobby embeddings (train)",
         )
 
 

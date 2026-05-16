@@ -148,8 +148,13 @@ def _normalize_for_audit(text: str) -> str:
     return " ".join(text.lower().split())
 
 
-def _load_kure_model(device: str | None = None, *, model_name: str = KURE_MODEL_NAME) -> Any:
-    cache_key = f"{model_name}|{device or 'default'}"
+def _load_kure_model(
+    device: str | None = None,
+    *,
+    model_name: str = KURE_MODEL_NAME,
+    model_revision: str = "",
+) -> Any:
+    cache_key = f"{model_name}|{model_revision}|{device or 'default'}"
     cached = _KURE_MODEL_CACHE.get(cache_key)
     if cached is not None:
         return cached
@@ -162,6 +167,8 @@ def _load_kure_model(device: str | None = None, *, model_name: str = KURE_MODEL_
     kwargs: dict[str, Any] = {}
     if device:
         kwargs["device"] = device
+    if model_revision:
+        kwargs["revision"] = model_revision
     model = SentenceTransformer(model_name, **kwargs)
     if hasattr(model, "max_seq_length"):
         model.max_seq_length = 512

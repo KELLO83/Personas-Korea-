@@ -78,7 +78,7 @@ Current default remains:
 
 ```text
 Stage 1 = popularity + cooccurrence
-Stage 2 = LightGBM learned ranker
+Stage 2 = LightGBM learned ranker + KURE-v1 text_embedding_similarity
 MMR     = false
 ```
 
@@ -86,8 +86,8 @@ Rationale:
 
 - The Person-Hobby graph is sparse and raw hobby phrases are extremely long-tail.
 - Stage 1 `popularity + cooccurrence` has beaten available graph/item-item provider variants in the current artifacts.
-- Stage 2 LightGBM is the promoted accuracy-oriented default.
-- The unresolved issue is ranking collapse, not candidate retrieval failure. CandidateRecall@50 is about 0.977.
+- Stage 2 LightGBM with KURE-v1 `text_embedding_similarity` is the promoted accuracy-oriented default for the current split.
+- The unresolved issue is ranking quality inside the fixed candidate pool, not replacing Stage1 with semantic retrieval. Current candidate_recall@50 is `0.827669` on validation and `0.827208` on test for the locked current split.
 
 ### KURE-v1 Experiment Boundary
 
@@ -147,12 +147,44 @@ baseline feature = KURE-v1 text_embedding_similarity
 candidate_recall@50 validation/test = 0.827669 / 0.827208
 ```
 
+Recommended execution priority:
+
+| Priority | Track | Experiment | Reason |
+| ---: | --- | --- | --- |
+| 1 | Track A | Snowflake-ko embedding backbone swap | Highest-value direct comparison against KURE-v1 while changing only the embedding backbone. |
+| 2 | Track D | Candidate hobby text expansion | Candidate hobby names may be too short; better candidate text can improve the same KURE-v1 feature without changing the model. |
+| 3 | Track B | Domain-specific KURE feature split | Lets LightGBM learn which persona domain matched the hobby instead of receiving one mixed cosine score. |
+| 4 | Track C | KURE rank/margin features | Adds relative semantic position inside the fixed candidate pool after the main semantic text quality questions are answered. |
+
+Do not reorder this priority without a new decision note. Track A and Track D must
+stay isolated until each has a separate validation artifact.
+
 Experiment track A: embedding backbone swap.
 
 | Candidate | Purpose | Rule |
 | --- | --- | --- |
 | `dragonkue/snowflake-arctic-embed-l-v2.0-ko` | higher-quality Korean embedding probe | validation first; test only if it beats KURE-v1 Stage2 on Recall@10 and NDCG@10 |
 | `dragonkue/multilingual-e5-small-ko-v2` | lightweight speed/cost probe | validation first; may be accepted only if close in accuracy with material runtime/cache benefit |
+
+Track A experiment-control contract:
+
+- Keep the Stage1 candidate pool fixed as `popularity + cooccurrence`.
+- Keep the Stage2 LightGBM recipe fixed unless a separate PRD section declares a ranker ablation.
+- Keep the leakage-safe persona text path fixed:
+  `mask_holdout_hobbies -> post_mask_leakage_audit -> build_domain_tagged_persona_text`.
+- Keep the Stage2 feature contract fixed:
+  `text_embedding_similarity = cosine(masked persona domain text embedding, candidate hobby text embedding)`.
+- Only the embedding backbone may change in Track A. Do not change candidate text construction, masking, LightGBM params, negative sampling, split, or candidate pool in the same run.
+- Record `model_name`, `model_revision`, embedding dimension, pooling behavior if known, device, batch size, cache hit/miss counts, runtime, and cache fingerprint.
+- Cache identity must include `model_name`, `model_revision`, and `preprocessing_version`; KURE/Snowflake/E5 embeddings must never share the same cache namespace.
+
+Track A status board:
+
+| Model | Role | Status | Validation gate | Test execution | Decision artifact |
+| --- | --- | --- | --- | --- | --- |
+| `nlpai-lab/KURE-v1` | current reference Stage2 text feature backbone | promoted on current split | passed | executed | `artifacts/experiments/phase5_c_text_embedding/current_locked_kure_stage2_num_leaves31_cpu10/` |
+| `dragonkue/snowflake-arctic-embed-l-v2.0-ko` | accuracy-ceiling probe | planned/runnable | must beat KURE-v1 Stage2 on validation Recall@10 and NDCG@10 | winner-only | pending |
+| `dragonkue/multilingual-e5-small-ko-v2` | lightweight speed/cost probe | planned/runnable | must be close in accuracy and materially faster/lighter | winner-only | pending |
 
 Experiment track B: domain-specific KURE features.
 
@@ -182,7 +214,29 @@ kure_similarity_gap_to_mean
 
 These features must not change Stage1 candidate generation. They only describe a candidate's semantic position inside the already fixed pool.
 
-Promotion gates for all three tracks:
+Experiment track D: candidate hobby text expansion.
+
+The current Stage2 text feature embeds the candidate hobby name. This is simple and reproducible, but many hobby names are short natural-language fragments. Follow-up experiments may expand the candidate text while keeping the same masked persona text and same Stage1 pool:
+
+```text
+hobby_text_name_only
+hobby_text_name_plus_aliases
+hobby_text_name_plus_category
+hobby_text_name_plus_short_description
+```
+
+Track D must be evaluated separately from Track A. Do not change the embedding backbone and candidate hobby text construction in the same run unless the experiment is explicitly declared as a combined ablation after both isolated effects are known.
+
+Track D output must record:
+
+- candidate hobby text builder name and version
+- source fields used: canonical name, aliases, category, description
+- examples for at least 20 hobbies
+- vocabulary coverage and missing-description rate
+- whether the expanded text introduces target leakage or label-derived text
+- validation Recall@10/NDCG@10 delta versus the promoted KURE Stage2 baseline
+
+Promotion gates for all embedding-feature tracks:
 
 - Validation-first.
 - Winner-only test.
@@ -190,6 +244,13 @@ Promotion gates for all three tracks:
 - Must beat the promoted KURE Stage2 SOTA on validation Recall@10 and NDCG@10 before test.
 - Must preserve leakage controls: `mask_holdout_hobbies`, `post_mask_leakage_audit`, domain-tagged text builder, and model-specific cache metadata.
 - Must record runtime, device, batch size, cache hit/miss, and feature columns.
+- Track A code must expose the embedding backbone as an explicit CLI/config value, record `model_name` and `model_revision`, and prevent KURE/Snowflake/E5 caches from mixing.
+
+Track A implementation status:
+
+- `train_ranker.py` exposes `--text-embedding-model-name` and `--text-embedding-model-revision`.
+- `PersonEmbeddingCache` and `HobbyEmbeddingCache` use model name/revision in cache identity and SentenceTransformer loading.
+- The next runnable experiment is Snowflake-ko validation-only Stage2 feature comparison against the promoted KURE Stage2 SOTA.
 
 ### Mandatory Blockers Before KURE Text Feature Ablation
 
@@ -249,24 +310,24 @@ Hard requirements:
 
 - It must be explicit opt-in only (`allow_stage1_kure_provider=true` plus a CLI flag); the default remains `popularity + cooccurrence`.
 - Persona text must use the same leakage-safe holdout masking/audit rules before Stage1 semantic scoring.
-- Candidate-pool cache keys must include provider names and KURE model/revision/cache fingerprint metadata.
-- KURE embedding/scoring must use CUDA when available, CPU fallback otherwise, visible progress output, and CPU worker defaults of `max(1, os.cpu_count() - 2)` for evaluation.
-- Stage2 training/evaluation must still use the closed LightGBM default unless the experiment explicitly trains a separate opt-in model artifact.
+- Candidate-pool cache keys must include provider names and embedding model/revision/cache fingerprint metadata.
+- Embedding/scoring must use CUDA when available, CPU fallback otherwise, visible progress output, and the project CPU resource policy.
+- Stage2 training/evaluation must still use the current locked LightGBM recipe unless the experiment explicitly trains a separate opt-in model artifact.
 
 Decision gate:
 
 - Validation-first; run test only for a validation-selected winner.
-- Compare against the closed Phase 2.5 default, not only against Stage1.
+- Compare against the current locked Stage1 pool and current KURE Stage2 SOTA, not only against Stage1.
 - Default promotion requires `delta_recall@10 >= -0.002`, `delta_ndcg@10 >= -0.002`, `v2_fallback_count=0`, and no candidate-recall regression beyond tolerance.
-- If it improves Stage1 but remains below the closed Phase 2.5 default, record it as rejected/experimental and keep the default unchanged.
+- If it improves Stage1 but remains below the current KURE Stage2 SOTA or candidate_recall@50 regresses, record it as rejected/experimental and keep the default unchanged.
 
 Outcome recorded for `kure_stage1_semantic_001_fast_gpu`:
 
 - Validation only; test skipped because the promotion gate failed.
 - Stage1 provider path: `popularity + cooccurrence + kure_semantic`.
 - Validation v2 Recall@10 `0.599705`, NDCG@10 `0.370891`, candidate_recall@50 `0.794971`.
-- Closed Phase 2.5 validation baseline: Recall@10 `0.739051`, NDCG@10 `0.457970`, candidate_recall@50 `0.977645`.
-- Decision: rejected; default remains `popularity + cooccurrence -> LightGBM`, with `kure_semantic` opt-in only.
+- Historical closed Phase 2.5 validation baseline: Recall@10 `0.739051`, NDCG@10 `0.457970`, candidate_recall@50 `0.977645`.
+- Decision: rejected; current default remains `popularity + cooccurrence -> LightGBM + KURE Stage2 text_embedding_similarity`, with `kure_semantic` opt-in only.
 
 ### Text Embedding Backbone Follow-Up Candidates
 

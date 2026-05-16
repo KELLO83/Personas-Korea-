@@ -6,6 +6,7 @@ import json
 import numpy as np
 
 from GNN_Neural_Network.gnn_recommender.embedding_cache import HobbyEmbeddingCache, PersonEmbeddingCache
+from GNN_Neural_Network.gnn_recommender import embedding_cache
 
 
 def test_person_embedding_cache_rejects_revision_mismatch(tmp_path) -> None:
@@ -17,6 +18,31 @@ def test_person_embedding_cache_rejects_revision_mismatch(tmp_path) -> None:
 
     different_revision_cache = PersonEmbeddingCache(tmp_path, model_name="model-a", model_revision="rev2")
     assert different_revision_cache.get("persona text") is None
+
+
+def test_person_embedding_cache_passes_revision_to_loader(tmp_path, monkeypatch) -> None:
+    calls = []
+
+    class FakeModel:
+        def encode(self, text, **_kwargs):
+            assert text == "persona text"
+            return np.array([1.0, 2.0], dtype=np.float32)
+
+    def fake_loader(device=None, *, model_name, model_revision=""):
+        calls.append((device, model_name, model_revision))
+        return FakeModel()
+
+    monkeypatch.setattr(embedding_cache, "_load_kure_model", fake_loader)
+
+    cache = PersonEmbeddingCache(
+        tmp_path,
+        model_name="dragonkue/snowflake-arctic-embed-l-v2.0-ko",
+        model_revision="rev-a",
+        device="cpu",
+    )
+    cache.encode("persona text")
+
+    assert calls == [("cpu", "dragonkue/snowflake-arctic-embed-l-v2.0-ko", "rev-a")]
 
 
 def test_person_embedding_cache_treats_corrupt_npy_as_miss(tmp_path) -> None:

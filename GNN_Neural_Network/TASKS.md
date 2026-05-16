@@ -114,6 +114,7 @@ Do not confuse this with the completed KURE dense MMR sweep.
   - [x] Decision: on the current split/candidate pool, KURE Stage2 is selected over the current no-text baseline and is the current SOTA/default candidate.
 - [ ] Next Stage2 embedding probe: `dragonkue/snowflake-arctic-embed-l-v2.0-ko` as a single validation-only Stage2 text feature ablation against the KURE Stage2 SOTA.
 - [ ] Optional Stage2 embedding probe: `dragonkue/multilingual-e5-small-ko-v2` as a lightweight feature ablation if runtime/cost reduction becomes important.
+- [ ] Next candidate hobby text probe: evaluate candidate text builders (`name_only`, `name_plus_aliases`, `name_plus_category`, `name_plus_short_description`) as a separate Track D validation-only ablation. Do not change the embedding backbone in the same run.
 - [ ] Next KURE Stage2 feature-shape probe: split the single cosine feature into domain-specific masked text blocks (`sports`, `arts`, `travel`, `food`, etc.) and compare against the promoted single-feature KURE SOTA.
 - [ ] Optional KURE Stage2 rank/margin probe: add within-candidate-pool KURE percentile/gap features without changing Stage1 candidate generation.
 - [ ] Do not run another Stage1 semantic candidate generator experiment without a new PRD/TASKS reopening note, because KURE Stage1 reduced candidate_recall@50 from `0.977645` to `0.794971`.
@@ -126,10 +127,19 @@ Do not confuse this with the completed KURE dense MMR sweep.
   - baseline model: `artifacts/experiments/phase5_c_text_embedding/current_locked_kure_stage2_num_leaves31_cpu10/ranker_model.txt`
   - Stage1 must remain `popularity + cooccurrence`
   - Stage2 LightGBM recipe must remain `num_leaves=31` unless a separate tuning task is opened
+  - Stage2 text feature contract must remain `text_embedding_similarity = cosine(masked persona domain text embedding, candidate hobby text embedding)`
+  - persona text path must remain `mask_holdout_hobbies -> post_mask_leakage_audit -> build_domain_tagged_persona_text`
   - CPU thread count must stay `10` for comparable local runs
   - progress must be visible for embedding, feature building, training, and evaluation
 - [ ] Track A - embedding backbone swap:
-  - [ ] make the Stage2 text feature path accept an explicit embedding model name/revision and write it into cache metadata
+  - [x] define Track A control contract: only the embedding model name/revision may change
+  - [x] make the Stage2 text feature path accept an explicit embedding model name/revision and write it into cache metadata
+    - [x] `train_ranker.py` supports `--text-embedding-model-name`
+    - [x] `train_ranker.py` supports `--text-embedding-model-revision`
+    - [x] `PersonEmbeddingCache` and `HobbyEmbeddingCache` pass model revision to SentenceTransformer loading
+    - [x] cache metadata and ranker metadata record model name/revision/preprocessing
+  - [ ] verify Track A runs keep candidate hobby text builder, masking policy, LightGBM params, split, and candidate pool unchanged
+  - [ ] record embedding dimension, pooling behavior when known, device, batch size, cache hit/miss, runtime, and cache fingerprint
   - [ ] run `dragonkue/snowflake-arctic-embed-l-v2.0-ko` validation-only with the same candidate pool and same feature slot
   - [ ] run `dragonkue/multilingual-e5-small-ko-v2` validation-only only after Snowflake or as a runtime/cost probe
   - [ ] promote to test only if validation Recall@10 and NDCG@10 beat KURE-v1 Stage2
@@ -142,9 +152,21 @@ Do not confuse this with the completed KURE dense MMR sweep.
   - [ ] derive `kure_similarity_percentile`, `kure_similarity_rank`, `kure_similarity_gap_to_top`, and `kure_similarity_gap_to_mean` inside each person's fixed candidate pool
   - [ ] confirm these features do not add or remove candidates
   - [ ] evaluate validation-only before any test run
+- [ ] Track D - candidate hobby text expansion:
+  - [ ] define the candidate hobby text builder interface and persist a `candidate_text_builder_version`
+  - [ ] evaluate `hobby_text_name_only` as the explicit control builder
+  - [ ] evaluate `hobby_text_name_plus_aliases`
+  - [ ] evaluate `hobby_text_name_plus_category`
+  - [ ] evaluate `hobby_text_name_plus_short_description`
+  - [ ] persist 20 representative hobby text examples, source fields, coverage, and missing-description rate
+  - [ ] verify expanded hobby text does not contain target labels, holdout-derived text, or evaluation-split leakage
+  - [ ] compare validation Recall@10/NDCG@10 against the promoted KURE Stage2 baseline before any test run
 - [ ] Governance for all tracks:
   - [ ] one script per experiment purpose; do not silently batch unrelated experiments
   - [ ] cache keys must include data split, embedding model/revision, preprocessing version, masking policy, and feature columns
+  - [ ] cache keys must include candidate text builder version and source-field policy for Track D
+  - [ ] Track A and Track D must not be combined until each isolated effect has a recorded validation artifact
+  - [ ] decision artifacts must state exactly which variable changed: embedding backbone, domain feature split, rank/margin feature, or candidate text builder
   - [ ] persist `validation_metrics.status.json`, runtime, device, batch/chunk size, cache hit/miss, and peak GPU memory when available
   - [ ] update `experiment_decisions.json`, `experiment_run_summary.md`, `PRD.md`, `TASKS.md`, and `README.md` if a default decision changes
 
@@ -486,4 +508,7 @@ Current implementation evidence shows `[ACT]` masking and domain-tagged persona 
 - [x] Persist masking policy metadata in every future text-embedding run artifact.
 - [x] Persist embedding model metadata including model name, revision/hash when available, device, batch size, embedding dimension, and cache key.
 - [x] Add tests proving feature/cache keys differ across KURE-v1, Snowflake-ko, and E5-small-ko candidates.
+- [ ] Define and test candidate hobby text builder metadata before Track D runs.
+- [ ] Add a source-field and leakage audit for expanded candidate hobby text fields before using aliases, category, or descriptions.
+- [ ] Keep candidate hobby text expansion isolated from embedding backbone swaps until both have separate validation artifacts.
 - [ ] Keep all text embedding, KURE, MMR, and XSimGCL paths opt-in and non-default until a validation winner plus decision artifact exists.

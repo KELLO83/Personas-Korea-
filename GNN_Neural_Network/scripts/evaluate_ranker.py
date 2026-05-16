@@ -181,6 +181,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--disable-feature-cache", action="store_true", help="Disable default feature matrix cache")
     parser.add_argument("--embedding-cache-dir", type=Path, default=None, help="Directory for KURE hobby embedding cache")
     parser.add_argument(
+        "--text-embedding-model-name",
+        type=str,
+        default=KURE_MODEL_NAME,
+        help="SentenceTransformer model name for text embedding features.",
+    )
+    parser.add_argument(
+        "--text-embedding-model-revision",
+        type=str,
+        default="",
+        help="Optional model revision used for text embedding cache identity.",
+    )
+    parser.add_argument(
         "--embedding-batch-size",
         type=int,
         default=32,
@@ -317,6 +329,8 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
     _configure_third_party_logging()
     args = parse_args()
+    text_embedding_model_name = str(args.text_embedding_model_name or KURE_MODEL_NAME).strip() or KURE_MODEL_NAME
+    text_embedding_model_revision = str(args.text_embedding_model_revision or "").strip()
     system_resource_plan = _resolve_system_resource_plan(args)
     _apply_cpu_resource_plan(system_resource_plan)
     LOGGER.info(
@@ -655,21 +669,23 @@ def main() -> None:
         text_device = "cuda" if text_torch.cuda.is_available() else "cpu"
         LOGGER.info(
             "KURE model source prepared: model=%s device=%s embedding_cache_dir=%s huggingface_cache=%s",
-            KURE_MODEL_NAME,
+            text_embedding_model_name,
             text_device,
-            text_cache_dir / _safe_model_cache_name(KURE_MODEL_NAME),
-            _huggingface_model_cache_status(KURE_MODEL_NAME),
+            text_cache_dir / _safe_model_cache_name(text_embedding_model_name),
+            _huggingface_model_cache_status(text_embedding_model_name),
         )
         person_embedding_cache = PersonEmbeddingCache(
             text_cache_dir,
-            model_name=KURE_MODEL_NAME,
+            model_name=text_embedding_model_name,
+            model_revision=text_embedding_model_revision,
             preprocessing_version=TEXT_EMBEDDING_PREPROCESSING_VERSION,
             batch_size=effective_embedding_batch_size,
             device=text_device,
         )
         hobby_embedding_cache = HobbyEmbeddingCache(
             text_cache_dir,
-            model_name=KURE_MODEL_NAME,
+            model_name=text_embedding_model_name,
+            model_revision=text_embedding_model_revision,
             preprocessing_version=TEXT_EMBEDDING_PREPROCESSING_VERSION,
             batch_size=effective_embedding_batch_size,
             device=text_device,
@@ -780,6 +796,8 @@ def main() -> None:
         }
         embedding_model_metadata = _embedding_model_metadata(
             enabled=True,
+            model_name=text_embedding_model_name,
+            model_revision=text_embedding_model_revision,
             cache_dir=text_cache_dir,
             batch_size=effective_embedding_batch_size,
             device=text_device,
@@ -1306,6 +1324,8 @@ def main() -> None:
         enabled=include_text_embedding_feature or args.stage1_kure_semantic_provider or (
             (args.use_mmr or args.use_dpp) and args.mmr_embedding_method == "kure"
         ),
+        model_name=text_embedding_model_name,
+        model_revision=text_embedding_model_revision,
         cache_dir=text_cache_dir if (include_text_embedding_feature or args.stage1_kure_semantic_provider) else mmr_cache_dir,
         batch_size=effective_embedding_batch_size if (include_text_embedding_feature or args.stage1_kure_semantic_provider) else mmr_embedding_batch_size,
         device=text_device if (include_text_embedding_feature or args.stage1_kure_semantic_provider) else str(mmr_embedding_plan.get("device", "")),
@@ -1595,8 +1615,8 @@ def _feature_cache_key(
             "hobby_aliases": _file_fingerprint(hobby_aliases_path),
         },
         "text_embedding": {
-            "model_name": KURE_MODEL_NAME if "text_embedding_similarity" in feature_columns else "",
-            "model_revision": "",
+            "model_name": str(getattr(args, "text_embedding_model_name", KURE_MODEL_NAME) or KURE_MODEL_NAME) if "text_embedding_similarity" in feature_columns else "",
+            "model_revision": str(getattr(args, "text_embedding_model_revision", "") or "") if "text_embedding_similarity" in feature_columns else "",
             "preprocessing_version": TEXT_EMBEDDING_PREPROCESSING_VERSION if "text_embedding_similarity" in feature_columns else "",
             "text_builder": "build_domain_tagged_persona_text" if "text_embedding_similarity" in feature_columns else "",
             "masking": "mask_holdout_hobbies",
@@ -1804,6 +1824,8 @@ def _input_config_summary(
 def _embedding_model_metadata(
     *,
     enabled: bool,
+    model_name: str,
+    model_revision: str,
     cache_dir: Path,
     batch_size: int,
     device: str,
@@ -1811,8 +1833,8 @@ def _embedding_model_metadata(
 ) -> dict[str, object]:
     return {
         "enabled": enabled,
-        "model_name": KURE_MODEL_NAME if enabled else "",
-        "model_revision": "",
+        "model_name": model_name if enabled else "",
+        "model_revision": model_revision if enabled else "",
         "preprocessing_version": TEXT_EMBEDDING_PREPROCESSING_VERSION if enabled else "",
         "text_builder": "build_domain_tagged_persona_text" if enabled else "",
         "cache_dir": str(cache_dir) if enabled else "",

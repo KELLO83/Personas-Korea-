@@ -1,5 +1,6 @@
 import argparse
 import logging
+import pandas as pd
 import polars as pl
 from typing import Optional
 import torch
@@ -111,6 +112,7 @@ def _filter_target_age_groups(
 
 def _load_to_neo4j(df: pl.DataFrame, reset: bool, batch_size: int) -> None:
     """데이터프레임을 Neo4j에 적재합니다. reset=True인 경우 적재 직전에 기존 데이터를 삭제합니다."""
+    _validate_display_names(df)
     loader = GraphLoader()
     try:
         loader.create_schema()
@@ -125,6 +127,13 @@ def _load_to_neo4j(df: pl.DataFrame, reset: bool, batch_size: int) -> None:
         logger.info(f"✅ Neo4j 적재 완료! 총 {loaded_count:,}개의 페르소나가 저장되었습니다.")
     finally:
         loader.close()
+
+
+def _validate_display_names(df: pl.DataFrame) -> None:
+    if "display_name" not in df.columns:
+        raise ValueError("display_name column is required before loading personas into Neo4j")
+    if df.height > 0 and df.select(pl.col("display_name").is_not_null().any()).item() is not True:
+        raise ValueError("display_name column must contain at least one non-null value before Neo4j load")
 
 
 import re
@@ -227,7 +236,13 @@ def _preprocess_single_chunk(chunk_df: pl.DataFrame, fast_mode: bool) -> pl.Data
     """
     멀티 프로세싱을 위해 데이터 청크를 pickle화하여 전달하기 편하도록 래핑된 함수.
     """
-    return preprocess(chunk_df, fast_mode=fast_mode)
+    return _ensure_polars(preprocess(chunk_df, fast_mode=fast_mode))
+
+
+def _ensure_polars(df: pl.DataFrame | pd.DataFrame) -> pl.DataFrame:
+    if isinstance(df, pl.DataFrame):
+        return df
+    return pl.from_pandas(df)
 
 
 def main() -> None:
@@ -263,7 +278,7 @@ def main() -> None:
 
     # 3. 빠른 전처리 (Fast Preprocess)
     logger.info("모수(Population)에 대한 고속 전처리를 시작합니다...")
-    df = preprocess(raw_df, fast_mode=True)
+    df = _ensure_polars(preprocess(raw_df, fast_mode=True))
 
     age_groups = normalize_age_group_tokens(args.age_groups)
     if not age_groups:
