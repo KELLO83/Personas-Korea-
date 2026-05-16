@@ -90,6 +90,8 @@ logs/
 # IDE / Editor
 .vscode/
 .idea/
+.claude/
+.serena/
 *.swp
 *.swo
 .spyderproject
