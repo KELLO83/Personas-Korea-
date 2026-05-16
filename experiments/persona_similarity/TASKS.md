@@ -18,6 +18,7 @@
 - [x] Add `TASKS.md`.
 - [x] Add `README.md` with command examples.
 - [x] Add `configs/lightgbm_reranker.yaml`.
+- [x] Add optional experiment dependencies in `requirements.txt`.
 - [x] Add unit tests under `tests/`.
 
 ## Phase 1 - Dataset Inspection and Export
@@ -120,7 +121,15 @@
 - [ ] Run structured+text hybrid score comparison.
 - [ ] Review text feature manual samples before any promotion decision.
 
-## Phase 8 - Promotion Gate
+## Phase 8 - Optional Reranker and Candidate Expansion Code
+
+- [x] Add optional CatBoost ranking train/evaluate scripts.
+- [x] Add CatBoost config block with `thread_count=18`.
+- [ ] Run CatBoost ranking only if LightGBM is not clearly sufficient.
+- [ ] Implement PPR candidate-generation comparison only if FastRP/KNN candidate recall is insufficient.
+- [ ] Implement Node2Vec candidate-generation comparison only if FastRP/KNN candidate recall is insufficient.
+
+## Phase 9 - Promotion Gate
 
 - [ ] Confirm candidate generation uses `topK >= 50`, not smoke-test `topK=5`.
 - [ ] Confirm no random row-level split leakage.
@@ -155,8 +164,10 @@ Run one experiment-purpose script at a time.
 14. experiments/persona_similarity/scripts/build_text_embeddings.py
 15. experiments/persona_similarity/scripts/build_text_features.py
 16. text-only / structured+text / hybrid text experiments
-17. manual review
-18. decision artifact update
+17. optional CatBoost ranking comparison
+18. optional PPR/Node2Vec candidate-generation comparison only if needed
+19. manual review
+20. decision artifact update
 ```
 
 ## Current Decision

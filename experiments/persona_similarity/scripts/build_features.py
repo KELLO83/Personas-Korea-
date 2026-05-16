@@ -32,6 +32,33 @@ from experiments.persona_similarity.scripts.feature_builder import (
     weak_label,
 )
 
+AUDIT_COLUMNS = [
+    "source_age_group",
+    "target_age_group",
+    "source_sex",
+    "target_sex",
+    "source_province",
+    "target_province",
+    "source_district",
+    "target_district",
+    "source_occupation",
+    "target_occupation",
+    "source_education",
+    "target_education",
+    "source_field",
+    "target_field",
+    "source_marital",
+    "target_marital",
+    "source_family",
+    "target_family",
+    "source_housing",
+    "target_housing",
+    "source_community_id",
+    "target_community_id",
+    "shared_hobbies",
+    "shared_skills",
+]
+
 
 def split_sources(source_uuids: list[str], split_config: dict[str, Any]) -> dict[str, list[str]]:
     unique_sources = sorted(set(source_uuids))
@@ -69,10 +96,11 @@ def build_feature_frame(
             "target_uuid": row["target_uuid"],
             "label": weak_label(features, weak_weights),
             "deterministic_score": deterministic_score(features, deterministic_weights),
+            **{column: row.get(column) for column in AUDIT_COLUMNS},
             **features,
         }
         rows.append(output)
-    return pd.DataFrame(rows, columns=["source_uuid", "target_uuid", "label", "deterministic_score", *FEATURE_COLUMNS])
+    return pd.DataFrame(rows, columns=["source_uuid", "target_uuid", "label", "deterministic_score", *AUDIT_COLUMNS, *FEATURE_COLUMNS])
 
 
 def main() -> None:
@@ -93,6 +121,7 @@ def main() -> None:
                 "deterministic_score": config.get("deterministic_score", {}),
                 "split": config["split"],
                 "feature_columns": FEATURE_COLUMNS,
+                "audit_columns": AUDIT_COLUMNS,
             }
         ),
     }
@@ -126,6 +155,7 @@ def main() -> None:
             "source_count": int(features["source_uuid"].nunique()) if not features.empty else 0,
             "target_count": int(features["target_uuid"].nunique()) if not features.empty else 0,
             "feature_columns": FEATURE_COLUMNS,
+            "audit_columns": AUDIT_COLUMNS,
             "split_counts": {name: len(values) for name, values in splits.items()},
             "build_seconds": build_seconds,
         },

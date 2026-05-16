@@ -173,3 +173,24 @@ Final decision:
 - KURE-v1 text feature is useful signal, but it is not the current SOTA.
 - Do not promote KURE-v1 into the default recommendation path.
 - Keep `phase2_5_num_leaves_31` as the documented SOTA/default reference and move product/default integration forward.
+
+## 2026-05-16 strict SOTA-pool KURE Stage2 feature attempt
+
+Implemented `scripts/train_eval_sota_pool_kure_feature.py` for the requested strict comparison:
+
+- keep the preserved closed-SOTA candidate feature cache fixed
+- append only `text_embedding_similarity`
+- train/evaluate no-text and KURE Stage2 LightGBM under the same cached candidate rows
+- show progress for reproduction, text masking, KURE embedding, feature build, training, and evaluation
+- abort if SOTA candidate-pool reproduction fails before promotion-grade comparison
+
+Result: blocked. The preserved SOTA cache and the current split artifacts do not match.
+
+| Check | Value |
+| --- | ---: |
+| preserved validation cache persons | 9,841 |
+| current `validation_edges.csv` persons | 10,857 |
+| reproduced candidate_recall@50 | 0.361702 |
+| required candidate_recall@50 guard | 0.950000 |
+
+Decision: the attempted strict SOTA-pool KURE comparison is invalid for default promotion. The default remains `phase2_5_num_leaves_31` with `include_text_embedding_feature=false`. A promotion-grade rerun would require the original SOTA split snapshot or a full rebuild of both baseline and KURE under one newly locked split.

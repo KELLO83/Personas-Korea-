@@ -32,12 +32,6 @@ export function InsightsSection() {
 
   return (
     <section className="grid">
-      <div className="hero-card">
-        <div className="eyebrow">Phase 22 검수</div>
-        <h1>확장 분석 콘솔</h1>
-        <p className="muted">PRD F16-F18과 그래프 품질 정리 항목을 백엔드 API로 검수합니다.</p>
-      </div>
-
       <div className="grid two">
         <div className="card">
           <h2>Target Persona Generator</h2>
@@ -58,6 +52,18 @@ export function InsightsSection() {
               <Pills title="취미" items={target.data.representative_hobbies} />
               <Pills title="스킬" items={target.data.representative_skills} />
               <p className="small muted">근거 UUID: {target.data.evidence_uuids.slice(0, 5).join(", ") || "-"}</p>
+              <details className="small muted" style={{ marginTop: 12 }}>
+                <summary>개발자 디버그: 샘플/프롬프트/가드레일</summary>
+                <div className="bar-list" style={{ marginTop: 8 }}>
+                  <p>input_policy: {target.data.input_policy || "-"}</p>
+                  <p>synthesis_prompt</p>
+                  <pre>{target.data.synthesis_prompt || "-"}</pre>
+                  <p>guardrails</p>
+                  <pre>{JSON.stringify(target.data.guardrails, null, 2)}</pre>
+                  <p>sample_personas</p>
+                  <pre>{JSON.stringify(target.data.sample_personas, null, 2)}</pre>
+                </div>
+              </details>
             </div>
           )}
         </div>
@@ -114,14 +120,34 @@ export function InsightsSection() {
               <div className="result-card" key={check.name}>
                 <strong>{check.name}</strong>
                 <p className="small muted">action={check.action} · severity={check.severity} · dominant={percent(check.dominant_ratio)}</p>
+                <p className="small muted">cardinality={compactNumber(check.cardinality)} · total={compactNumber(check.total_count)}</p>
+                <p className="small muted">이슈: {check.issue}</p>
                 <p>{check.recommendation}</p>
+                <details className="small muted" style={{ marginTop: 8 }}>
+                  <summary>분포 상세 {check.distribution.length}건</summary>
+                  <div className="bar-list" style={{ marginTop: 8 }}>
+                    {check.distribution.map((item) => (
+                      <div className="bar-row" key={`${check.name}-${item.label}`}>
+                        <span>{item.label || "-"}</span>
+                        <span className="small muted">{compactNumber(item.count)} · {percent(item.ratio)}</span>
+                      </div>
+                    ))}
+                    {check.distribution.length === 0 && <p className="muted small">표시할 분포가 없습니다.</p>}
+                  </div>
+                </details>
               </div>
             ))}
             {quality.data && quality.data.migration_plan.length > 0 && (
               <div className="result-card">
                 <strong>Country 마이그레이션 검증 계획</strong>
                 <div className="bar-list" style={{ marginTop: 8 }}>
-                  {quality.data.migration_plan.map((step) => <p className="small muted" key={step.name}>{step.name}: {step.validation}</p>)}
+                  {quality.data.migration_plan.map((step) => (
+                    <details className="small muted" key={step.name}>
+                      <summary>{step.name}</summary>
+                      <p>{step.validation}</p>
+                      <pre>{step.cypher}</pre>
+                    </details>
+                  ))}
                 </div>
               </div>
             )}

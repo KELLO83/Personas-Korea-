@@ -32,7 +32,7 @@ Decision:
 - KURE-v1 domain-tagged text feature is **not promoted** and is **not default**.
 - Current KURE text path is **NO-GO for default replacement** because it remains below the closed Phase 2.5 SOTA.
 - KURE-v1 remains **follow-up-only** as a Stage2 auxiliary feature because it has positive signal under matched weak-candidate conditions.
-- One final validation-only follow-up is allowed: compare `include_text_embedding_feature=true` against a no-text control under the same current code, same split, same seed, same candidate pool, and same known-hobby masking. Run test only if validation beats the fixed no-text control and is competitive with the closed Phase 2.5 SOTA gate.
+- The strict follow-up requested for default promotion, "closed SOTA candidate pool unchanged + Stage2 KURE feature only", is currently blocked by artifact provenance. The preserved SOTA feature cache (`features_ac22205dddbdfaba.npz`) has `9,841` persons, while the current `validation_edges.csv` has `10,857` persons; reproducing the SOTA pool against the current split gives candidate_recall@50 `0.361702`, far below the required `>=0.95` guard. Therefore that attempted comparison is invalid for promotion.
 - Do not run another KURE Stage1 semantic candidate provider without a new PRD/TASKS reopening note.
 
 ### Local 50K Data Reality

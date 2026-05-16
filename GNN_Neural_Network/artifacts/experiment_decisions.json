@@ -1016,5 +1016,27 @@
     },
     "reason": "KURE-v1 domain-tagged text features beat the matched no-text control under the same current code and candidate pool, but the current path remains below the closed Phase 2.5 SOTA on absolute Recall@10 and NDCG@10. Default remains include_text_embedding_feature=false.",
     "next_step": "Do not promote KURE-v1. Move default/product integration forward with the closed Phase 2.5 SOTA; keep KURE text as non-default evidence unless a new stronger candidate-pool hypothesis is opened in PRD/TASKS."
+  },
+  "phase5_c_strict_sota_pool_kure_stage2_feature": {
+    "experiment": "Strict_SOTA_Candidate_Pool_Plus_KURE_Stage2_Feature",
+    "timestamp": "2026-05-16",
+    "status": "blocked_sota_reproduction_failed",
+    "decision": "do_not_use_for_default_promotion",
+    "default_change": false,
+    "script": "scripts/train_eval_sota_pool_kure_feature.py",
+    "resource_policy": {
+      "cpu_thread_count": 10,
+      "progress_mode": "on"
+    },
+    "intended_protocol": "preserved closed-SOTA candidate feature cache plus one appended text_embedding_similarity feature",
+    "reproduction_guard": {
+      "required_candidate_recall@50": 0.95,
+      "observed_candidate_recall@50": 0.3617021276595745,
+      "preserved_validation_cache": "artifacts/cache/cache/features_ac22205dddbdfaba.npz",
+      "preserved_validation_cache_persons": 9841,
+      "current_validation_edges_persons": 10857
+    },
+    "reason": "The preserved closed-SOTA feature cache does not match the current validation split/truth labels, so SOTA candidate-pool reproduction fails before KURE can be evaluated for promotion. Any KURE uplift from this artifact state would be invalid for default decisions.",
+    "next_step": "Use the closed Phase 2.5 SOTA as default. A strict KURE Stage2 promotion test requires either the original SOTA split snapshot or a full rebuilt locked-split baseline and KURE pair."
   }
 }

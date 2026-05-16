@@ -1,8 +1,10 @@
 import pandas as pd
 
+from experiments.persona_similarity.scripts.build_features import AUDIT_COLUMNS, build_feature_frame
 from experiments.persona_similarity.scripts.common import cache_metadata_matches, mark_cache_hit, should_use_cache, write_json
 from experiments.persona_similarity.scripts.evaluation_utils import add_diversity_rerank_score, evaluate_score_column, topk_overlap_at_k
 from experiments.persona_similarity.scripts.experiment_specs import FEATURE_EXCLUSION_SETS, structured_text_feature_columns, text_feature_columns, feature_columns
+from experiments.persona_similarity.scripts.feature_builder import DeterministicScoreWeights, WeakLabelWeights
 from experiments.persona_similarity.scripts.text_feature_builder import build_domain_text, cosine_similarity
 
 
@@ -118,6 +120,52 @@ def test_diversity_rerank_penalizes_repeated_attributes() -> None:
     ordered = reranked.sort_values("diverse_score", ascending=False)["target_uuid"].tolist()
 
     assert ordered[:2] == ["a", "c"]
+
+
+def test_build_feature_frame_preserves_audit_columns_for_review_and_diversity() -> None:
+    pairs = pd.DataFrame(
+        [
+            {
+                "source_uuid": "s1",
+                "target_uuid": "t1",
+                "fastrp_score": 0.8,
+                "source_age": 30,
+                "target_age": 31,
+                "source_age_group": "30s",
+                "target_age_group": "30s",
+                "source_sex": "M",
+                "target_sex": "M",
+                "source_province": "Seoul",
+                "target_province": "Seoul",
+                "source_district": "Gangnam",
+                "target_district": "Seocho",
+                "source_occupation": "Developer",
+                "target_occupation": "Developer",
+                "source_education": "College",
+                "target_education": "College",
+                "source_field": "Engineering",
+                "target_field": "Engineering",
+                "source_marital": "Single",
+                "target_marital": "Single",
+                "source_family": "Alone",
+                "target_family": "Alone",
+                "source_housing": "Apartment",
+                "target_housing": "Apartment",
+                "source_community_id": 1,
+                "target_community_id": 1,
+                "shared_hobbies": '["reading"]',
+                "shared_skills": "[]",
+            }
+        ]
+    )
+
+    frame = build_feature_frame(pairs, WeakLabelWeights(), DeterministicScoreWeights())
+
+    for column in AUDIT_COLUMNS:
+        assert column in frame.columns
+    assert frame.loc[0, "target_occupation"] == "Developer"
+    assert frame.loc[0, "target_province"] == "Seoul"
+    assert frame.loc[0, "same_occupation"] == 1
 
 
 def test_cache_helpers_detect_and_mark_cache_hits(tmp_path) -> None:

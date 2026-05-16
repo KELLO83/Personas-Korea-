@@ -83,8 +83,8 @@ if defined HAS_NODE (
 
 start "FastAPI" /D "%ROOT%" cmd /k ""%PYTHON%" -m uvicorn src.api.main:app --host 0.0.0.0 --port 8000"
 
-echo [DONE] Started FastAPI(8000) and Next.js(3000).
-echo Open: http://localhost:8000/docs and http://localhost:3000
+echo [DONE] Started FastAPI(8000) and Next.js(4000).
+echo Open: http://localhost:8000/docs and http://localhost:4000
 
 :END
 pause

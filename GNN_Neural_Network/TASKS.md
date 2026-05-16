@@ -97,6 +97,13 @@ Do not confuse this with the completed KURE dense MMR sweep.
   - [x] `include_text_embedding_feature=true`: validation Recall@10 `0.634706`, NDCG@10 `0.396559`
   - [x] CPU thread count explicitly set to `10` and progress visible (`--progress-mode on`)
   - [x] KURE selected vs matched no-text control, but not promoted because it remains below the closed Phase 2.5 SOTA absolute test reference.
+- [x] Build the requested strict comparison script: existing SOTA candidate feature cache + Stage2 KURE feature only.
+  - [x] Script: `scripts/train_eval_sota_pool_kure_feature.py`
+  - [x] Progress is always shown for reproduction/evaluation/text-prep/embedding/feature-build/training when `--progress-mode on`.
+  - [x] CPU thread count was run with `--cpu-thread-count 10`.
+  - [x] The script now aborts if SOTA candidate-pool reproduction fails (`candidate_recall@50 < 0.95`) before KURE training/evaluation is allowed.
+  - [x] Current repo state is blocked for this strict SOTA-pool comparison: preserved `features_ac22205dddbdfaba.npz` has `9,841` persons, but current `validation_edges.csv` has `10,857` persons; reproduction candidate_recall@50 is only `0.361702`.
+  - [x] Decision: strict "closed SOTA candidate pool + Stage2 KURE" promotion-grade evaluation is not valid with the current split artifacts. Do not use the attempted run for default promotion.
 - [ ] Optional future probe: `dragonkue/snowflake-arctic-embed-l-v2.0-ko` as a single validation-only Stage2 text feature ablation, only after higher-priority default integration or accuracy-safe diversity work.
 - [ ] Optional future probe: `dragonkue/multilingual-e5-small-ko-v2` as a lightweight Stage2 feature ablation only if runtime/cost reduction becomes important.
 - [ ] Do not run another Stage1 semantic candidate generator experiment without a new PRD/TASKS reopening note, because KURE Stage1 reduced candidate_recall@50 from `0.977645` to `0.794971`.

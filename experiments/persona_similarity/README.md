@@ -21,6 +21,9 @@ Do not run these automatically during setup. They are documented for future repr
 Most long-running scripts reuse valid artifacts by default. Pass `--force` only when an artifact must be rebuilt.
 
 ```powershell
+# Optional experiment dependencies
+.\.venv\Scripts\python.exe -m pip install -r experiments\persona_similarity\requirements.txt
+
 # Recommended before a serious reranker run: rebuild wider candidates.
 .\.venv\Scripts\python.exe scripts\build_gds.py --top-k 50
 
@@ -36,6 +39,10 @@ Most long-running scripts reuse valid artifacts by default. Pass `--force` only 
 .\.venv\Scripts\python.exe experiments\persona_similarity\scripts\evaluate_lambdarank.py --config experiments\persona_similarity\configs\lightgbm_reranker.yaml
 .\.venv\Scripts\python.exe experiments\persona_similarity\scripts\train_rank_xendcg.py --config experiments\persona_similarity\configs\lightgbm_reranker.yaml
 .\.venv\Scripts\python.exe experiments\persona_similarity\scripts\evaluate_rank_xendcg.py --config experiments\persona_similarity\configs\lightgbm_reranker.yaml
+
+# Optional CatBoost reranker comparison
+.\.venv\Scripts\python.exe experiments\persona_similarity\scripts\train_catboost_ranker.py --config experiments\persona_similarity\configs\lightgbm_reranker.yaml
+.\.venv\Scripts\python.exe experiments\persona_similarity\scripts\evaluate_catboost_ranker.py --config experiments\persona_similarity\configs\lightgbm_reranker.yaml
 
 # Hybrid score based on a trained model
 .\.venv\Scripts\python.exe experiments\persona_similarity\scripts\evaluate_hybrid_score.py --config experiments\persona_similarity\configs\lightgbm_reranker.yaml --source-experiment lambdarank

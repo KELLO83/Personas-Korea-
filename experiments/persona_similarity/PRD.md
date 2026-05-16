@@ -632,7 +632,7 @@ FastRP/KNN SIMILAR_TO + post-hoc explanation API
 13. structured+text 통합 모델 비교
 14. 필요 시 PPR 후보생성 baseline 비교
 15. 필요 시 Node2Vec 후보생성 baseline 비교
-16. 필요 시 CatBoost ranking 대체 reranker 비교
+16. 필요 시 train_catboost_ranker.py / evaluate_catboost_ranker.py로 CatBoost ranking 대체 reranker 비교
 17. manual review와 decision artifact 갱신
 ```
 
