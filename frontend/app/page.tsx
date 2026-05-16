@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import type { ChatMessage, PersonaProfileResponse, RagTraceListResponse, RecommendationStatusResponse, SearchResponse, StatsResponse, SubgraphResponse } from "@/lib/api-types";
 import { personaApi } from "@/lib/api-client";
 import { DEFAULT_PERSONA_UUID } from "@/lib/constants";
-import { shortUuid, uuidWithName } from "@/lib/formatters";
+import { shortUuid } from "@/lib/formatters";
 import { chatSessionId, resetChatSessionId } from "@/lib/chat-session";
 import { useLoadable } from "@/hooks/use-loadable";
 import { DashboardSection } from "@/components/dashboard-section";
@@ -36,6 +36,8 @@ const emptySearchFilters: SearchFilters = {
   keyword: "",
 };
 
+const ragTraceAdminAutoLoad = process.env.NEXT_PUBLIC_RAG_TRACE_ADMIN_ENABLED === "true";
+
 export default function Home() {
   const [activeView, setActiveView] = useState<ViewKey>("dashboard");
   const [selectedUuid, setSelectedUuid] = useState(DEFAULT_PERSONA_UUID);
@@ -52,7 +54,8 @@ export default function Home() {
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
-  const selectedDisplayName = profile.data?.display_name ?? selectedLabel;
+  const selectedProfileName = profile.data?.uuid === selectedUuid ? profile.data.display_name : null;
+  const selectedDisplayName = selectedProfileName ?? (selectedLabel === "기본 페르소나" ? "이름 미등록" : selectedLabel);
 
   useEffect(() => {
     void loadStats(() => personaApi.stats());
@@ -60,7 +63,7 @@ export default function Home() {
   }, [loadRecommendationStatus, loadStats]);
 
   useEffect(() => {
-    if (activeView === "operations" && !ragTraces.data && !ragTraces.loading && !ragTraces.error) {
+    if (ragTraceAdminAutoLoad && activeView === "operations" && !ragTraces.data && !ragTraces.loading && !ragTraces.error) {
       void loadRagTraces(() => personaApi.ragTraces({ limit: 20 }));
     }
   }, [activeView, loadRagTraces, ragTraces.data, ragTraces.error, ragTraces.loading]);
@@ -156,8 +159,8 @@ export default function Home() {
             </div>
             <div className="card status-card">
               <span className="status-dot" /> <span className="small muted">현재 선택</span>
-              <h2>{selectedLabel}</h2>
-              <p className="muted small">UUID {uuidWithName(selectedUuid, selectedDisplayName)}</p>
+              <h2>{selectedDisplayName}</h2>
+              <p className="muted small">UUID {selectedUuid}</p>
               <button className="ghost-button" onClick={() => setActiveView("graph")}>관계 그래프로 보기</button>
             </div>
           </section>
@@ -166,7 +169,7 @@ export default function Home() {
             <span className="status-dot" />
             <div>
               <div className="eyebrow">현재 선택</div>
-              <h2>{selectedLabel} <span className="muted">({uuidWithName(selectedUuid, selectedDisplayName)})</span></h2>
+              <h2>{selectedDisplayName} <span className="muted">({selectedUuid})</span></h2>
             </div>
             <button className="ghost-button" onClick={() => setActiveView("graph")} style={{ marginLeft: "auto" }}>관계 그래프</button>
           </div>

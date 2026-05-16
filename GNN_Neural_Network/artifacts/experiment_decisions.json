@@ -964,12 +964,13 @@
     ],
     "next_step": "Run KURE/KRUE text embedding only as an explicit opt-in validation-first ablation with leakage audit and no default change unless gates pass."
   },
-  "phase5_c_kure_domain_tagged_text_005": {
-    "experiment": "Phase5_C_KURE_Domain_Tagged_Text_Feature_005",
-    "timestamp": "2026-05-16",
-    "status": "rejected_below_sota",
-    "decision": "do_not_promote_current_kure_text_path",
-    "default_change": false,
+    "phase5_c_kure_domain_tagged_text_005": {
+        "experiment": "Phase5_C_KURE_Domain_Tagged_Text_Feature_005",
+        "timestamp": "2026-05-16",
+        "status": "superseded_by_current_locked_comparison",
+        "decision": "historical_result_superseded_do_not_use_as_current_default_decision",
+        "default_change": false,
+        "superseded_by": "phase5_c_current_locked_kure_stage2",
     "current_sota": {
       "run_id": "phase2_5_num_leaves_31",
       "model_path": "artifacts/experiments/phase2_5_num_leaves_31/ranker_model.txt",
@@ -1014,9 +1015,9 @@
         "progress_mode": "on"
       }
     },
-    "reason": "KURE-v1 domain-tagged text features beat the matched no-text control under the same current code and candidate pool, but the current path remains below the closed Phase 2.5 SOTA on absolute Recall@10 and NDCG@10. Default remains include_text_embedding_feature=false.",
-    "next_step": "Do not promote KURE-v1. Move default/product integration forward with the closed Phase 2.5 SOTA; keep KURE text as non-default evidence unless a new stronger candidate-pool hypothesis is opened in PRD/TASKS."
-  },
+        "reason": "This record used the older closed Phase 2.5 absolute SOTA as the comparison target and is retained as historical context. The later current-locked no-text vs KURE Stage2 comparison is the valid current default decision source.",
+        "next_step": "Use phase5_c_current_locked_kure_stage2 for current default decisions. Continue Stage2 embedding follow-up against the promoted KURE Stage2 SOTA."
+    },
   "phase5_c_strict_sota_pool_kure_stage2_feature": {
     "experiment": "Strict_SOTA_Candidate_Pool_Plus_KURE_Stage2_Feature",
     "timestamp": "2026-05-16",

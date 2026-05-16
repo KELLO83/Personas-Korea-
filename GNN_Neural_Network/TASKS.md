@@ -52,7 +52,7 @@ This section is the executable blocker list before any `include_text_embedding_f
 Do not confuse this with the completed KURE dense MMR sweep.
 
 - [x] KURE dense MMR sweep status: completed, NO-GO, default `MMR=false` unchanged
-- [x] KURE text embedding feature ablation status: completed/rejected after corrected audit and fallback reruns. `kure_text_feature_001` was disabled by leakage gate, `kure_text_feature_002_context_coverage_gate` was not promoted due low mapped context coverage, and `kure_text_feature_003_full_ranker_fallback` regressed on validation Recall@10 below the closed Phase 2.5 default.
+- [x] KURE text embedding feature ablation status: early runs were rejected/blocked after corrected audit and fallback reruns, but the later current-locked same-split comparison promoted KURE Stage2. `kure_text_feature_001` was disabled by leakage gate, `kure_text_feature_002_context_coverage_gate` was not promoted due low mapped context coverage, and `kure_text_feature_003_full_ranker_fallback` regressed on validation Recall@10 below the closed Phase 2.5 default.
 - [x] KURE text feature run must set `include_text_embedding_feature=true`
 - [x] KURE text feature run must record `persona_hobby_semantic_sim` or `text_embedding_similarity` in the ranker feature policy
 - [x] `mask_holdout_hobbies()` must run before encoding persona text
@@ -96,7 +96,7 @@ Do not confuse this with the completed KURE dense MMR sweep.
   - [x] no-text control: validation Recall@10 `0.591692`, NDCG@10 `0.366055`
   - [x] `include_text_embedding_feature=true`: validation Recall@10 `0.634706`, NDCG@10 `0.396559`
   - [x] CPU thread count explicitly set to `10` and progress visible (`--progress-mode on`)
-  - [x] KURE selected vs matched no-text control, but not promoted because it remains below the closed Phase 2.5 SOTA absolute test reference.
+  - [x] KURE selected vs matched no-text control. The later locked same-current-data comparison below is the promotion-grade decision source.
 - [x] Build the requested strict comparison script: existing SOTA candidate feature cache + Stage2 KURE feature only.
   - [x] Script: `scripts/train_eval_sota_pool_kure_feature.py`
   - [x] Progress is always shown for reproduction/evaluation/text-prep/embedding/feature-build/training when `--progress-mode on`.
@@ -117,7 +117,36 @@ Do not confuse this with the completed KURE dense MMR sweep.
 - [ ] Next KURE Stage2 feature-shape probe: split the single cosine feature into domain-specific masked text blocks (`sports`, `arts`, `travel`, `food`, etc.) and compare against the promoted single-feature KURE SOTA.
 - [ ] Optional KURE Stage2 rank/margin probe: add within-candidate-pool KURE percentile/gap features without changing Stage1 candidate generation.
 - [ ] Do not run another Stage1 semantic candidate generator experiment without a new PRD/TASKS reopening note, because KURE Stage1 reduced candidate_recall@50 from `0.977645` to `0.794971`.
-- [ ] Stop any future embedding run at validation if Recall@10/NDCG@10 miss the closed Phase 2.5 promotion gate or candidate_recall@50 regresses materially.
+- [ ] Stop any future Stage2 embedding run at validation if Recall@10/NDCG@10 miss the promoted KURE Stage2 SOTA gate or candidate_recall@50 regresses materially.
+
+### Stage2 Embedding Improvement Plan
+
+- [ ] Establish the fixed comparison baseline for every follow-up:
+  - baseline artifact: `artifacts/experiments/phase5_c_text_embedding/current_locked_num_leaves31_comparison.json`
+  - baseline model: `artifacts/experiments/phase5_c_text_embedding/current_locked_kure_stage2_num_leaves31_cpu10/ranker_model.txt`
+  - Stage1 must remain `popularity + cooccurrence`
+  - Stage2 LightGBM recipe must remain `num_leaves=31` unless a separate tuning task is opened
+  - CPU thread count must stay `10` for comparable local runs
+  - progress must be visible for embedding, feature building, training, and evaluation
+- [ ] Track A - embedding backbone swap:
+  - [ ] make the Stage2 text feature path accept an explicit embedding model name/revision and write it into cache metadata
+  - [ ] run `dragonkue/snowflake-arctic-embed-l-v2.0-ko` validation-only with the same candidate pool and same feature slot
+  - [ ] run `dragonkue/multilingual-e5-small-ko-v2` validation-only only after Snowflake or as a runtime/cost probe
+  - [ ] promote to test only if validation Recall@10 and NDCG@10 beat KURE-v1 Stage2
+- [ ] Track B - domain-specific KURE feature split:
+  - [ ] define masked domain text builders for sports, arts, travel, food, family, and professional context
+  - [ ] add feature columns such as `kure_sports_similarity`, `kure_arts_similarity`, `kure_travel_similarity`, and `kure_food_similarity`
+  - [ ] keep the single KURE Stage2 baseline available as an ablation control
+  - [ ] promote to test only if validation beats the single-cosine KURE Stage2 SOTA
+- [ ] Track C - candidate-pool KURE rank/margin features:
+  - [ ] derive `kure_similarity_percentile`, `kure_similarity_rank`, `kure_similarity_gap_to_top`, and `kure_similarity_gap_to_mean` inside each person's fixed candidate pool
+  - [ ] confirm these features do not add or remove candidates
+  - [ ] evaluate validation-only before any test run
+- [ ] Governance for all tracks:
+  - [ ] one script per experiment purpose; do not silently batch unrelated experiments
+  - [ ] cache keys must include data split, embedding model/revision, preprocessing version, masking policy, and feature columns
+  - [ ] persist `validation_metrics.status.json`, runtime, device, batch/chunk size, cache hit/miss, and peak GPU memory when available
+  - [ ] update `experiment_decisions.json`, `experiment_run_summary.md`, `PRD.md`, `TASKS.md`, and `README.md` if a default decision changes
 
 ## Global Execution Policy
 
@@ -350,11 +379,11 @@ Remaining implementation work before any future text embedding ablation:
 - [x] Add cold-start metrics to the ranker evaluation artifacts before using text embedding results for follow-up decisions.
   - [x] closed Phase 2.5 validation/test artifacts recorded under `artifacts/experiments/phase2_5_cold_start_baseline/`
 
-Follow-up-only backbone probes:
+Active Stage2 backbone probes:
 
-- [ ] Run `dragonkue/snowflake-arctic-embed-l-v2.0-ko` only after context coverage and cache provenance blockers are closed.
-- [ ] Run `dragonkue/multilingual-e5-small-ko-v2` only after the same blockers are closed.
-- [ ] Compare any future backbone against KURE-v1 and the closed Phase 2.5 default on overall and cold-start metrics.
+- [ ] Run `dragonkue/snowflake-arctic-embed-l-v2.0-ko` as a validation-only Stage2 feature ablation against the current KURE Stage2 SOTA.
+- [ ] Run `dragonkue/multilingual-e5-small-ko-v2` as a validation-only Stage2 feature ablation if Snowflake or runtime/cost results justify the second probe.
+- [ ] Compare any future backbone against KURE-v1 Stage2 on overall and cold-start metrics with the same current candidate pool.
 - [ ] Record each future result as `rejected`, `experimental`, `needs_followup`, or selected for winner-only test.
 - [x] Run fast KURE-v1 2K pilot after governance hardening.
   - [x] `kure_text_feature_005_domain_tagged_fast_gpu_pilot_2k` showed same-sample validation Recall@10/NDCG@10 gains over the no-text pilot.
@@ -363,7 +392,7 @@ Follow-up-only backbone probes:
   - [x] Full validation KURE text Recall@10 `0.634706`, NDCG@10 `0.396559`.
   - [x] Full validation matched no-text control Recall@10 `0.591692`, NDCG@10 `0.366055`.
   - [x] Test KURE text Recall@10 `0.617482`, NDCG@10 `0.386258`.
-  - [x] Decision: feature signal confirmed, but below closed Phase 2.5 SOTA; default remains off.
+  - [x] Historical decision was below the older closed Phase 2.5 SOTA, but the later locked same-current-data comparison superseded it and promoted KURE Stage2.
 
 ### Step 3: Remaining Ranking-Collapse Implementation Plan
 

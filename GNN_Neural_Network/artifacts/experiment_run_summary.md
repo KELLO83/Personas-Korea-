@@ -135,24 +135,25 @@ Decision: `needs_full_validation_followup`. The same-sample pilot signal is posi
 
 ## 2026-05-16 KURE domain-tagged full validation and test decision
 
-Current SOTA remains the closed Phase 2.5 LightGBM ranker:
+Historical note: this decision used the older closed Phase 2.5 artifact as the
+absolute comparison target. It is now superseded by the later current-data
+locked no-text vs KURE Stage2 comparison below.
 
 | Run | Split | Recall@10 | NDCG@10 | Candidate Recall@50 | Decision |
 | --- | --- | ---: | ---: | ---: | --- |
-| `phase2_5_num_leaves_31` | test | 0.709684 | 0.447713 | 0.977136 | current SOTA/default |
-| `kure_text_feature_005_domain_tagged_20k_cpu10_test_matrix_retry` | test | 0.617482 | 0.386258 | 0.827208 | not promoted |
+| `phase2_5_num_leaves_31` | test | 0.709684 | 0.447713 | 0.977136 | older closed artifact |
+| `kure_text_feature_005_domain_tagged_20k_cpu10_test_matrix_retry` | test | 0.617482 | 0.386258 | 0.827208 | historical, superseded |
 
 KURE-v1 domain-tagged text features showed a real Stage2 signal under the matched current candidate pool:
 
 - test delta vs its own Stage1: Recall@10 `+0.047711`, NDCG@10 `+0.029900`
 - full validation KURE text vs matched no-text control: Recall@10 `+0.043014`, NDCG@10 `+0.030504`
 
-Decision:
+Historical decision at that point:
 
-- `include_text_embedding_feature=false` remains default.
-- Current KURE text path is **not SOTA** and is **not promoted**.
-- KURE-v1 remains follow-up-only as an auxiliary Stage2 feature.
-- One final validation-only matched-control follow-up is allowed under the same current code/split/candidate pool. It must show progress (`--progress-mode on`) and record CPU/GPU/cache policy. Test runs remain winner-only.
+- The run was not promoted against the older closed artifact.
+- That conclusion must not be used as the current default decision because the
+  later locked same-current-data comparison is the valid decision source.
 
 ### Final matched current-code validation follow-up
 
@@ -170,9 +171,8 @@ KURE text delta vs matched no-text control:
 
 Final decision:
 
-- KURE-v1 text feature is useful signal, but it is not the current SOTA.
-- Do not promote KURE-v1 into the default recommendation path.
-- Keep `phase2_5_num_leaves_31` as the documented SOTA/default reference and move product/default integration forward.
+- KURE-v1 text feature is useful Stage2 signal.
+- This section is superseded by `current_locked_kure_stage2_num_leaves31_cpu10`, which promotes KURE Stage2 on the current data/split.
 
 ## 2026-05-16 strict SOTA-pool KURE Stage2 feature attempt
 

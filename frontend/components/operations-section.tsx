@@ -14,6 +14,7 @@ export function OperationsSection({ recommendationStatus, ragTraces, onRefresh }
   const traceAdminDisabled = Boolean(ragTraces.error?.includes("disabled") || ragTraces.error?.includes("503"));
   const visibleTraces = ragTraces.error ? [] : (ragTraces.data?.traces ?? []);
   const traceCount = visibleTraces.length;
+  const traceNotRequested = !ragTraces.data && !ragTraces.error && !ragTraces.loading;
   const traceCaption = traceAdminDisabled
     ? "admin disabled"
     : ragTraces.data?.tracing_enabled
@@ -42,6 +43,11 @@ export function OperationsSection({ recommendationStatus, ragTraces, onRefresh }
           {traceAdminDisabled
             ? "RAG trace 관리자 API는 기본 비활성화 상태입니다. 로컬/관리자 환경에서 확인하려면 RAG_TRACE_ADMIN_ENABLED=true로 켜세요."
             : ragTraces.error}
+        </div>
+      )}
+      {traceNotRequested && (
+        <div className="card">
+          RAG trace 자동 조회는 기본 비활성화 상태입니다. 필요한 경우 로컬/관리자 환경에서 설정을 켠 뒤 새로고침하세요.
         </div>
       )}
 
