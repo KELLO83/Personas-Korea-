@@ -2,6 +2,7 @@ import logging
 from typing import Any
 
 import numpy as np
+import torch
 
 from src.config import settings
 
@@ -88,11 +89,6 @@ class KureEmbedder:
         return optimal_batch_size
 
     def _load_model(self) -> Any:
-        # ✅ [수정] 동적 배치 사이즈 결정 로직 실행
-        if self.batch_size is None:
-            import torch
-            self.batch_size = self._get_optimal_batch_size()
-
         normalized_device = self.device.lower()
         if normalized_device == "cpu":
             message = (
@@ -102,15 +98,12 @@ class KureEmbedder:
             logger.warning(message)
             raise RuntimeError(message)
 
+        # ✅ [수정] 동적 배치 사이즈 결정 로직 실행
+        if self.batch_size is None:
+            self.batch_size = self._get_optimal_batch_size()
+
         if normalized_device.startswith("cuda"):
             # 이미 위에서 torch 유무를 확인했으므로 재확인 생략 가능하지만 기존 로직 유지
-            try:
-                import torch
-            except ImportError as exc:
-                message = "CUDA embedding requires PyTorch, but torch is not installed."
-                logger.warning(message)
-                raise RuntimeError(message) from exc
-
             if not torch.cuda.is_available():
                 message = (
                     "CUDA embedding requested but torch.cuda.is_available() is false. "

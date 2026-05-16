@@ -5,15 +5,15 @@ import time
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
+import polars as pl
 
 from experiments.persona_similarity.scripts.common import PROJECT_ROOT, ensure_parent, write_json
 from experiments.persona_similarity.scripts.common import file_sha256, mark_cache_hit, should_use_cache, stable_json_hash
 from experiments.persona_similarity.scripts.experiment_specs import model_path, train_metadata_path
 
 
-def group_sizes(frame: pd.DataFrame) -> list[int]:
-    return frame.groupby("source_uuid", sort=False).size().astype(int).tolist()
+def group_sizes(frame: pl.DataFrame) -> list[int]:
+    return frame.group_by("source_uuid", maintain_order=True).len()["len"].cast(pl.Int64).to_list()
 
 
 def train_lightgbm_experiment(
@@ -46,12 +46,23 @@ def train_lightgbm_experiment(
     except ImportError as exc:
         raise SystemExit("lightgbm is required to train persona similarity experiments.") from exc
 
-    features = pd.read_parquet(input_features_path)
-    train = features[features["split"] == "train"].sort_values(["source_uuid", "fastrp_score"], ascending=[True, False])
-    valid = features[features["split"] == "valid"].sort_values(["source_uuid", "fastrp_score"], ascending=[True, False])
+    features = pl.read_parquet(input_features_path)
+    train = features.filter(pl.col("split") == "train").sort(["source_uuid", "fastrp_score"], descending=[False, True])
+    valid = features.filter(pl.col("split") == "valid").sort(["source_uuid", "fastrp_score"], descending=[False, True])
 
-    train_set = lgb.Dataset(train[feature_columns], label=train["label"], group=group_sizes(train), feature_name=feature_columns)
-    valid_set = lgb.Dataset(valid[feature_columns], label=valid["label"], group=group_sizes(valid), feature_name=feature_columns, reference=train_set)
+    train_set = lgb.Dataset(
+        train.select(feature_columns).to_numpy(),
+        label=train["label"].to_numpy(),
+        group=group_sizes(train),
+        feature_name=feature_columns,
+    )
+    valid_set = lgb.Dataset(
+        valid.select(feature_columns).to_numpy(),
+        label=valid["label"].to_numpy(),
+        group=group_sizes(valid),
+        feature_name=feature_columns,
+        reference=train_set,
+    )
 
     lgb_config: dict[str, Any] = config["lightgbm"]
     params = {
@@ -87,10 +98,10 @@ def train_lightgbm_experiment(
             "model_path": str(output_model_path.relative_to(PROJECT_ROOT)),
             "objective": objective,
             "metric": params.get("metric"),
-            "train_rows": int(len(train)),
-            "valid_rows": int(len(valid)),
-            "train_sources": int(train["source_uuid"].nunique()),
-            "valid_sources": int(valid["source_uuid"].nunique()),
+            "train_rows": int(train.height),
+            "valid_rows": int(valid.height),
+            "train_sources": int(train["source_uuid"].n_unique()),
+            "valid_sources": int(valid["source_uuid"].n_unique()),
             "best_iteration": int(model.best_iteration or 0),
             "best_score": json.loads(json.dumps(model.best_score)),
             "train_seconds": train_seconds,

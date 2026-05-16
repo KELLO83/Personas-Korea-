@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +11,16 @@ import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 EXPERIMENT_ROOT = PROJECT_ROOT / "experiments" / "persona_similarity"
+
+
+def default_cpu_workers() -> int:
+    return min(max((os.cpu_count() or 1) - 4, 1), 18)
+
+
+def resolve_worker_count(requested: int | None = None) -> int:
+    if requested is None or requested <= 0:
+        return default_cpu_workers()
+    return max(1, min(int(requested), os.cpu_count() or 1))
 
 
 def load_config(path: str | Path) -> dict[str, Any]:

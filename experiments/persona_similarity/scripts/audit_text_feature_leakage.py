@@ -11,7 +11,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-import pandas as pd
+import polars as pl
 
 from experiments.persona_similarity.scripts.common import file_sha256, load_config, mark_cache_hit, should_use_cache, stable_json_hash, write_json
 from experiments.persona_similarity.scripts.text_feature_builder import TEXT_DOMAINS, build_domain_text, text_hash
@@ -32,18 +32,18 @@ STRUCTURED_TEXT_COLUMNS = [
 ]
 
 
-def missing_counts(frame: pd.DataFrame) -> dict[str, int]:
+def missing_counts(frame: pl.DataFrame) -> dict[str, int]:
     return {
-        column: int(frame[column].fillna("").astype(str).str.strip().eq("").sum())
+        column: int(frame.select((pl.col(column).fill_null("").cast(pl.String).str.strip_chars() == "").sum()).item())
         for column in STRUCTURED_TEXT_COLUMNS
         if column in frame.columns
     }
 
 
-def duplicate_domain_hashes(frame: pd.DataFrame, domain: str) -> dict[str, Any]:
+def duplicate_domain_hashes(frame: pl.DataFrame, domain: str) -> dict[str, Any]:
     hashes: list[str] = []
     examples: dict[str, list[str]] = defaultdict(list)
-    for row in frame.to_dict(orient="records"):
+    for row in frame.to_dicts():
         text = build_domain_text(row, domain)
         if not text:
             continue
@@ -64,7 +64,7 @@ def duplicate_domain_hashes(frame: pd.DataFrame, domain: str) -> dict[str, Any]:
     }
 
 
-def simple_structured_overlap_flags(frame: pd.DataFrame) -> dict[str, Any]:
+def simple_structured_overlap_flags(frame: pl.DataFrame) -> dict[str, Any]:
     checks = {
         "hobbies_text_mentions_hobby_like_terms": ("hobbies_and_interests", ["취미", "운동", "독서", "여행", "요리", "음악"]),
         "skills_text_mentions_skill_like_terms": ("skills_and_expertise", ["기술", "전문", "경험", "역량", "자격", "능력"]),
@@ -74,11 +74,11 @@ def simple_structured_overlap_flags(frame: pd.DataFrame) -> dict[str, Any]:
     for name, (column, terms) in checks.items():
         if column not in frame.columns:
             continue
-        series = frame[column].fillna("").astype(str)
-        mask = series.apply(lambda text: any(term in text for term in terms))
+        values = [str(value or "") for value in frame[column].to_list()]
+        mask = [any(term in text for term in terms) for text in values]
         results[name] = {
-            "count": int(mask.sum()),
-            "ratio": float(mask.mean()) if len(mask) else 0.0,
+            "count": int(sum(mask)),
+            "ratio": float(sum(mask) / len(mask)) if mask else 0.0,
         }
     return results
 
@@ -101,7 +101,7 @@ def main() -> None:
         return
 
     start_time = time.perf_counter()
-    frame = pd.read_parquet(PROJECT_ROOT / config["paths"]["persona_texts"])
+    frame = pl.read_parquet(PROJECT_ROOT / config["paths"]["persona_texts"])
     domain_reports = {domain: duplicate_domain_hashes(frame, domain) for domain in TEXT_DOMAINS}
     write_json(
         config["paths"]["text_leakage_audit"],
@@ -109,7 +109,7 @@ def main() -> None:
             **cache_metadata,
             "cache_hit": False,
             "cache_reason": cache_reason,
-            "rows": int(len(frame)),
+            "rows": int(frame.height),
             "missing_text_counts": missing_counts(frame),
             "domain_duplicate_hashes": domain_reports,
             "structured_overlap_flags": simple_structured_overlap_flags(frame),

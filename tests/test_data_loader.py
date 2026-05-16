@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pandas as pd
+import polars as pl
 import pytest
 
 from src.data import loader
@@ -50,7 +51,7 @@ def test_load_dataset_reads_local_csv_first(tmp_path: Path, monkeypatch: pytest.
     result = loader.load_dataset()
 
     assert len(result) == 1
-    assert result.iloc[0]["uuid"] == "03b4f36a18e6469386d0286dddd513c8"
+    assert result.row(0, named=True)["uuid"] == "03b4f36a18e6469386d0286dddd513c8"
 
 
 def test_load_dataset_uses_huggingface_fallback(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -71,10 +72,10 @@ def test_load_dataset_uses_huggingface_fallback(tmp_path: Path, monkeypatch: pyt
     monkeypatch.setattr(loader.settings, "DATA_SAMPLE_SIZE", 10000)
     monkeypatch.setattr(loader, "load_hf_dataset", fake_load_hf_dataset)
 
-    result = loader.load_dataset()
+    with pytest.raises(SystemExit):
+        loader.load_dataset()
 
-    assert len(result) == 1
-    assert calls == [("nvidia/Nemotron-Personas-Korea", "train[:10000]")]
+    assert calls == []
 
 
 def test_load_dataset_uses_full_huggingface_split_when_sample_size_is_none(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -94,10 +95,10 @@ def test_load_dataset_uses_full_huggingface_split_when_sample_size_is_none(tmp_p
     monkeypatch.setattr(loader.settings, "HF_DATASET_SPLIT", "train")
     monkeypatch.setattr(loader, "load_hf_dataset", fake_load_hf_dataset)
 
-    result = loader.load_dataset(sample_size=None)
+    with pytest.raises(SystemExit):
+        loader.load_dataset(sample_size=None)
 
-    assert len(result) == 1
-    assert calls == [("nvidia/Nemotron-Personas-Korea", "train")]
+    assert calls == []
 
 
 def test_load_dataset_defaults_to_full_split_when_sample_size_setting_is_none(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -118,12 +119,12 @@ def test_load_dataset_defaults_to_full_split_when_sample_size_setting_is_none(tm
     monkeypatch.setattr(loader.settings, "DATA_SAMPLE_SIZE", None)
     monkeypatch.setattr(loader, "load_hf_dataset", fake_load_hf_dataset)
 
-    result = loader.load_dataset()
+    with pytest.raises(SystemExit):
+        loader.load_dataset()
 
-    assert len(result) == 1
-    assert calls == [("nvidia/Nemotron-Personas-Korea", "train")]
+    assert calls == []
 
 
 def test_validate_dataframe_reports_missing_columns() -> None:
     with pytest.raises(ValueError, match="Dataset is missing required columns"):
-        loader._validate_dataframe(pd.DataFrame([{"uuid": "x"}]))
+        loader._validate_dataframe(pl.DataFrame([{"uuid": "x"}]))

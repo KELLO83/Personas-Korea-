@@ -255,11 +255,16 @@
   "next_priorities": [
     {
       "priority": 1,
+      "task": "LightGBM regularization tuning follow-up audit",
+      "goal": "Keep the promoted num_leaves=31 default documented and monitor overfitting risk when later text-feature experiments are compared."
+    },
+    {
+      "priority": 2,
       "task": "Gated KURE/KRUE text embedding feature ablation",
       "goal": "Run only with explicit opt-in, masking, post-mask leakage audit, validation-first selection, and no default change unless gates pass."
     },
     {
-      "priority": 2,
+      "priority": 3,
       "task": "Cold-start and taxonomy review of any KURE/KRUE result",
       "goal": "Compare sparse-user metrics and taxonomy concentration before treating diversity gains as production-ready."
     }

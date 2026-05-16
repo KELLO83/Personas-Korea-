@@ -5,6 +5,7 @@ pydantic-settings>=2.0.0
 
 # Data
 pandas>=2.0.0
+polars>=1.0.0
 pyarrow>=14.0.0
 openpyxl>=3.1.0
 datasets>=2.18.0
@@ -36,9 +37,6 @@ uvicorn>=0.27.0
 
 # Frontend
 streamlit>=1.30.0
-
-# Korean NLP
-kiwipiepy>=0.18.0
 
 # Utils
 tqdm>=4.65.0

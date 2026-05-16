@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
+import polars as pl
 
 from experiments.persona_similarity.scripts.common import PROJECT_ROOT, ensure_parent, file_sha256, mark_cache_hit, should_use_cache, stable_json_hash, write_json
 from experiments.persona_similarity.scripts.evaluation_utils import evaluate_score_column, load_test_features, topk_overlap_at_k, write_manual_review, write_metrics
@@ -41,12 +41,12 @@ def train_catboost_experiment(
     except ImportError as exc:
         raise SystemExit("catboost is required to train CatBoost persona similarity experiments.") from exc
 
-    features = pd.read_parquet(input_features_path)
-    train = features[features["split"] == "train"].sort_values(["source_uuid", "fastrp_score"], ascending=[True, False])
-    valid = features[features["split"] == "valid"].sort_values(["source_uuid", "fastrp_score"], ascending=[True, False])
+    features = pl.read_parquet(input_features_path)
+    train = features.filter(pl.col("split") == "train").sort(["source_uuid", "fastrp_score"], descending=[False, True])
+    valid = features.filter(pl.col("split") == "valid").sort(["source_uuid", "fastrp_score"], descending=[False, True])
 
-    train_pool = Pool(train[feature_columns], label=train["label"], group_id=train["source_uuid"])
-    valid_pool = Pool(valid[feature_columns], label=valid["label"], group_id=valid["source_uuid"])
+    train_pool = Pool(train.select(feature_columns).to_numpy(), label=train["label"].to_numpy(), group_id=train["source_uuid"].to_list())
+    valid_pool = Pool(valid.select(feature_columns).to_numpy(), label=valid["label"].to_numpy(), group_id=valid["source_uuid"].to_list())
     params = {
         key: value
         for key, value in catboost_config.items()
@@ -72,10 +72,10 @@ def train_catboost_experiment(
             "cache_hit": False,
             "cache_reason": cache_reason,
             "model_path": str(output_model_path.relative_to(PROJECT_ROOT)),
-            "train_rows": int(len(train)),
-            "valid_rows": int(len(valid)),
-            "train_sources": int(train["source_uuid"].nunique()),
-            "valid_sources": int(valid["source_uuid"].nunique()),
+            "train_rows": int(train.height),
+            "valid_rows": int(valid.height),
+            "train_sources": int(train["source_uuid"].n_unique()),
+            "valid_sources": int(valid["source_uuid"].n_unique()),
             "best_iteration": int(model.get_best_iteration() or 0),
             "best_score": json.loads(json.dumps(model.get_best_score(), default=str)),
             "train_seconds": train_seconds,
@@ -119,7 +119,7 @@ def evaluate_catboost_experiment(
     model = CatBoostRanker()
     model.load_model(str(model_path(experiment_name)))
     predict_start = time.perf_counter()
-    test["model_score"] = model.predict(test[feature_columns])
+    test = test.with_columns(pl.Series("model_score", model.predict(test.select(feature_columns).to_numpy())))
     inference_seconds = time.perf_counter() - predict_start
     top_k_values = [int(value) for value in config["evaluation"]["top_k"]]
     metrics = {
@@ -131,8 +131,8 @@ def evaluate_catboost_experiment(
         "feature_columns": feature_columns,
         "metrics": evaluate_score_column(test, "model_score", top_k_values),
         "overlap_vs_fastrp": {f"overlap@{k}": topk_overlap_at_k(test, "fastrp_score", "model_score", k, progress=True) for k in top_k_values},
-        "test_rows": int(len(test)),
-        "test_sources": int(test["source_uuid"].nunique()),
+        "test_rows": int(test.height),
+        "test_sources": int(test["source_uuid"].n_unique()),
         "inference_seconds": inference_seconds,
         "evaluation_seconds": time.perf_counter() - start_time,
     }

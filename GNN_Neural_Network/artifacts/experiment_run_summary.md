@@ -14,7 +14,15 @@ include_text_embedding_feature = false
 MMR = false
 ```
 
+Stage 1: `popularity + cooccurrence`
+Stage 2: v2 LightGBM ranker
+
 The closed Phase 2.5 default remains the comparison baseline for all later KURE dense MMR or text embedding feature work.
+
+## Key Lessons
+
+- Keep the promoted LightGBM regularized default as the accuracy baseline.
+- Treat KURE/KRUE text feature and MMR work as gated no-go unless validation, leakage, and cold-start checks pass.
 
 ## Phase 2.5 default and cold-start baseline
 
@@ -255,3 +263,76 @@ Recommended next Stage2 embedding work:
 3. Add rank/margin features inside the fixed candidate pool, for example KURE similarity percentile or gap to the person's top semantic candidate.
 
 Do not reopen Stage1 semantic retrieval until a design explicitly preserves candidate recall.
+
+## 2026-05-16 Snowflake-ko Stage2 single-feature validation attempt
+
+Track A code was patched so Stage2 text embedding experiments can select an explicit SentenceTransformer backbone:
+
+- `train_ranker.py --text-embedding-model-name`
+- `train_ranker.py --text-embedding-model-revision`
+- `evaluate_ranker.py --text-embedding-model-name`
+- `evaluate_ranker.py --text-embedding-model-revision`
+
+Training run completed:
+
+```text
+run_id = snowflake_stage2_single_feature_validation_cpu10
+embedding_model = dragonkue/snowflake-arctic-embed-l-v2.0-ko
+Stage1 = popularity + cooccurrence
+Stage2 = LightGBM(num_leaves=31) + text_embedding_similarity
+cpu_threads = 10
+progress_mode = on
+device = cuda
+batch_size = 16
+```
+
+Training artifact:
+
+```text
+artifacts/experiments/phase5_c_text_embedding/snowflake_stage2_single_feature_validation_cpu10/ranker_model.txt
+```
+
+Training metadata:
+
+| Item | Value |
+| --- | ---: |
+| train rows | 43,425 |
+| validation rows for internal LightGBM split | 10,860 |
+| ranker train persons | 8,685 |
+| ranker val persons | 2,172 |
+| best iteration | 95 |
+| best AUC | 0.873005 |
+| runtime seconds | 1457.58 |
+| leakage failed persons | 0 |
+| leakage passed persons | 10,857 |
+
+Top feature gains:
+
+| Feature | Gain |
+| --- | ---: |
+| `popularity_prior` | 115785.96 |
+| `text_embedding_similarity` | 21505.97 |
+| `age_group_fit` | 4149.34 |
+| `mismatch_penalty` | 3629.29 |
+
+Validation evaluation status:
+
+- Full validation evaluation was started with the same Snowflake model identity and progress enabled.
+- It reached `candidates_done` with `candidate_pool_person_count=10857`.
+- The command timed out after 1 hour before `validation_metrics.json` was produced.
+- Therefore Snowflake-ko is **not promoted** and **not rejected on Recall/NDCG yet**. It is `trained_needs_validation_resume`.
+
+Next step when resuming:
+
+```powershell
+.\.venv\Scripts\python.exe GNN_Neural_Network\scripts\evaluate_ranker.py `
+  --config GNN_Neural_Network\configs\kure_text_optin_ranker.yaml `
+  --split validation `
+  --model-path GNN_Neural_Network\artifacts\experiments\phase5_c_text_embedding\snowflake_stage2_single_feature_validation_cpu10\ranker_model.txt `
+  --output GNN_Neural_Network\artifacts\experiments\phase5_c_text_embedding\snowflake_stage2_single_feature_validation_cpu10\validation_metrics.json `
+  --experiment-id snowflake_stage2_single_feature_validation_cpu10 `
+  --text-embedding-model-name dragonkue/snowflake-arctic-embed-l-v2.0-ko `
+  --embedding-batch-size 16 `
+  --cpu-thread-count 10 `
+  --progress-mode on
+```

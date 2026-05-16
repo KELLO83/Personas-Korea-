@@ -45,15 +45,15 @@ def compute_shap_values(
     Returns:
         SHAP values array (n_samples, n_features).
     """
-    try:
-        import shap
-    except ImportError as exc:
-        raise ImportError("shap is required for explanation. Install: pip install shap>=0.45.0") from exc
-
     # Unwrap LightGBMRanker if needed
     model = getattr(ranker_model, "model", ranker_model)
     if model is None:
         raise ValueError("Ranker model is not trained.")
+
+    try:
+        import shap
+    except ImportError as exc:
+        raise ImportError("shap is required for explanation. Install: pip install shap>=0.45.0") from exc
 
     if feature_names is None:
         feature_names = [str(name) for name in model.feature_name()]

@@ -11,7 +11,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-import pandas as pd
+import polars as pl
 from neo4j import GraphDatabase
 
 from experiments.persona_similarity.scripts.common import ensure_parent, load_config, mark_cache_hit, should_use_cache, stable_json_hash, write_json
@@ -81,7 +81,7 @@ LIMIT coalesce($export_limit, 1000000000)
 """
 
 
-def export_pairs(config: dict[str, Any]) -> pd.DataFrame:
+def export_pairs(config: dict[str, Any]) -> pl.DataFrame:
     neo4j_config = config["neo4j"]
     driver = GraphDatabase.driver(settings.NEO4J_URI, auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD))
     try:
@@ -100,7 +100,7 @@ def export_pairs(config: dict[str, Any]) -> pd.DataFrame:
     for row in rows:
         row["shared_hobbies"] = json.dumps(row.get("shared_hobbies") or [], ensure_ascii=False)
         row["shared_skills"] = json.dumps(row.get("shared_skills") or [], ensure_ascii=False)
-    return pd.DataFrame(rows)
+    return pl.DataFrame(rows)
 
 
 def main() -> None:
@@ -124,16 +124,16 @@ def main() -> None:
     df = export_pairs(config)
     export_seconds = time.perf_counter() - start_time
     output_path = ensure_parent(config["paths"]["candidate_pairs"])
-    df.to_parquet(output_path, index=False)
+    df.write_parquet(output_path)
     write_json(
         config["paths"]["export_status"],
         {
-            "rows": int(len(df)),
+            "rows": int(df.height),
             **cache_metadata,
             "cache_hit": False,
             "cache_reason": cache_reason,
-            "source_count": int(df["source_uuid"].nunique()) if not df.empty else 0,
-            "target_count": int(df["target_uuid"].nunique()) if not df.empty else 0,
+            "source_count": int(df["source_uuid"].n_unique()) if df.height else 0,
+            "target_count": int(df["target_uuid"].n_unique()) if df.height else 0,
             "candidate_top_n": config["neo4j"]["candidate_top_n"],
             "export_seconds": export_seconds,
         },

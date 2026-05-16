@@ -136,11 +136,17 @@ Do not confuse this with the completed KURE dense MMR sweep.
   - [x] make the Stage2 text feature path accept an explicit embedding model name/revision and write it into cache metadata
     - [x] `train_ranker.py` supports `--text-embedding-model-name`
     - [x] `train_ranker.py` supports `--text-embedding-model-revision`
+    - [x] `evaluate_ranker.py` supports `--text-embedding-model-name`
+    - [x] `evaluate_ranker.py` supports `--text-embedding-model-revision`
     - [x] `PersonEmbeddingCache` and `HobbyEmbeddingCache` pass model revision to SentenceTransformer loading
     - [x] cache metadata and ranker metadata record model name/revision/preprocessing
   - [ ] verify Track A runs keep candidate hobby text builder, masking policy, LightGBM params, split, and candidate pool unchanged
   - [ ] record embedding dimension, pooling behavior when known, device, batch size, cache hit/miss, runtime, and cache fingerprint
   - [ ] run `dragonkue/snowflake-arctic-embed-l-v2.0-ko` validation-only with the same candidate pool and same feature slot
+    - [x] training completed: `snowflake_stage2_single_feature_validation_cpu10`, best AUC `0.873005`, best iteration `95`
+    - [x] leakage audit passed: failed `0`, passed `10857`
+    - [x] validation evaluation started and reached `candidates_done`
+    - [ ] validation Recall/NDCG pending; first full evaluation timed out before `validation_metrics.json`
   - [ ] run `dragonkue/multilingual-e5-small-ko-v2` validation-only only after Snowflake or as a runtime/cost probe
   - [ ] promote to test only if validation Recall@10 and NDCG@10 beat KURE-v1 Stage2
 - [ ] Track B - domain-specific KURE feature split:

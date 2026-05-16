@@ -2,7 +2,8 @@
 
 ## Python Environment
 
-This project uses `.venv` with Python 3.11. Never use global/system Python.
+This project uses `.venv` with Python 3.11 as the default Python runtime. Never
+use global/system Python.
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests -q
@@ -81,8 +82,13 @@ CPU-heavy ML code should default to this laptop profile:
 - Default CPU threads/workers: `18`.
 - Do not default to all logical processors.
 - Recommended fallback: `min(max(os.cpu_count() - 4, 1), 18)`.
-- Apply this to LightGBM `num_threads`, joblib `n_jobs`, process pools,
-  PyTorch CPU threads, NumPy/BLAS env vars, feature builders, and evaluation.
+- Apply this to LightGBM `num_threads`, joblib `n_jobs`, process pools, PyTorch
+  CPU threads, NumPy/BLAS env vars, feature builders, and evaluation.
+- Python 3.11 CPU-bound Python loops are constrained by the GIL. For Python-heavy
+  work such as feature row construction, candidate feature building, text/cache
+  post-processing, and pure-Python evaluation transforms, default to
+  multiprocessing/process pools rather than thread pools. Threads are acceptable
+  for I/O-bound work or native libraries that release the GIL.
 
 ```powershell
 $env:OMP_NUM_THREADS = "18"

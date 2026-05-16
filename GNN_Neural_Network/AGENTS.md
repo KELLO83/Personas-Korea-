@@ -24,9 +24,15 @@ Do not put similar-persona (`Person -> Person`) experiments in this folder.
 
 ## Performance Rules
 
+- Inherit the root `.venv` Python 3.11 runtime.
 - Use CUDA automatically when available, with CPU fallback.
 - Keep batch size, chunk size, candidate pool size, worker count, and device
   configurable via YAML or CLI.
+- Python-heavy CPU loops should use multiprocessing/process pools by default
+  under Python 3.11 because the GIL limits thread-level CPU parallelism. This
+  applies to feature row builds, candidate feature transforms, cache
+  post-processing, and evaluation transforms. Threads are acceptable for
+  I/O-bound work or native libraries that release the GIL.
 - Cache reused LightGCN/XSimGCL embeddings, adjacency tensors, popularity counts,
   and co-occurrence counts.
 - Avoid repeated graph propagation or embedding recomputation in tight loops.

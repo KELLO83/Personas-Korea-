@@ -51,6 +51,11 @@ Do not put hobby recommendation (`Person -> Hobby`) experiments in this folder.
 - Use one script per experiment purpose.
 - Long-running export, feature building, embedding, training, and evaluation
   scripts must show progress.
+- Inherit the root `.venv` Python 3.11 runtime.
+- Python-heavy CPU feature/evaluation loops should use multiprocessing/process
+  pools by default because the GIL limits thread-level CPU parallelism. Keep
+  native ML libraries such as LightGBM/CatBoost on their own
+  `num_threads`/`thread_count` settings.
 - Cache candidate pairs, pair features, text embeddings, text cosine features,
   splits, and trained models when metadata matches.
 - Persist metrics, manual review samples, model metadata, cache metadata, and

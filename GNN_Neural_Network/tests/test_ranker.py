@@ -228,6 +228,17 @@ class TestBuildRankerDataset:
             assert r1.hobby_id == r2.hobby_id
             assert r1.label == r2.label
 
+    def test_process_workers_match_serial_schema_and_labels(self) -> None:
+        args = self._make_fixtures()
+        serial = build_ranker_dataset(*args, neg_ratio=2, seed=99, parallel_workers=1)
+        parallel = build_ranker_dataset(*args, neg_ratio=2, seed=99, parallel_workers=2, parallel_backend="process")
+
+        assert parallel.feature_columns == serial.feature_columns
+        assert len(parallel.rows) == len(serial.rows)
+        assert sum(row.label for row in parallel.rows) == sum(row.label for row in serial.rows)
+        assert all("similar_person_score" not in row.features for row in parallel.rows)
+        assert all("persona_text_fit" not in row.features for row in parallel.rows)
+
     def test_uses_empty_context_fallback_without_context(self) -> None:
         args = list(self._make_fixtures())
         args[5] = {}

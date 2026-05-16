@@ -4,6 +4,7 @@ import hashlib
 import json
 import random
 from collections import Counter
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, cast
@@ -17,6 +18,18 @@ from .data import PersonContext, empty_person_context
 from .rerank import (
     HobbyCandidate, RerankerConfig, build_rerank_features, merge_stage1_candidates,
 )
+
+_ranker_worker_all_hobby_ids: list[int] = []
+_ranker_worker_known_by_person: dict[int, set[int]] = {}
+_ranker_worker_id_to_hobby: dict[int, str] = {}
+_ranker_worker_contexts: dict[str, PersonContext] = {}
+_ranker_worker_id_to_person: dict[int, str] = {}
+_ranker_worker_hobby_profile: dict[str, object] = {}
+_ranker_worker_reranker_config: RerankerConfig | None = None
+_ranker_worker_neg_ratio = 4
+_ranker_worker_hard_ratio = 0.8
+_ranker_worker_include_text_embedding_feature = False
+_ranker_worker_text_similarity_lookup: dict[int, dict[int, float]] = {}
 
 
 # --- Ranker Row Schema ---
@@ -269,6 +282,12 @@ def build_ranker_dataset(
     include_source_features: bool = False,
     include_text_embedding_feature: bool = False,
     text_similarity_fn: Callable[[int, HobbyCandidate], float] | None = None,
+    text_similarity_lookup: dict[int, dict[int, float]] | None = None,
+    parallel_workers: int | None = None,
+    parallel_backend: str = "process",
+    process_workers: int | None = None,
+    show_progress: bool = False,
+    progress_desc: str = "ranker rows",
 ) -> RankerDataset:
     rng = random.Random(seed)
 
@@ -282,71 +301,217 @@ def build_ranker_dataset(
         include_text_embedding_feature=include_text_embedding_feature,
     )
 
-    for person_id, positive_hobby_ids in positives_by_person.items():
-        person_uuid = id_to_person.get(person_id)
-        if not person_uuid:
-            continue
-        context = contexts.get(person_uuid) or empty_person_context(person_uuid)
+    worker_count = parallel_workers if parallel_workers is not None else process_workers
+    workers = max(1, int(worker_count or 1))
+    backend = parallel_backend.strip().lower()
+    if backend == "auto":
+        backend = "process"
+    if backend not in {"process", "serial"}:
+        raise ValueError(f"Unsupported ranker dataset parallel_backend: {parallel_backend}")
+    if backend == "serial":
+        workers = 1
 
-        known_hobby_ids = known_by_person.get(person_id, set())
-        known_hobby_names = {id_to_hobby[h] for h in known_hobby_ids if h in id_to_hobby}
-
-        pool_candidates = candidate_pools.get(person_id, [])
-        pool_hobby_ids = [c.hobby_id for c in pool_candidates]
-        pool_lookup: dict[int, HobbyCandidate] = {c.hobby_id: c for c in pool_candidates}
-
-        negatives = sample_negatives(
-            person_id=person_id,
-            positive_hobby_ids=positive_hobby_ids,
-            candidate_pool=pool_hobby_ids,
-            all_hobby_ids=all_hobby_ids,
-            known_hobby_ids=known_hobby_ids,
-            neg_ratio=neg_ratio,
-            hard_ratio=hard_ratio,
-            rng=rng,
-        )
-
-        def _make_candidate(hid: int) -> HobbyCandidate:
-            if hid in pool_lookup:
-                return pool_lookup[hid]
-            return HobbyCandidate(
-                hobby_id=hid,
-                hobby_name=id_to_hobby.get(hid, ""),
-                source_scores={},
-                raw_source_scores={},
-                reason_features={},
+    if workers > 1 and text_similarity_fn is None:
+        payloads = [
+            (
+                person_id,
+                positive_hobby_ids,
+                candidate_pools.get(person_id, []),
+                int(rng.randrange(0, 2**31 - 1)),
+            )
+            for person_id, positive_hobby_ids in positives_by_person.items()
+        ]
+        chunksize = max(1, min(64, len(payloads) // (workers * 4) if workers else 1))
+        with ProcessPoolExecutor(
+            max_workers=workers,
+            initializer=_init_ranker_dataset_worker,
+            initargs=(
+                all_hobby_ids,
+                known_by_person,
+                id_to_hobby,
+                contexts,
+                id_to_person,
+                hobby_profile,
+                reranker_config,
+                neg_ratio,
+                hard_ratio,
+                include_text_embedding_feature,
+                text_similarity_lookup or {},
+            ),
+        ) as executor:
+            iterator = executor.map(_build_ranker_rows_for_person_worker, payloads, chunksize=chunksize)
+            if show_progress:
+                iterator = tqdm(iterator, total=len(payloads), desc=progress_desc, dynamic_ncols=False)
+            for person_rows in iterator:
+                rows.extend(person_rows)
+    else:
+        serial_items = positives_by_person.items()
+        if show_progress:
+            serial_items = tqdm(serial_items, total=len(positives_by_person), desc=progress_desc, dynamic_ncols=False)
+        for person_id, positive_hobby_ids in serial_items:
+            rows.extend(
+                _build_ranker_rows_for_person(
+                    person_id=person_id,
+                    positive_hobby_ids=positive_hobby_ids,
+                    pool_candidates=candidate_pools.get(person_id, []),
+                    rng=random.Random(rng.randrange(0, 2**31 - 1)),
+                    all_hobby_ids=all_hobby_ids,
+                    known_by_person=known_by_person,
+                    id_to_hobby=id_to_hobby,
+                    contexts=contexts,
+                    id_to_person=id_to_person,
+                    hobby_profile=hobby_profile,
+                    reranker_config=reranker_config,
+                    neg_ratio=neg_ratio,
+                    hard_ratio=hard_ratio,
+                    include_text_embedding_feature=include_text_embedding_feature,
+                    text_similarity_fn=text_similarity_fn,
+                    text_similarity_lookup=text_similarity_lookup or {},
+                ),
             )
 
-        person_context: PersonContext = context
+    return RankerDataset(rows=rows, feature_columns=feature_columns)
 
-        def _build_row(hid: int, label: int) -> RankerRow:
-            candidate = _make_candidate(hid)
-            text_embedding_similarity = 0.0
-            if include_text_embedding_feature and text_similarity_fn is not None:
+
+def _init_ranker_dataset_worker(
+    all_hobby_ids: list[int],
+    known_by_person: dict[int, set[int]],
+    id_to_hobby: dict[int, str],
+    contexts: dict[str, PersonContext],
+    id_to_person: dict[int, str],
+    hobby_profile: dict[str, object],
+    reranker_config: RerankerConfig,
+    neg_ratio: int,
+    hard_ratio: float,
+    include_text_embedding_feature: bool,
+    text_similarity_lookup: dict[int, dict[int, float]],
+) -> None:
+    global _ranker_worker_all_hobby_ids
+    global _ranker_worker_known_by_person
+    global _ranker_worker_id_to_hobby
+    global _ranker_worker_contexts
+    global _ranker_worker_id_to_person
+    global _ranker_worker_hobby_profile
+    global _ranker_worker_reranker_config
+    global _ranker_worker_neg_ratio
+    global _ranker_worker_hard_ratio
+    global _ranker_worker_include_text_embedding_feature
+    global _ranker_worker_text_similarity_lookup
+    _ranker_worker_all_hobby_ids = all_hobby_ids
+    _ranker_worker_known_by_person = known_by_person
+    _ranker_worker_id_to_hobby = id_to_hobby
+    _ranker_worker_contexts = contexts
+    _ranker_worker_id_to_person = id_to_person
+    _ranker_worker_hobby_profile = hobby_profile
+    _ranker_worker_reranker_config = reranker_config
+    _ranker_worker_neg_ratio = neg_ratio
+    _ranker_worker_hard_ratio = hard_ratio
+    _ranker_worker_include_text_embedding_feature = include_text_embedding_feature
+    _ranker_worker_text_similarity_lookup = text_similarity_lookup
+
+
+def _build_ranker_rows_for_person_worker(
+    payload: tuple[int, set[int], list[HobbyCandidate], int],
+) -> list[RankerRow]:
+    if _ranker_worker_reranker_config is None:
+        raise RuntimeError("ranker dataset worker was not initialized")
+    person_id, positive_hobby_ids, pool_candidates, seed = payload
+    return _build_ranker_rows_for_person(
+        person_id=person_id,
+        positive_hobby_ids=positive_hobby_ids,
+        pool_candidates=pool_candidates,
+        rng=random.Random(seed),
+        all_hobby_ids=_ranker_worker_all_hobby_ids,
+        known_by_person=_ranker_worker_known_by_person,
+        id_to_hobby=_ranker_worker_id_to_hobby,
+        contexts=_ranker_worker_contexts,
+        id_to_person=_ranker_worker_id_to_person,
+        hobby_profile=_ranker_worker_hobby_profile,
+        reranker_config=_ranker_worker_reranker_config,
+        neg_ratio=_ranker_worker_neg_ratio,
+        hard_ratio=_ranker_worker_hard_ratio,
+        include_text_embedding_feature=_ranker_worker_include_text_embedding_feature,
+        text_similarity_fn=None,
+        text_similarity_lookup=_ranker_worker_text_similarity_lookup,
+    )
+
+
+def _build_ranker_rows_for_person(
+    *,
+    person_id: int,
+    positive_hobby_ids: set[int],
+    pool_candidates: list[HobbyCandidate],
+    rng: random.Random,
+    all_hobby_ids: list[int],
+    known_by_person: dict[int, set[int]],
+    id_to_hobby: dict[int, str],
+    contexts: dict[str, PersonContext],
+    id_to_person: dict[int, str],
+    hobby_profile: dict[str, object],
+    reranker_config: RerankerConfig,
+    neg_ratio: int,
+    hard_ratio: float,
+    include_text_embedding_feature: bool,
+    text_similarity_fn: Callable[[int, HobbyCandidate], float] | None,
+    text_similarity_lookup: dict[int, dict[int, float]],
+) -> list[RankerRow]:
+    person_uuid = id_to_person.get(person_id)
+    if not person_uuid:
+        return []
+    context = contexts.get(person_uuid) or empty_person_context(person_uuid)
+    known_hobby_ids = known_by_person.get(person_id, set())
+    known_hobby_names = {id_to_hobby[h] for h in known_hobby_ids if h in id_to_hobby}
+    pool_hobby_ids = [c.hobby_id for c in pool_candidates]
+    pool_lookup: dict[int, HobbyCandidate] = {c.hobby_id: c for c in pool_candidates}
+    negatives = sample_negatives(
+        person_id=person_id,
+        positive_hobby_ids=positive_hobby_ids,
+        candidate_pool=pool_hobby_ids,
+        all_hobby_ids=all_hobby_ids,
+        known_hobby_ids=known_hobby_ids,
+        neg_ratio=neg_ratio,
+        hard_ratio=hard_ratio,
+        rng=rng,
+    )
+
+    def _make_candidate(hid: int) -> HobbyCandidate:
+        if hid in pool_lookup:
+            return pool_lookup[hid]
+        return HobbyCandidate(
+            hobby_id=hid,
+            hobby_name=id_to_hobby.get(hid, ""),
+            source_scores={},
+            raw_source_scores={},
+            reason_features={},
+        )
+
+    def _build_row(hid: int, label: int) -> RankerRow:
+        candidate = _make_candidate(hid)
+        text_embedding_similarity = 0.0
+        if include_text_embedding_feature:
+            if text_similarity_lookup:
+                text_embedding_similarity = float(text_similarity_lookup.get(person_id, {}).get(candidate.hobby_id, 0.0))
+            elif text_similarity_fn is not None:
                 try:
                     text_embedding_similarity = float(text_similarity_fn(person_id, candidate))
                 except Exception:
                     text_embedding_similarity = 0.0
+        features = build_rerank_features(
+            context,
+            candidate,
+            hobby_profile,
+            known_hobby_names,
+            reranker_config,
+            text_embedding_similarity=text_embedding_similarity,
+        )
+        features.pop("similar_person_score", None)
+        features.pop("persona_text_fit", None)
+        return RankerRow(person_id=person_id, hobby_id=hid, label=label, features=features)
 
-            features = build_rerank_features(
-                person_context,
-                candidate,
-                hobby_profile,
-                known_hobby_names,
-                reranker_config,
-                text_embedding_similarity=text_embedding_similarity,
-            )
-            features.pop("similar_person_score", None)
-            features.pop("persona_text_fit", None)
-            return RankerRow(person_id=person_id, hobby_id=hid, label=label, features=features)
-
-        for hobby_id in positive_hobby_ids:
-            rows.append(_build_row(hobby_id, 1))
-
-        for hobby_id in negatives:
-            rows.append(_build_row(hobby_id, 0))
-
-    return RankerDataset(rows=rows, feature_columns=feature_columns)
+    return [
+        *(_build_row(hobby_id, 1) for hobby_id in positive_hobby_ids),
+        *(_build_row(hobby_id, 0) for hobby_id in negatives),
+    ]
 
 
 class LightGBMRanker:

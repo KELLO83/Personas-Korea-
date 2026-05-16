@@ -12,7 +12,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 import numpy as np
-import pandas as pd
+import polars as pl
 
 from experiments.persona_similarity.scripts.common import (
     ensure_parent,
@@ -40,9 +40,9 @@ def iter_with_progress(items: list[dict[str, Any]], enabled: bool) -> Any:
     return tqdm(items, desc="building text corpus", unit="text")
 
 
-def build_text_records(personas: pd.DataFrame, progress: bool) -> list[dict[str, str]]:
+def build_text_records(personas: pl.DataFrame, progress: bool) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
-    for row in iter_with_progress(personas.to_dict(orient="records"), progress):
+    for row in iter_with_progress(personas.to_dicts(), progress):
         uuid = str(row["uuid"])
         for domain in TEXT_DOMAINS:
             text = build_domain_text(row, domain)
@@ -91,7 +91,7 @@ def main() -> None:
 
     os.environ.setdefault("OMP_NUM_THREADS", str(default_cpu_threads()))
     os.environ.setdefault("MKL_NUM_THREADS", str(default_cpu_threads()))
-    personas = pd.read_parquet(PROJECT_ROOT / config["paths"]["persona_texts"])
+    personas = pl.read_parquet(PROJECT_ROOT / config["paths"]["persona_texts"])
     records = build_text_records(personas, bool(text_config.get("progress", True)))
     texts = [record["text"] for record in records]
     empty_mask = np.array([not text.strip() for text in texts], dtype=bool)
@@ -132,7 +132,7 @@ def main() -> None:
             "device": device,
             "batch_size": batch_size,
             "embedding_rows": int(len(records)),
-            "persona_rows": int(personas["uuid"].nunique()),
+            "persona_rows": int(personas["uuid"].n_unique()),
             "domains": list(TEXT_DOMAINS.keys()),
             "empty_text_rows": int(empty_mask.sum()),
             "embedding_dim": int(embeddings.shape[1]) if embeddings.ndim == 2 else 0,

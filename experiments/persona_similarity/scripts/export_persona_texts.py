@@ -10,7 +10,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-import pandas as pd
+import polars as pl
 from neo4j import GraphDatabase
 
 from experiments.persona_similarity.scripts.common import ensure_parent, load_config, mark_cache_hit, should_use_cache, stable_json_hash, write_json
@@ -37,7 +37,7 @@ LIMIT coalesce($export_limit, 1000000000)
 """
 
 
-def export_persona_texts(config: dict[str, Any]) -> pd.DataFrame:
+def export_persona_texts(config: dict[str, Any]) -> pl.DataFrame:
     neo4j_config = config["neo4j"]
     driver = GraphDatabase.driver(settings.NEO4J_URI, auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD))
     try:
@@ -46,7 +46,7 @@ def export_persona_texts(config: dict[str, Any]) -> pd.DataFrame:
             rows = [dict(record) for record in records]
     finally:
         driver.close()
-    return pd.DataFrame(rows)
+    return pl.DataFrame(rows)
 
 
 def main() -> None:
@@ -68,14 +68,14 @@ def main() -> None:
     start_time = time.perf_counter()
     frame = export_persona_texts(config)
     output_path = ensure_parent(config["paths"]["persona_texts"])
-    frame.to_parquet(output_path, index=False)
+    frame.write_parquet(output_path)
     write_json(
         config["paths"]["persona_texts_status"],
         {
             **cache_metadata,
             "cache_hit": False,
             "cache_reason": cache_reason,
-            "rows": int(len(frame)),
+            "rows": int(frame.height),
             "columns": list(frame.columns),
             "export_seconds": time.perf_counter() - start_time,
         },

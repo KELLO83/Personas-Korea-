@@ -12,7 +12,7 @@ import subprocess
 import time
 import sys
 from collections import Counter, defaultdict
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Any, Iterable, Mapping, cast
 
@@ -110,6 +110,14 @@ FEATURE_CACHE_VERSION = 2
 _feature_worker_hobby_profile: dict[str, object] | None = None
 _feature_worker_reranker_config: Any = None
 _feature_worker_model_feature_columns: list[str] = []
+_ranking_worker_train_known: dict[int, set[int]] = {}
+_ranking_worker_id_to_hobby: dict[int, str] = {}
+_ranking_worker_id_to_person: dict[int, str] = {}
+_ranking_worker_contexts: dict[str, PersonContext] = {}
+_ranking_worker_hobby_profile: dict[str, object] | None = None
+_ranking_worker_reranker_config: Any = None
+_ranking_worker_hobby_taxonomy: dict[str, object] | None = None
+_ranking_worker_max_k = 10
 
 
 def _torch_module() -> Any:
@@ -154,6 +162,56 @@ def _build_feature_rows_for_person(payload: tuple[int, PersonContext, list[Any],
         rows.append([features.get(col, 0.0) for col in _feature_worker_model_feature_columns])
         hobby_ids.append(candidate.hobby_id)
     return person_id, rows, hobby_ids, False
+
+
+def _init_ranking_worker(
+    train_known: dict[int, set[int]],
+    id_to_hobby: dict[int, str],
+    id_to_person: dict[int, str],
+    contexts: dict[str, PersonContext],
+    hobby_profile: dict[str, object],
+    reranker_config: Any,
+    hobby_taxonomy: dict[str, object] | None,
+    max_k: int,
+) -> None:
+    global _ranking_worker_train_known
+    global _ranking_worker_id_to_hobby
+    global _ranking_worker_id_to_person
+    global _ranking_worker_contexts
+    global _ranking_worker_hobby_profile
+    global _ranking_worker_reranker_config
+    global _ranking_worker_hobby_taxonomy
+    global _ranking_worker_max_k
+    _ranking_worker_train_known = train_known
+    _ranking_worker_id_to_hobby = id_to_hobby
+    _ranking_worker_id_to_person = id_to_person
+    _ranking_worker_contexts = contexts
+    _ranking_worker_hobby_profile = hobby_profile
+    _ranking_worker_reranker_config = reranker_config
+    _ranking_worker_hobby_taxonomy = hobby_taxonomy
+    _ranking_worker_max_k = max_k
+
+
+def _build_stage1_v1_rankings_for_person(payload: tuple[int, list[Any]]) -> tuple[int, list[int], list[int], list[int]]:
+    if _ranking_worker_hobby_profile is None or _ranking_worker_reranker_config is None:
+        raise RuntimeError("ranking worker was not initialized")
+    person_id, hobby_candidates = payload
+    candidate_ranking = [candidate.hobby_id for candidate in hobby_candidates]
+    known = _ranking_worker_train_known.get(person_id, set())
+    known_names = {
+        _ranking_worker_id_to_hobby[hobby_id]
+        for hobby_id in known
+        if hobby_id in _ranking_worker_id_to_hobby
+    }
+    reranked = rerank_candidates(
+        _ranking_worker_contexts.get(_ranking_worker_id_to_person.get(person_id, "")),
+        hobby_candidates,
+        _ranking_worker_hobby_profile,
+        known_names,
+        _ranking_worker_reranker_config,
+        hobby_taxonomy=_ranking_worker_hobby_taxonomy,
+    )
+    return person_id, candidate_ranking, candidate_ranking[:_ranking_worker_max_k], [c.hobby_id for c in reranked[:_ranking_worker_max_k]]
 
 
 def parse_args() -> argparse.Namespace:
@@ -219,8 +277,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--progress-mode",
         choices=["auto", "on", "off"],
-        default="off",
-        help="Progress output mode: off (default), auto (tty only), on (always).",
+        default="on",
+        help="Progress output mode: on (default), auto (tty only), off.",
     )
     parser.add_argument("--progress-mininterval", type=float, default=5.0, help="Minimum seconds between progress updates")
     parser.add_argument("--progress-maxinterval", type=float, default=30.0, help="Maximum seconds between progress updates")
@@ -230,6 +288,18 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=0,
         help="CPU threads for PyTorch/LightGBM predict. Use 0 to auto-detect logical CPUs.",
+    )
+    parser.add_argument(
+        "--feature-build-parallelism",
+        choices=["auto", "process", "serial"],
+        default="auto",
+        help="Parallel backend for CPU-bound feature row construction. auto uses process workers on Python 3.11.",
+    )
+    parser.add_argument(
+        "--ranking-build-parallelism",
+        choices=["auto", "process", "serial"],
+        default="auto",
+        help="Parallel backend for Stage1/V1 ranking construction. auto uses process workers on Python 3.11.",
     )
     return parser.parse_args()
 
@@ -265,10 +335,20 @@ def _resolve_system_resource_plan(args: argparse.Namespace) -> dict[str, object]
         "gpu_total_vram_mb": gpu_total_mb,
         "gpu_used_vram_mb": gpu_used_mb,
         "gpu_free_vram_mb": gpu_free_mb,
-        "feature_builder_parallelism": "auto_process_or_thread_by_feature_policy",
+        "feature_builder_parallelism": "auto_process_for_python311",
+        "ranking_builder_parallelism": "auto_process_for_python311",
         "lightgbm_predict_threads": cpu_threads,
         "torch_threads": cpu_threads,
     }
+
+
+def _resolve_parallel_backend(value: str) -> str:
+    backend = str(value or "auto").strip().lower()
+    if backend == "auto":
+        return "process"
+    if backend not in {"process", "serial"}:
+        raise ValueError(f"Unsupported parallel backend: {value}")
+    return backend
 
 
 def _apply_cpu_resource_plan(plan: Mapping[str, object]) -> None:
@@ -820,31 +900,71 @@ def main() -> None:
         )
         return
 
+    ranking_parallelism = _resolve_parallel_backend(args.ranking_build_parallelism)
     LOGGER.info(
-        "Starting Stage1/V1 ranking build: persons=%s skip_v1=%s",
+        "Starting Stage1/V1 ranking build: persons=%s skip_v1=%s workers=%s backend=%s",
         len(truth_person_ids),
         args.skip_v1,
+        int(system_resource_plan["cpu_threads"]) if not args.skip_v1 else 1,
+        ranking_parallelism,
     )
     candidate_rank_start = time.perf_counter()
-    for person_id in _iter_with_progress(args, truth_person_ids, desc=f"rank candidates ({args.split})"):
-        hobby_candidates = pools_by_person.get(person_id, [])
-        candidate_rankings[person_id] = [c.hobby_id for c in hobby_candidates]
-        stage1_rankings[person_id] = candidate_rankings[person_id][:max_k]
-        if args.skip_v1:
+    if args.skip_v1:
+        for person_id in _iter_with_progress(args, truth_person_ids, desc=f"rank candidates ({args.split})"):
+            candidate_rankings[person_id] = [c.hobby_id for c in pools_by_person.get(person_id, [])]
+            stage1_rankings[person_id] = candidate_rankings[person_id][:max_k]
             v1_rankings[person_id] = []
-            continue
-
-        known = train_known.get(person_id, set())
-        known_names = {id_to_hobby[hid] for hid in known if hid in id_to_hobby}
-        reranked = rerank_candidates(
-            contexts.get(id_to_person.get(person_id, "")),
-            hobby_candidates,
-            hobby_profile,
-            known_names,
-            reranker_config,
-            hobby_taxonomy=hobby_taxonomy,
-        )
-        v1_rankings[person_id] = [c.hobby_id for c in reranked[:max_k]]
+    else:
+        ranking_worker_count = max(1, int(system_resource_plan["cpu_threads"]))
+        if ranking_parallelism == "serial":
+            ranking_worker_count = 1
+        ranking_payloads = [(person_id, pools_by_person.get(person_id, [])) for person_id in truth_person_ids]
+        ranking_chunksize = max(1, min(64, len(ranking_payloads) // (ranking_worker_count * 4) if ranking_worker_count else 1))
+        if ranking_worker_count > 1:
+            with ProcessPoolExecutor(
+                max_workers=ranking_worker_count,
+                initializer=_init_ranking_worker,
+                initargs=(
+                    train_known,
+                    id_to_hobby,
+                    id_to_person,
+                    contexts,
+                    hobby_profile,
+                    reranker_config,
+                    hobby_taxonomy,
+                    max_k,
+                ),
+            ) as executor:
+                results = executor.map(_build_stage1_v1_rankings_for_person, ranking_payloads, chunksize=ranking_chunksize)
+                for person_id, candidate_ranking, stage1_ranking, v1_ranking in _iter_with_progress(
+                    args,
+                    results,
+                    desc=f"rank candidates ({args.split})",
+                    total_count=len(ranking_payloads),
+                ):
+                    candidate_rankings[person_id] = candidate_ranking
+                    stage1_rankings[person_id] = stage1_ranking
+                    v1_rankings[person_id] = v1_ranking
+        else:
+            _init_ranking_worker(
+                train_known,
+                id_to_hobby,
+                id_to_person,
+                contexts,
+                hobby_profile,
+                reranker_config,
+                hobby_taxonomy,
+                max_k,
+            )
+            for person_id, candidate_ranking, stage1_ranking, v1_ranking in _iter_with_progress(
+                args,
+                (_build_stage1_v1_rankings_for_person(payload) for payload in ranking_payloads),
+                desc=f"rank candidates ({args.split})",
+                total_count=len(ranking_payloads),
+            ):
+                candidate_rankings[person_id] = candidate_ranking
+                stage1_rankings[person_id] = stage1_ranking
+                v1_rankings[person_id] = v1_ranking
     LOGGER.info(
         "Stage1/V1 ranking build done: persons=%s seconds=%.3f",
         len(candidate_rankings),
@@ -879,20 +999,22 @@ def main() -> None:
         fallback_person_ids = []
 
         feature_worker_count = max(1, int(system_resource_plan["cpu_threads"]))
-        use_threaded_feature_build = feature_worker_count > 1 and text_similarity_fn is None
-        use_parallel_feature_build = feature_worker_count > 1 and text_similarity_fn is not None
+        feature_parallelism = _resolve_parallel_backend(args.feature_build_parallelism)
+        if feature_parallelism == "serial":
+            feature_worker_count = 1
+        use_parallel_feature_build = feature_worker_count > 1 and feature_parallelism == "process"
         LOGGER.info(
-            "Starting feature row build: persons=%s candidate_rows=%s feature_columns=%s text_lookup_pairs=%s process_parallel=%s thread_parallel=%s workers=%s",
+            "Starting feature row build: persons=%s candidate_rows=%s feature_columns=%s text_lookup_pairs=%s parallel=%s workers=%s backend=%s",
             len(truth_person_ids),
             candidate_pool_row_count,
             len(model_feature_columns),
             sum(len(values) for values in text_similarity_lookup.values()),
             use_parallel_feature_build,
-            use_threaded_feature_build,
-            feature_worker_count if use_parallel_feature_build or use_threaded_feature_build else 1,
+            feature_worker_count if use_parallel_feature_build else 1,
+            feature_parallelism,
         )
         feature_build_start = time.perf_counter()
-        if use_parallel_feature_build or use_threaded_feature_build:
+        if use_parallel_feature_build:
             feature_payloads = [
                 (
                     person_id,
@@ -903,52 +1025,30 @@ def main() -> None:
                 )
                 for person_id in truth_person_ids
             ]
-            if use_threaded_feature_build:
-                _init_feature_worker(hobby_profile, reranker_config, model_feature_columns)
-                with ThreadPoolExecutor(max_workers=feature_worker_count) as executor:
-                    results = executor.map(_build_feature_rows_for_person, feature_payloads)
-                    for person_id, rows, hobby_ids_list, is_fallback in _iter_with_progress(
-                        args,
-                        results,
-                        desc=f"features ({args.split})",
-                        total_count=len(feature_payloads),
-                    ):
-                        if is_fallback:
-                            fallback_person_ids.append(person_id)
-                            v2_fallback_count += 1
-                            continue
-                        start = feature_row_offset
-                        row_count = len(rows)
-                        if row_count:
-                            feature_matrix[start : start + row_count] = np.asarray(rows, dtype=np.float32)
-                            feature_row_offset += row_count
-                        person_to_feature_slice[person_id] = (start, feature_row_offset)
-                        hobby_ids_by_person[person_id] = hobby_ids_list
-            else:
-                chunksize = max(1, min(64, len(feature_payloads) // (feature_worker_count * 4) if feature_worker_count else 1))
-                with ProcessPoolExecutor(
-                    max_workers=feature_worker_count,
-                    initializer=_init_feature_worker,
-                    initargs=(hobby_profile, reranker_config, model_feature_columns),
-                ) as executor:
-                    results = executor.map(_build_feature_rows_for_person, feature_payloads, chunksize=chunksize)
-                    for person_id, rows, hobby_ids_list, is_fallback in _iter_with_progress(
-                        args,
-                        results,
-                        desc=f"features ({args.split})",
-                        total_count=len(feature_payloads),
-                    ):
-                        if is_fallback:
-                            fallback_person_ids.append(person_id)
-                            v2_fallback_count += 1
-                            continue
-                        start = feature_row_offset
-                        row_count = len(rows)
-                        if row_count:
-                            feature_matrix[start : start + row_count] = np.asarray(rows, dtype=np.float32)
-                            feature_row_offset += row_count
-                        person_to_feature_slice[person_id] = (start, feature_row_offset)
-                        hobby_ids_by_person[person_id] = hobby_ids_list
+            chunksize = max(1, min(64, len(feature_payloads) // (feature_worker_count * 4) if feature_worker_count else 1))
+            with ProcessPoolExecutor(
+                max_workers=feature_worker_count,
+                initializer=_init_feature_worker,
+                initargs=(hobby_profile, reranker_config, model_feature_columns),
+            ) as executor:
+                results = executor.map(_build_feature_rows_for_person, feature_payloads, chunksize=chunksize)
+                for person_id, rows, hobby_ids_list, is_fallback in _iter_with_progress(
+                    args,
+                    results,
+                    desc=f"features ({args.split})",
+                    total_count=len(feature_payloads),
+                ):
+                    if is_fallback:
+                        fallback_person_ids.append(person_id)
+                        v2_fallback_count += 1
+                        continue
+                    start = feature_row_offset
+                    row_count = len(rows)
+                    if row_count:
+                        feature_matrix[start : start + row_count] = np.asarray(rows, dtype=np.float32)
+                        feature_row_offset += row_count
+                    person_to_feature_slice[person_id] = (start, feature_row_offset)
+                    hobby_ids_by_person[person_id] = hobby_ids_list
         else:
             for person_id in _iter_with_progress(args, truth_person_ids, desc=f"features ({args.split})"):
                 person_uuid = id_to_person.get(person_id, "")

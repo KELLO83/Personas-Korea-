@@ -208,6 +208,7 @@ def main() -> None:
     hobby_embedding_cache: HobbyEmbeddingCache | None = None
     person_masked_text: dict[int, str] = {}
     person_audit_pass: dict[int, bool] = {}
+    text_similarity_lookup: dict[int, dict[int, float]] = {}
     kure_device = ""
     embedding_resource_plan: dict[str, object] = {}
     effective_text_batch_size = 0
@@ -505,26 +506,40 @@ def main() -> None:
     if args.reg_lambda is not None:
         params["reg_lambda"] = args.reg_lambda
 
-    print(f"[progress] Building ranker train dataset (neg_ratio={args.neg_ratio}, hard_ratio={args.hard_ratio})...", flush=True)
+    print(
+        f"[progress] Building ranker train dataset with process workers={cpu_threads} "
+        f"(neg_ratio={args.neg_ratio}, hard_ratio={args.hard_ratio})...",
+        flush=True,
+    )
     train_ds = build_ranker_dataset(
         ranker_train_edges, pools, all_hobby_ids, train_known,
         id_to_hobby, contexts, id_to_person, hobby_profile, reranker_config,
         neg_ratio=args.neg_ratio, hard_ratio=args.hard_ratio, seed=args.seed,
         include_source_features=args.include_source_features,
         include_text_embedding_feature=args.include_text_embedding_feature,
-        text_similarity_fn=text_similarity_fn,
+        text_similarity_fn=None,
+        text_similarity_lookup=text_similarity_lookup,
+        parallel_workers=cpu_threads,
+        parallel_backend="process",
+        show_progress=True,
+        progress_desc="ranker train rows",
     )
     train_pos = sum(1 for r in train_ds.rows if r.label == 1)
     print(f"  rows={len(train_ds.rows)} pos={train_pos} neg={len(train_ds.rows) - train_pos}")
 
-    print("[progress] Building ranker val dataset...", flush=True)
+    print(f"[progress] Building ranker val dataset with process workers={cpu_threads}...", flush=True)
     val_ds = build_ranker_dataset(
         ranker_val_edges, pools, all_hobby_ids, train_known,
         id_to_hobby, contexts, id_to_person, hobby_profile, reranker_config,
         neg_ratio=args.neg_ratio, hard_ratio=args.hard_ratio, seed=args.seed + 1,
         include_source_features=args.include_source_features,
         include_text_embedding_feature=args.include_text_embedding_feature,
-        text_similarity_fn=text_similarity_fn,
+        text_similarity_fn=None,
+        text_similarity_lookup=text_similarity_lookup,
+        parallel_workers=cpu_threads,
+        parallel_backend="process",
+        show_progress=True,
+        progress_desc="ranker validation rows",
     )
     val_pos = sum(1 for r in val_ds.rows if r.label == 1)
     print(f"  rows={len(val_ds.rows)} pos={val_pos} neg={len(val_ds.rows) - val_pos}")
@@ -603,6 +618,8 @@ def main() -> None:
             "requested_cpu_threads": requested_cpu_threads,
             "cpu_threads": cpu_threads,
             "lightgbm_train_threads": cpu_threads,
+            "ranker_dataset_parallel_backend": "process",
+            "ranker_dataset_process_workers": cpu_threads,
         },
         "embedding_model_metadata_path": str(output_dir / "embedding_model_metadata.json"),
         "embedding_model_metadata": embedding_model_metadata,
