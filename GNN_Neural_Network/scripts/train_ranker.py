@@ -40,7 +40,9 @@ from GNN_Neural_Network.gnn_recommender.embedding_cache import HobbyEmbeddingCac
 from GNN_Neural_Network.gnn_recommender.ranker import (
     LightGBMRanker,
     RANKER_DOMAIN_TEXT_FEATURE_COLUMNS,
+    RANKER_TEXT_RANK_MARGIN_FEATURE_COLUMNS,
     build_ranker_dataset,
+    build_text_rank_margin_lookup,
     create_lambda_rank_dataset,
     load_or_build_candidate_pool,
     get_candidate_pool_cache_key,
@@ -68,6 +70,17 @@ def parse_args() -> argparse.Namespace:
         "--include-domain-text-embedding-features",
         action="store_true",
         help="Enable E5 domain-specific Stage2 text similarity features in addition to text_embedding_similarity.",
+    )
+    parser.add_argument(
+        "--include-text-rank-margin-features",
+        action="store_true",
+        help="Enable within-candidate-pool E5 similarity rank, percentile, and gap features.",
+    )
+    parser.add_argument(
+        "--candidate-text-builder",
+        choices=["name_only", "name_plus_aliases", "name_plus_category", "name_plus_short_description"],
+        default="name_only",
+        help="Candidate hobby text builder for Stage2 embedding features.",
     )
     parser.add_argument("--stage1-kure-semantic-provider", action="store_true", help="Enable opt-in KURE-v1 Stage1 semantic candidate provider")
     parser.add_argument("--stage1-kure-score-batch-size", type=int, default=128, help="Person batch size for KURE Stage1 semantic scoring")
@@ -151,7 +164,7 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
     _configure_third_party_logging()
     args = parse_args()
-    if args.include_domain_text_embedding_features:
+    if args.include_domain_text_embedding_features or args.include_text_rank_margin_features:
         args.include_text_embedding_feature = True
     start_time = time.perf_counter()
     text_embedding_model_name = str(args.text_embedding_model_name or KURE_MODEL_NAME).strip() or KURE_MODEL_NAME
@@ -178,6 +191,20 @@ def main() -> None:
     hobby_to_id = _expect_mapping(checkpoint.get("hobby_to_id"), "hobby_to_id")
     id_to_hobby = {v: k for k, v in hobby_to_id.items()}
     id_to_person = {v: k for k, v in person_to_id.items()}
+    hobby_profile_for_text = load_json(config.paths.hobby_profile) if config.paths.hobby_profile.exists() else {}
+    hobby_taxonomy_for_text = load_json(config.paths.hobby_taxonomy) if config.paths.hobby_taxonomy.exists() else {}
+    hobby_aliases_for_text = (
+        _build_hobby_alias_map(config.paths.hobby_aliases, set(id_to_hobby.values()))
+        if config.paths.hobby_aliases.exists()
+        else {}
+    )
+    candidate_text_by_id = _build_candidate_text_by_id(
+        id_to_hobby=id_to_hobby,
+        hobby_profile=hobby_profile_for_text,
+        hobby_taxonomy=hobby_taxonomy_for_text,
+        alias_map=hobby_aliases_for_text,
+        builder=args.candidate_text_builder,
+    )
 
     train_edges = _read_indexed_edges(config.paths.train_edges)
     val_edges = _read_indexed_edges(config.paths.validation_edges)
@@ -226,6 +253,7 @@ def main() -> None:
     person_audit_pass: dict[int, bool] = {}
     text_similarity_lookup: dict[int, dict[int, float]] = {}
     domain_similarity_lookup: dict[int, dict[int, dict[str, float]]] = {}
+    text_rank_margin_lookup: dict[int, dict[int, dict[str, float]]] = {}
     kure_device = ""
     embedding_resource_plan: dict[str, object] = {}
     effective_text_batch_size = 0
@@ -344,9 +372,11 @@ def main() -> None:
             "data_split": data_split,
             "input_config_summary": input_config_summary,
             "feature_policy": {
-            "include_source_features": args.include_source_features,
-            "include_text_embedding_feature": True,
-            "include_domain_text_embedding_features": args.include_domain_text_embedding_features,
+                "include_source_features": args.include_source_features,
+                "include_text_embedding_feature": True,
+                "include_domain_text_embedding_features": args.include_domain_text_embedding_features,
+                "include_text_rank_margin_features": args.include_text_rank_margin_features,
+                "candidate_text_builder": args.candidate_text_builder,
             },
             "text_leakage_audit_path": str(text_leakage_audit_path),
             "text_leakage_audit": disabled_summary,
@@ -479,6 +509,7 @@ def main() -> None:
             person_embedding_cache=person_embedding_cache,
             hobby_embedding_cache=hobby_embedding_cache,
             id_to_hobby=id_to_hobby,
+            candidate_text_by_id=candidate_text_by_id,
             candidate_pools=pools,
             show_progress_bar=show_progress,
         )
@@ -489,6 +520,7 @@ def main() -> None:
                 person_embedding_cache=person_embedding_cache,
                 hobby_embedding_cache=hobby_embedding_cache,
                 candidate_pools=pools,
+                candidate_text_by_id=candidate_text_by_id,
             )
             if args.include_domain_text_embedding_features:
                 domain_similarity_lookup = _build_domain_similarity_lookup(
@@ -497,10 +529,17 @@ def main() -> None:
                     person_embedding_cache=person_embedding_cache,
                     hobby_embedding_cache=hobby_embedding_cache,
                     candidate_pools=pools,
+                    candidate_text_by_id=candidate_text_by_id,
                 )
                 text_leakage_audit["domain_similarity_lookup_person_count"] = len(domain_similarity_lookup)
                 text_leakage_audit["domain_similarity_lookup_pair_count"] = sum(
                     len(values) for values in domain_similarity_lookup.values()
+                )
+            if args.include_text_rank_margin_features:
+                text_rank_margin_lookup = build_text_rank_margin_lookup(pools, text_similarity_lookup)
+                text_leakage_audit["text_rank_margin_lookup_person_count"] = len(text_rank_margin_lookup)
+                text_leakage_audit["text_rank_margin_lookup_pair_count"] = sum(
+                    len(values) for values in text_rank_margin_lookup.values()
                 )
 
             def _lookup_text_similarity(person_id: int, candidate: HobbyCandidate) -> float:
@@ -551,9 +590,11 @@ def main() -> None:
         include_source_features=args.include_source_features,
         include_text_embedding_feature=args.include_text_embedding_feature,
         include_domain_text_embedding_features=args.include_domain_text_embedding_features,
+        include_text_rank_margin_features=args.include_text_rank_margin_features,
         text_similarity_fn=None,
         text_similarity_lookup=text_similarity_lookup,
         domain_similarity_lookup=domain_similarity_lookup,
+        text_rank_margin_lookup=text_rank_margin_lookup,
         parallel_workers=cpu_threads,
         parallel_backend="thread",
         show_progress=True,
@@ -570,9 +611,11 @@ def main() -> None:
         include_source_features=args.include_source_features,
         include_text_embedding_feature=args.include_text_embedding_feature,
         include_domain_text_embedding_features=args.include_domain_text_embedding_features,
+        include_text_rank_margin_features=args.include_text_rank_margin_features,
         text_similarity_fn=None,
         text_similarity_lookup=text_similarity_lookup,
         domain_similarity_lookup=domain_similarity_lookup,
+        text_rank_margin_lookup=text_rank_margin_lookup,
         parallel_workers=cpu_threads,
         parallel_backend="thread",
         show_progress=True,
@@ -628,6 +671,7 @@ def main() -> None:
         "val_rows": len(val_ds.rows),
         "feature_columns": train_ds.feature_columns,
         "include_source_features": args.include_source_features,
+        "candidate_text_builder": args.candidate_text_builder,
         "experiment_id": args.experiment_id,
         "status": "trained",
         "runtime_seconds": runtime_seconds,
@@ -638,8 +682,9 @@ def main() -> None:
         "lightgbm_params": params,
         "text_leakage_audit_path": str(text_leakage_audit_path),
         "text_leakage_audit": {
-            "enabled": args.include_text_embedding_feature or args.include_domain_text_embedding_features,
+            "enabled": args.include_text_embedding_feature or args.include_domain_text_embedding_features or args.include_text_rank_margin_features,
             "include_domain_text_embedding_features": args.include_domain_text_embedding_features,
+            "include_text_rank_margin_features": args.include_text_rank_margin_features,
             "pass": bool(text_leakage_audit.get("pass", False)),
             "failed_person_count": int(text_leakage_audit.get("failed_person_count", 0)),
             "passed_person_count": int(text_leakage_audit.get("passed_person_count", 0)),
@@ -650,6 +695,10 @@ def main() -> None:
             "include_domain_text_embedding_features": any(
                 column in train_ds.feature_columns for column in RANKER_DOMAIN_TEXT_FEATURE_COLUMNS
             ),
+            "include_text_rank_margin_features": any(
+                column in train_ds.feature_columns for column in RANKER_TEXT_RANK_MARGIN_FEATURE_COLUMNS
+            ),
+            "candidate_text_builder": args.candidate_text_builder,
         },
         "candidate_pool_policy": candidate_pool_policy,
         "stage1_kure_semantic_provider": stage1_kure_metadata,
@@ -920,6 +969,73 @@ def _build_hobby_alias_map(alias_map_path: Path, valid_hobby_names: set[str]) ->
     return {canonical: sorted(aliases) for canonical, aliases in canonical_to_aliases.items()}
 
 
+def _build_candidate_text_by_id(
+    *,
+    id_to_hobby: dict[int, str],
+    hobby_profile: dict[str, object],
+    hobby_taxonomy: dict[str, object],
+    alias_map: dict[str, list[str]],
+    builder: str,
+) -> dict[int, str]:
+    categories = _build_hobby_categories(id_to_hobby, hobby_taxonomy)
+    hobbies_profile = hobby_profile.get("hobbies", {}) if isinstance(hobby_profile, dict) else {}
+    hobbies_profile = hobbies_profile if isinstance(hobbies_profile, dict) else {}
+    output: dict[int, str] = {}
+    for hobby_id, hobby_name in id_to_hobby.items():
+        parts = [str(hobby_name)]
+        normalized_name = normalize_hobby_name(hobby_name)
+        if builder in {"name_plus_aliases", "name_plus_short_description"}:
+            aliases = [alias for alias in alias_map.get(normalized_name, []) if alias and alias != normalized_name]
+            if aliases:
+                parts.append("aliases: " + ", ".join(aliases[:8]))
+        if builder in {"name_plus_category", "name_plus_short_description"}:
+            category = categories.get(hobby_id, "")
+            if category:
+                parts.append("category: " + category)
+        if builder == "name_plus_short_description":
+            profile_entry = hobbies_profile.get(hobby_name, {})
+            if isinstance(profile_entry, dict):
+                description = (
+                    profile_entry.get("short_description")
+                    or profile_entry.get("description")
+                    or profile_entry.get("summary")
+                    or ""
+                )
+                if description:
+                    parts.append("description: " + str(description))
+        output[hobby_id] = " | ".join(part for part in parts if part)
+    return output
+
+
+def _build_hobby_categories(
+    id_to_hobby: dict[int, str],
+    hobby_taxonomy: dict[str, object],
+) -> dict[int, str]:
+    taxonomy_map = hobby_taxonomy.get("taxonomy", {}) if isinstance(hobby_taxonomy, dict) else {}
+    rules = hobby_taxonomy.get("rules", []) if isinstance(hobby_taxonomy, dict) else []
+    result: dict[int, str] = {}
+    for hobby_id, hobby_name in id_to_hobby.items():
+        category = ""
+        subcategory = ""
+        if isinstance(taxonomy_map, dict):
+            entry = taxonomy_map.get(hobby_name, {})
+            if isinstance(entry, dict):
+                category = str(entry.get("category", "") or "")
+                subcategory = str(entry.get("subcategory", "") or "")
+        if not category and isinstance(rules, list):
+            for rule in rules:
+                if isinstance(rule, dict) and rule.get("canonical_hobby") == hobby_name:
+                    tax = rule.get("taxonomy", {})
+                    if isinstance(tax, dict):
+                        category = str(tax.get("category", "") or "")
+                        subcategory = str(tax.get("subcategory", "") or "")
+                    break
+        value = " > ".join(part for part in [category, subcategory] if part)
+        if value:
+            result[hobby_id] = value
+    return result
+
+
 def _safe_cosine_similarity(vector_a: Any, vector_b: Any) -> float:
     arr_a = np.asarray(vector_a, dtype=np.float32).reshape(-1)
     arr_b = np.asarray(vector_b, dtype=np.float32).reshape(-1)
@@ -978,6 +1094,7 @@ def _prewarm_text_embedding_caches(
     person_embedding_cache: PersonEmbeddingCache,
     hobby_embedding_cache: HobbyEmbeddingCache,
     id_to_hobby: dict[int, str],
+    candidate_text_by_id: dict[int, str],
     candidate_pools: dict[int, list[HobbyCandidate]],
     show_progress_bar: bool = False,
 ) -> None:
@@ -993,11 +1110,12 @@ def _prewarm_text_embedding_caches(
             progress_desc="Text persona embeddings (train)",
         )
 
-    hobby_names = set(id_to_hobby.values())
+    hobby_names = {candidate_text_by_id.get(hobby_id, hobby_name) for hobby_id, hobby_name in id_to_hobby.items()}
     for candidates in candidate_pools.values():
         for candidate in candidates:
-            if candidate.hobby_name:
-                hobby_names.add(candidate.hobby_name)
+            candidate_text = candidate_text_by_id.get(candidate.hobby_id, candidate.hobby_name)
+            if candidate_text:
+                hobby_names.add(candidate_text)
     if hobby_names:
         LOGGER.info("Prewarming text hobby embeddings: %s unique hobbies", len(hobby_names))
         hobby_embedding_cache.encode_batch(
@@ -1014,6 +1132,7 @@ def _build_text_similarity_lookup(
     person_embedding_cache: PersonEmbeddingCache,
     hobby_embedding_cache: HobbyEmbeddingCache,
     candidate_pools: dict[int, list[HobbyCandidate]],
+    candidate_text_by_id: dict[int, str],
 ) -> dict[int, dict[int, float]]:
     start_time = time.perf_counter()
     lookup: dict[int, dict[int, float]] = {}
@@ -1028,7 +1147,7 @@ def _build_text_similarity_lookup(
 
     for candidates in candidate_pools.values():
         for candidate in candidates:
-            candidate_name = (candidate.hobby_name or "").strip()
+            candidate_name = (candidate_text_by_id.get(candidate.hobby_id, candidate.hobby_name) or "").strip()
             if candidate.hobby_id in hobby_vectors or not candidate_name:
                 continue
             vector = hobby_embedding_cache.get(candidate_name)
@@ -1067,6 +1186,7 @@ def _build_domain_similarity_lookup(
     person_embedding_cache: PersonEmbeddingCache,
     hobby_embedding_cache: HobbyEmbeddingCache,
     candidate_pools: dict[int, list[HobbyCandidate]],
+    candidate_text_by_id: dict[int, str],
 ) -> dict[int, dict[int, dict[str, float]]]:
     start_time = time.perf_counter()
     lookup: dict[int, dict[int, dict[str, float]]] = {}
@@ -1094,7 +1214,7 @@ def _build_domain_similarity_lookup(
 
     for candidates in candidate_pools.values():
         for candidate in candidates:
-            candidate_name = (candidate.hobby_name or "").strip()
+            candidate_name = (candidate_text_by_id.get(candidate.hobby_id, candidate.hobby_name) or "").strip()
             if candidate.hobby_id in hobby_vectors or not candidate_name:
                 continue
             vector = hobby_embedding_cache.get(candidate_name)

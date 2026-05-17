@@ -16,10 +16,12 @@ from GNN_Neural_Network.gnn_recommender.ranker import (
     RANKER_FEATURE_COLUMNS,
     RANKER_FEATURE_COLUMNS_WITH_SOURCE,
     RANKER_FEATURE_COLUMNS_WITH_TEXT_AND_DOMAIN,
+    RANKER_TEXT_RANK_MARGIN_FEATURE_COLUMNS,
     LightGBMRanker,
     RankerDataset,
     RankerRow,
     build_ranker_dataset,
+    build_text_rank_margin_lookup,
     load_or_build_candidate_pool,
     get_candidate_pool_cache_key,
     get_ranker_categorical_features,
@@ -286,6 +288,32 @@ class TestBuildRankerDataset:
         assert row_by_hobby[100].features["e5_food_similarity"] == 0.2
         for column in RANKER_DOMAIN_TEXT_FEATURE_COLUMNS:
             assert column in ds.feature_columns
+
+    def test_text_rank_margin_features_added_when_enabled(self) -> None:
+        args = self._make_fixtures()
+        candidate_pools = args[1]
+        text_lookup = {0: {100: 0.9, 103: 0.3, 104: 0.6}}
+        rank_lookup = build_text_rank_margin_lookup(candidate_pools, text_lookup)
+        assert rank_lookup[0][100]["e5_similarity_rank"] == 1.0
+        assert rank_lookup[0][104]["e5_similarity_rank"] == 2.0
+        assert rank_lookup[0][103]["e5_similarity_percentile"] == 0.0
+        ds = build_ranker_dataset(
+            *args,
+            neg_ratio=1,
+            seed=42,
+            include_text_embedding_feature=True,
+            include_domain_text_embedding_features=True,
+            include_text_rank_margin_features=True,
+            text_similarity_lookup=text_lookup,
+            domain_similarity_lookup={},
+            text_rank_margin_lookup=rank_lookup,
+        )
+        for column in RANKER_TEXT_RANK_MARGIN_FEATURE_COLUMNS:
+            assert column in ds.feature_columns
+        row_by_hobby = {row.hobby_id: row for row in ds.rows}
+        assert row_by_hobby[100].features["e5_similarity_rank"] == 1.0
+        assert row_by_hobby[100].features["e5_similarity_percentile"] == 1.0
+        assert row_by_hobby[100].features["e5_similarity_gap_to_top"] == 0.0
 
 
 class TestLightGBMRanker:
