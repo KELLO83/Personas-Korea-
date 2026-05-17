@@ -377,6 +377,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--skip-v1", action="store_true", help="Skip v1 deterministic reranker evaluation")
     parser.add_argument("--max-persons", type=int, default=0, help="Optional split-person cap for fast pilot evaluation")
     parser.add_argument("--stage1-kure-semantic-provider", action="store_true", help="Enable opt-in KURE-v1 Stage1 semantic candidate provider")
+    parser.add_argument(
+        "--stage1-quota-experiment",
+        choices=["none", "similar_person", "e5_semantic"],
+        default="none",
+        help="Enable a fixed-k Stage1 quota experiment from PRD.md.",
+    )
     parser.add_argument("--stage1-kure-score-batch-size", type=int, default=128, help="Person batch size for KURE Stage1 semantic scoring")
     parser.add_argument("--pool-cache-dir", type=Path, default=None, help="Directory for candidate pool cache artifacts")
     parser.add_argument("--feature-cache-dir", type=Path, default=None, help="Directory for feature matrix cache artifacts")
@@ -656,8 +662,42 @@ def main() -> None:
     stage1_provider_cache_fingerprint = ""
     stage1_kure_semantic_scores: dict[int, dict[int, float]] | None = None
     stage1_kure_metadata: dict[str, object] = {"enabled": False}
+    stage1_extra_scores_by_provider: dict[str, dict[int, dict[int, float]]] = {}
+    stage1_provider_quotas: dict[str, int] | None = None
+    stage1_fill_order: tuple[str, ...] | None = None
+    stage1_backfill_order: tuple[str, ...] = ("cooccurrence", "popularity")
+    stage1_quota_metadata: dict[str, object] = {"enabled": False}
+    if args.stage1_quota_experiment == "similar_person":
+        stage1_provider_names = ("cooccurrence", "popularity", "similar_person")
+        stage1_provider_quotas = {"cooccurrence": 32, "popularity": 13, "similar_person": 5}
+        stage1_fill_order = ("cooccurrence", "popularity", "similar_person")
+        similar_scores, similar_metadata = _build_structured_similar_person_scores(
+            person_ids=truth_person_ids,
+            train_edges=train_edges,
+            train_known=train_known,
+            contexts=contexts,
+            id_to_person=id_to_person,
+            top_k=candidate_k,
+            disable_progress=args.progress_mode == "off",
+        )
+        stage1_extra_scores_by_provider["similar_person"] = similar_scores
+        stage1_quota_metadata = {
+            "enabled": True,
+            "experiment": "similar_person",
+            "providers": list(stage1_provider_names),
+            "quotas": stage1_provider_quotas,
+            "fill_order": list(stage1_fill_order),
+            "backfill_order": list(stage1_backfill_order),
+            "similar_person_provider": similar_metadata,
+        }
+        stage1_provider_cache_fingerprint = str(similar_metadata.get("fingerprint", ""))
+    if args.stage1_quota_experiment == "e5_semantic":
+        stage1_provider_names = ("cooccurrence", "popularity", "e5_semantic")
+        stage1_provider_quotas = {"cooccurrence": 35, "popularity": 12, "e5_semantic": 3}
+        stage1_fill_order = ("cooccurrence", "popularity", "e5_semantic")
     if args.stage1_kure_semantic_provider:
         stage1_provider_names = ("popularity", "cooccurrence", "kure_semantic")
+    if args.stage1_kure_semantic_provider or args.stage1_quota_experiment == "e5_semantic":
         hobby_aliases = _build_hobby_alias_map(config.paths.hobby_aliases, set(id_to_hobby.values())) if config.paths.hobby_aliases.exists() else {}
         stage1_text_payload = _prepare_text_leakage_context(
             person_ids=truth_person_ids,
@@ -677,14 +717,16 @@ def main() -> None:
         stage1_text_device = "cuda" if stage1_torch.cuda.is_available() else "cpu"
         stage1_person_embedding_cache = PersonEmbeddingCache(
             stage1_text_cache_dir,
-            model_name=KURE_MODEL_NAME,
+            model_name=text_embedding_model_name,
+            model_revision=text_embedding_model_revision,
             preprocessing_version=TEXT_EMBEDDING_PREPROCESSING_VERSION,
             batch_size=stage1_embedding_batch_size,
             device=stage1_text_device,
         )
         stage1_hobby_embedding_cache = HobbyEmbeddingCache(
             stage1_text_cache_dir,
-            model_name=KURE_MODEL_NAME,
+            model_name=text_embedding_model_name,
+            model_revision=text_embedding_model_revision,
             preprocessing_version=TEXT_EMBEDDING_PREPROCESSING_VERSION,
             batch_size=stage1_embedding_batch_size,
             device=stage1_text_device,
@@ -698,11 +740,23 @@ def main() -> None:
             candidate_k,
             score_batch_size=args.stage1_kure_score_batch_size,
             show_progress_bar=args.progress_mode != "off",
-            progress_desc=f"KURE Stage1 semantic scoring ({args.split})",
+            progress_desc=f"Stage1 semantic scoring ({args.split})",
         )
+        if args.stage1_quota_experiment == "e5_semantic":
+            stage1_extra_scores_by_provider["e5_semantic"] = stage1_kure_semantic_scores
         stage1_kure_metadata["text_audit"] = stage1_text_audit
         stage1_kure_metadata["resource_plan"] = stage1_embedding_plan
         stage1_provider_cache_fingerprint = str(stage1_kure_metadata.get("fingerprint", ""))
+        if args.stage1_quota_experiment == "e5_semantic":
+            stage1_quota_metadata = {
+                "enabled": True,
+                "experiment": "e5_semantic",
+                "providers": list(stage1_provider_names),
+                "quotas": stage1_provider_quotas,
+                "fill_order": list(stage1_fill_order or ()),
+                "backfill_order": list(stage1_backfill_order),
+                "semantic_provider": stage1_kure_metadata,
+            }
 
     _write_status(
         args,
@@ -805,6 +859,10 @@ def main() -> None:
         disable_progress=args.progress_mode == "off",
         stage1_providers=stage1_provider_names,
         semantic_scores_by_person=stage1_kure_semantic_scores,
+        extra_scores_by_provider=stage1_extra_scores_by_provider,
+        provider_quotas=stage1_provider_quotas,
+        fill_order=stage1_fill_order,
+        backfill_order=stage1_backfill_order,
         provider_cache_fingerprint=stage1_provider_cache_fingerprint,
     )
 
@@ -1563,6 +1621,7 @@ def main() -> None:
             "providers": list(stage1_provider_names),
             "metrics": stage1_metrics,
             "kure_semantic_provider": stage1_kure_metadata,
+            "quota_experiment": stage1_quota_metadata,
         },
         "v2_lightgbm_ranker": {
             "metrics": v2_metrics,
@@ -1611,15 +1670,15 @@ def main() -> None:
     }
     text_embedding_enabled = include_text_embedding_feature or include_domain_text_embedding_features
     embedding_model_metadata = _embedding_model_metadata(
-        enabled=text_embedding_enabled or args.stage1_kure_semantic_provider or (
+        enabled=text_embedding_enabled or args.stage1_kure_semantic_provider or args.stage1_quota_experiment == "e5_semantic" or (
             (args.use_mmr or args.use_dpp) and args.mmr_embedding_method == "kure"
         ),
         model_name=text_embedding_model_name,
         model_revision=text_embedding_model_revision,
-        cache_dir=text_cache_dir if (text_embedding_enabled or args.stage1_kure_semantic_provider) else mmr_cache_dir,
-        batch_size=effective_embedding_batch_size if (text_embedding_enabled or args.stage1_kure_semantic_provider) else mmr_embedding_batch_size,
-        device=text_device if (text_embedding_enabled or args.stage1_kure_semantic_provider) else str(mmr_embedding_plan.get("device", "")),
-        resource_plan=embedding_resource_plan if (text_embedding_enabled or args.stage1_kure_semantic_provider) else mmr_embedding_plan,
+        cache_dir=text_cache_dir if (text_embedding_enabled or args.stage1_kure_semantic_provider or args.stage1_quota_experiment == "e5_semantic") else mmr_cache_dir,
+        batch_size=effective_embedding_batch_size if (text_embedding_enabled or args.stage1_kure_semantic_provider or args.stage1_quota_experiment == "e5_semantic") else mmr_embedding_batch_size,
+        device=text_device if (text_embedding_enabled or args.stage1_kure_semantic_provider or args.stage1_quota_experiment == "e5_semantic") else str(mmr_embedding_plan.get("device", "")),
+        resource_plan=embedding_resource_plan if (text_embedding_enabled or args.stage1_kure_semantic_provider or args.stage1_quota_experiment == "e5_semantic") else mmr_embedding_plan,
     )
     payload["embedding_model_metadata"] = embedding_model_metadata
     if not args.skip_v1:
@@ -1634,6 +1693,9 @@ def main() -> None:
     save_json(embedding_metadata_path, embedding_model_metadata)
     payload["embedding_model_metadata_path"] = str(embedding_metadata_path)
     save_json(output_path, payload)
+    if args.stage1_quota_experiment != "none":
+        save_json(output_path.with_name("candidate_pool_policy.json"), _stage1_quota_candidate_pool_policy(candidate_pool_policy, stage1_quota_metadata))
+        save_json(output_path.with_name("provider_contribution.json"), _provider_contribution_summary(pools_by_person))
     print(f"\nResults saved: {output_path}")
     status_summary = {
         "phase": "metrics_done",
@@ -1671,6 +1733,8 @@ def main() -> None:
         input_config_summary=input_config_summary,
         summary=status_summary,
     )
+    if args.stage1_quota_experiment != "none":
+        save_json(output_path.with_name("status.json"), status_summary)
 
     print(f"\n{'='*60}")
     if args.use_dpp:
@@ -2186,6 +2250,130 @@ def _candidate_pool_policy(
         "normalization_method": normalization_method,
         "cache_key": cache_key,
         "cache_path": str(cache_path),
+    }
+
+
+def _build_structured_similar_person_scores(
+    person_ids: list[int],
+    train_edges: list[tuple[int, int]],
+    train_known: dict[int, set[int]],
+    contexts: dict[str, PersonContext],
+    id_to_person: dict[int, str],
+    top_k: int,
+    disable_progress: bool = False,
+) -> tuple[dict[int, dict[int, float]], dict[str, object]]:
+    fields = (
+        "age_group",
+        "sex",
+        "occupation",
+        "province",
+        "district",
+        "family_type",
+        "housing_type",
+        "education_level",
+    )
+    train_person_ids = sorted({person_id for person_id, _ in train_edges})
+    train_hobbies: dict[int, set[int]] = {}
+    for person_id, hobby_id in train_edges:
+        train_hobbies.setdefault(person_id, set()).add(hobby_id)
+
+    inverted: dict[tuple[str, str], dict[int, set[int]]] = {}
+    for train_person_id in train_person_ids:
+        context = contexts.get(id_to_person.get(train_person_id, ""))
+        if context is None:
+            continue
+        for field in fields:
+            value = str(getattr(context, field, "")).strip()
+            if not value:
+                continue
+            inverted.setdefault((field, value), {}).setdefault(train_person_id, set()).update(train_hobbies.get(train_person_id, set()))
+
+    scores_by_person: dict[int, dict[int, float]] = {}
+    neighbor_counts: list[int] = []
+    for person_id in tqdm(person_ids, desc="similar-person structured scoring", disable=disable_progress):
+        context = contexts.get(id_to_person.get(person_id, ""))
+        known = train_known.get(person_id, set())
+        if context is None:
+            scores_by_person[person_id] = {}
+            neighbor_counts.append(0)
+            continue
+        hobby_scores: Counter[int] = Counter()
+        matched_neighbors: set[int] = set()
+        for weight, field in enumerate(fields[::-1], start=1):
+            value = str(getattr(context, field, "")).strip()
+            if not value:
+                continue
+            bucket = inverted.get((field, value), {})
+            for neighbor_id, hobbies in bucket.items():
+                if neighbor_id == person_id:
+                    continue
+                matched_neighbors.add(neighbor_id)
+                for hobby_id in hobbies:
+                    if hobby_id not in known:
+                        hobby_scores[hobby_id] += weight
+        ranked = sorted(hobby_scores.items(), key=lambda item: (-float(item[1]), item[0]))[:top_k]
+        scores_by_person[person_id] = {hobby_id: float(score) for hobby_id, score in ranked}
+        neighbor_counts.append(len(matched_neighbors))
+
+    fingerprint_payload = {
+        "provider": "similar_person",
+        "method": "structured_context_inverted_index_v1",
+        "fields": list(fields),
+        "top_k": top_k,
+        "person_count": len(person_ids),
+        "train_person_count": len(train_person_ids),
+        "train_edge_count": len(train_edges),
+    }
+    fingerprint = hashlib.md5(json.dumps(fingerprint_payload, sort_keys=True).encode()).hexdigest()[:12]
+    return scores_by_person, {
+        **fingerprint_payload,
+        "enabled": True,
+        "fingerprint": fingerprint,
+        "candidate_pair_count": sum(len(values) for values in scores_by_person.values()),
+        "avg_matched_neighbors": float(sum(neighbor_counts) / len(neighbor_counts)) if neighbor_counts else 0.0,
+        "zero_neighbor_persons": int(sum(1 for count in neighbor_counts if count == 0)),
+    }
+
+
+def _stage1_quota_candidate_pool_policy(
+    base_policy: dict[str, object],
+    quota_metadata: dict[str, object],
+) -> dict[str, object]:
+    policy = dict(base_policy)
+    policy.update(
+        {
+            "providers": quota_metadata.get("providers", policy.get("providers", [])),
+            "quotas": quota_metadata.get("quotas", {}),
+            "fill_order": quota_metadata.get("fill_order", []),
+            "backfill_order": quota_metadata.get("backfill_order", []),
+            "dedupe_key": "hobby_id",
+            "known_hobby_filter": "train_known",
+            "text_masking": "holdout_masked_if_text_provider_enabled",
+        }
+    )
+    return policy
+
+
+def _provider_contribution_summary(pools_by_person: dict[int, list[Any]]) -> dict[str, object]:
+    selected_counts: Counter[str] = Counter()
+    source_counts: Counter[str] = Counter()
+    size_counts: Counter[int] = Counter()
+    for candidates in pools_by_person.values():
+        size_counts[len(candidates)] += 1
+        for candidate in candidates:
+            scores = getattr(candidate, "source_scores", {}) or {}
+            if scores:
+                selected_provider = max(scores.items(), key=lambda item: float(item[1]))[0]
+                selected_counts[str(selected_provider)] += 1
+                for provider in scores:
+                    source_counts[str(provider)] += 1
+    total_candidates = sum(selected_counts.values())
+    return {
+        "person_count": len(pools_by_person),
+        "candidate_rows": total_candidates,
+        "selected_by_primary_provider": dict(sorted(selected_counts.items())),
+        "present_in_source_scores": dict(sorted(source_counts.items())),
+        "pool_size_distribution": {str(size): count for size, count in sorted(size_counts.items())},
     }
 
 

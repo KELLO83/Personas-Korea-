@@ -958,6 +958,10 @@ def load_or_build_candidate_pool(
     disable_progress: bool = False,
     stage1_providers: tuple[str, ...] = ("popularity", "cooccurrence"),
     semantic_scores_by_person: dict[int, dict[int, float]] | None = None,
+    extra_scores_by_provider: dict[str, dict[int, dict[int, float]]] | None = None,
+    provider_quotas: dict[str, int] | None = None,
+    fill_order: tuple[str, ...] | None = None,
+    backfill_order: tuple[str, ...] = ("cooccurrence", "popularity"),
     provider_cache_fingerprint: str = "",
 ) -> dict[int, list[HobbyCandidate]]:
     from .baseline import (
@@ -965,10 +969,12 @@ def load_or_build_candidate_pool(
         kure_semantic_candidate_provider,
         popularity_candidate_provider,
     )
-    from .recommend import merge_candidates_by_hobby, normalize_candidate_scores
+    from .recommend import Candidate, merge_candidates_by_hobby, normalize_candidate_scores
 
     provider_set = set(stage1_providers)
-    unknown_providers = provider_set - {"popularity", "cooccurrence", "kure_semantic"}
+    extra_scores_by_provider = extra_scores_by_provider or {}
+    score_backed_providers = set(extra_scores_by_provider)
+    unknown_providers = provider_set - {"popularity", "cooccurrence", "kure_semantic"} - score_backed_providers
     if unknown_providers:
         unknown = ", ".join(sorted(unknown_providers))
         raise ValueError(f"Unsupported Stage1 providers: {unknown}")
@@ -1056,12 +1062,34 @@ def load_or_build_candidate_pool(
                 ),
                 normalization_method,
             )
+        for provider, scores_by_person in extra_scores_by_provider.items():
+            if provider not in provider_set:
+                continue
+            provider_candidates[provider] = normalize_candidate_scores(
+                _score_dict_candidate_provider(
+                    provider,
+                    person_id,
+                    known,
+                    candidate_k,
+                    scores_by_person,
+                ),
+                normalization_method,
+            )
         ordered_provider_candidates = {
             provider: provider_candidates[provider]
             for provider in stage1_providers
             if provider in provider_candidates
         }
-        merged = merge_candidates_by_hobby(ordered_provider_candidates, candidate_k)
+        if provider_quotas:
+            merged = _merge_candidates_by_quota(
+                ordered_provider_candidates,
+                candidate_k,
+                provider_quotas,
+                fill_order or stage1_providers,
+                backfill_order,
+            )
+        else:
+            merged = merge_candidates_by_hobby(ordered_provider_candidates, candidate_k)
         pools[person_id] = merge_stage1_candidates(merged, id_to_hobby)
 
     if cache_dir is not None:
@@ -1076,3 +1104,100 @@ def load_or_build_candidate_pool(
         print(f"Candidate pool cached: {cache_path}")
 
     return pools
+
+
+def _score_dict_candidate_provider(
+    provider: str,
+    person_id: int,
+    known_hobbies: set[int],
+    top_k: int,
+    scores_by_person: dict[int, dict[int, float]],
+) -> list[Any]:
+    if top_k <= 0:
+        raise ValueError("top_k must be positive")
+    candidates: list[Any] = []
+    ranked = sorted(scores_by_person.get(person_id, {}).items(), key=lambda item: (-float(item[1]), item[0]))
+    from .recommend import Candidate
+
+    for rank, (hobby_id, score) in enumerate(ranked, start=1):
+        if hobby_id in known_hobbies:
+            continue
+        candidates.append(
+            Candidate(
+                hobby_id=hobby_id,
+                provider=provider,
+                raw_score=float(score),
+                rank=rank,
+                reason_features={f"{provider}_score": float(score), "person_id": person_id},
+                source_scores={provider: float(score)},
+            )
+        )
+        if len(candidates) >= top_k:
+            break
+    return candidates
+
+
+def _merge_candidates_by_quota(
+    provider_candidates: dict[str, list[Any]],
+    top_k: int,
+    provider_quotas: dict[str, int],
+    fill_order: tuple[str, ...],
+    backfill_order: tuple[str, ...],
+) -> list[Any]:
+    from .recommend import Candidate
+
+    by_hobby: dict[int, list[Any]] = {}
+    for candidates in provider_candidates.values():
+        for candidate in candidates:
+            by_hobby.setdefault(candidate.hobby_id, []).append(candidate)
+
+    selected: list[Any] = []
+    selected_ids: set[int] = set()
+
+    def add_from(provider: str, limit: int) -> None:
+        if limit <= 0:
+            return
+        added = 0
+        for candidate in provider_candidates.get(provider, []):
+            if candidate.hobby_id in selected_ids:
+                continue
+            selected.append(_merge_candidate_sources(candidate, by_hobby))
+            selected_ids.add(candidate.hobby_id)
+            added += 1
+            if added >= limit or len(selected) >= top_k:
+                break
+
+    for provider in fill_order:
+        add_from(provider, int(provider_quotas.get(provider, 0)))
+        if len(selected) >= top_k:
+            break
+
+    while len(selected) < top_k:
+        before = len(selected)
+        for provider in backfill_order:
+            add_from(provider, top_k - len(selected))
+            if len(selected) >= top_k:
+                break
+        if len(selected) == before:
+            break
+
+    return selected[:top_k]
+
+
+def _merge_candidate_sources(candidate: Any, by_hobby: dict[int, list[Any]]) -> Any:
+    from .recommend import Candidate
+
+    candidates = by_hobby.get(candidate.hobby_id, [candidate])
+    source_scores = {str(item.provider): float(item.score) for item in candidates}
+    raw_source_scores = {f"{item.provider}_raw": float(item.raw_score) for item in candidates}
+    reason_features = {str(item.provider): item.reason_features or {} for item in candidates}
+    reason_features["raw_source_scores"] = raw_source_scores
+    return Candidate(
+        hobby_id=candidate.hobby_id,
+        provider=candidate.provider,
+        raw_score=float(candidate.raw_score),
+        normalized_score=candidate.normalized_score,
+        rank=candidate.rank,
+        reason_features=reason_features,
+        source_scores=source_scores,
+    )

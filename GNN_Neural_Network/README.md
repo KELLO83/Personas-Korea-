@@ -53,6 +53,26 @@ Stage1의 목적은 각 persona마다 Stage2가 다시 정렬할 후보 취미 p
 현재 기본 실험 경로에서 semantic embedding은 Stage1 후보 생성이 아니라 Stage2
 ranking feature로만 사용합니다.
 
+## Stage1 후보 생성 성능 비교
+
+candidate_k=50 기준 Stage1 후보 provider validation 결과입니다.
+
+| Stage1 후보 구성 | Validation Recall@10 | Validation NDCG@10 | Candidate Recall@50 | 판단 |
+| --- | ---: | ---: | ---: | --- |
+| popularity + cooccurrence | 0.694035 | 0.435455 | 0.977645 | 선택 |
+| LightGCN only | 0.676964 | 0.427976 | 0.967381 | 단독 기본값 부적합 |
+| popularity + cooccurrence + LightGCN | 0.691393 | 0.434389 | 0.977136 | merge해도 baseline보다 낮음 |
+| cooccurrence 32 + popularity 13 + similar-person 5 | 0.699457 | 0.448987 | 0.831629 | quota 방식 채택 |
+| cooccurrence 35 + popularity 12 + E5 semantic 3 | 0.694391 | 0.446681 | 0.838077 | 최종 ranking 하락으로 거절 |
+
+방식별 의미:
+
+- `popularity + cooccurrence`: train split에서 많이 등장한 hobby와, 현재 persona의 known hobby와 함께 자주 등장한 hobby를 합쳐 후보 50개를 구성하는 기본 Stage1 방식입니다.
+- `LightGCN only`: `Person -> Hobby` interaction graph만으로 LightGCN embedding을 학습한 뒤 dot-product score가 높은 hobby를 후보로 뽑는 방식입니다.
+- `popularity + cooccurrence + LightGCN`: 기존 popularity/cooccurrence 후보에 LightGCN 후보를 함께 merge한 방식입니다.
+- `cooccurrence 32 + popularity 13 + similar-person 5`: 후보 50개 중 cooccurrence 32개, popularity 13개, 비슷한 persona의 train hobby 기반 후보 5개를 고정 quota로 채우는 방식입니다.
+- `cooccurrence 35 + popularity 12 + E5 semantic 3`: 후보 50개 중 cooccurrence 35개, popularity 12개, masked persona text와 hobby text의 E5 cosine similarity 상위 후보 3개를 고정 quota로 넣는 방식입니다.
+
 ## Stage2 학습 방식
 
 Stage2는 Stage1 후보를 그대로 추천하지 않고, LightGBM이 후보별 feature row를 다시
@@ -280,3 +300,39 @@ e5_family_similarity       = cosine(E5("[FAM] family_text"), hobby_vector)
 즉 LightGBM은 "전체적으로 비슷한가"뿐 아니라 "스포츠/예술/여행/음식/가족/직업
 맥락 중 어디에서 매칭됐는가"를 함께 학습합니다. 이 구성이 test에서 Snowflake
 single-feature보다도 높은 Recall@10과 NDCG@10을 보여 현재 기본값으로 승격했습니다.
+## 2026-05-17 Current SOTA Follow-Up
+
+Current locked default:
+
+```text
+Stage1: popularity + cooccurrence
+Stage2: LightGBM(num_leaves=31)
+Embedding: dragonkue/multilingual-e5-small-ko-v2
+Features: text_embedding_similarity + E5 domain-specific similarities
+Model: artifacts/experiments/phase5_c_text_embedding/e5_domain_features_validation_thread18/ranker_model.txt
+```
+
+Current test metrics:
+
+| Model | Recall@10 | NDCG@10 | Candidate Recall@50 | Decision |
+| --- | ---: | ---: | ---: | --- |
+| Stage1 baseline | 0.569771 | 0.356358 | 0.827208 | baseline |
+| E5-domain Stage2 | 0.680943 | 0.436665 | 0.827208 | current SOTA/default |
+| E5-domain + rank/margin | 0.682509 | 0.436354 | 0.827208 | not promoted; mixed test |
+
+Rank/margin feature result:
+
+- Added `e5_similarity_rank`, `e5_similarity_percentile`, `e5_similarity_gap_to_top`, and `e5_similarity_gap_to_mean`.
+- Validation improved over the current default: Recall@10 `+0.003224`, NDCG@10 `+0.000799`.
+- Test was mixed: Recall@10 `+0.001566`, NDCG@10 `-0.000311`.
+- Decision: keep the E5-domain default locked. Rank/margin remains an optional follow-up candidate, not the default.
+
+Candidate hobby text expansion result:
+
+- Added `--candidate-text-builder` with `name_only`, `name_plus_aliases`, `name_plus_category`, and `name_plus_short_description`.
+- `name_only` means the original default candidate hobby text: the canonical candidate hobby name only, not a person name.
+- `name_plus_aliases` produced higher validation/test metrics, but it is not promoted because alias/name metadata can inject taxonomy or canonicalization bias and its provenance is not strong enough for the locked default.
+- `name_plus_category` validation result: Recall@10 `0.676062`, NDCG@10 `0.424624`, Candidate Recall@50 `0.827669`.
+- This is below the E5-domain default validation result: Recall@10 `0.699180`, NDCG@10 `0.448862`.
+- `name_plus_short_description` validation result: Recall@10 `0.674035`, NDCG@10 `0.426106`; rejected.
+- Decision: exclude all expanded candidate hobby text builders from default promotion. Keep the current E5-domain default with candidate hobby name only.

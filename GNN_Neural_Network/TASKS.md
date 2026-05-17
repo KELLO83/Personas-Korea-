@@ -194,18 +194,37 @@ Do not confuse this with the completed KURE dense MMR sweep.
   - [x] keep the single E5-small Stage2 baseline available as an ablation control
   - [x] promote to test only if validation beats the single-cosine E5-small Stage2 default and candidate_recall@50 is unchanged
   - [x] validation/test completed and promoted as current SOTA/default
-- [ ] Track C - candidate-pool E5-small rank/margin features:
-  - [ ] derive `e5_similarity_percentile`, `e5_similarity_rank`, `e5_similarity_gap_to_top`, and `e5_similarity_gap_to_mean` inside each person's fixed candidate pool
-  - [ ] confirm these features do not add or remove candidates
-  - [ ] evaluate validation-only before any test run
+- [x] Track C - candidate-pool E5-small rank/margin features:
+  - [x] derive `e5_similarity_percentile`, `e5_similarity_rank`, `e5_similarity_gap_to_top`, and `e5_similarity_gap_to_mean` inside each person's fixed candidate pool
+  - [x] confirm these features do not add or remove candidates
+  - [x] smoke test `e5_domain_rank_margin_smoke_100_thread18` train/eval completed with 24 feature columns
+  - [x] full validation completed: `e5_domain_rank_margin_validation_thread18`
+    - [x] validation Recall@10 `0.702404`, NDCG@10 `0.449661`, candidate_recall@50 `0.827669`
+    - [x] delta vs E5-domain default validation: Recall@10 `+0.003224`, NDCG@10 `+0.000799`
+  - [x] winner-only test completed because validation improved both Recall@10 and NDCG@10
+    - [x] test Recall@10 `0.682509`, NDCG@10 `0.436354`, candidate_recall@50 `0.827208`
+    - [x] delta vs E5-domain default test: Recall@10 `+0.001566`, NDCG@10 `-0.000311`
+    - [x] Decision: mixed test result; do not replace the current E5-domain default yet. Keep as `needs_followup`/optional feature candidate.
 - [ ] Track D - candidate hobby text expansion:
-  - [ ] define the candidate hobby text builder interface and persist a `candidate_text_builder_version`
-  - [ ] evaluate `hobby_text_name_only` as the explicit control builder
-  - [ ] evaluate `hobby_text_name_plus_aliases`
-  - [ ] evaluate `hobby_text_name_plus_category`
-  - [ ] evaluate `hobby_text_name_plus_short_description`
-  - [ ] persist 20 representative hobby text examples, source fields, coverage, and missing-description rate
-  - [ ] verify expanded hobby text does not contain target labels, holdout-derived text, or evaluation-split leakage
+  - [x] define the candidate hobby text builder interface and persist `candidate_text_builder`
+    - [x] supported builders: `name_only`, `name_plus_aliases`, `name_plus_category`, `name_plus_short_description`
+    - [x] feature cache key/metadata include `candidate_text_builder`
+    - [x] cache miss fallback encodes missing candidate texts so similarity pair coverage stays complete
+  - [x] evaluate `hobby_text_name_only` as the explicit control builder through the current E5-domain default
+  - [x] evaluate `hobby_text_name_plus_aliases`
+    - [x] validation Recall@10 `0.711615`, NDCG@10 `0.461267`, candidate_recall@50 `0.827669`
+    - [x] test Recall@10 `0.694207`, NDCG@10 `0.445550`, candidate_recall@50 `0.827208`
+    - [x] Decision: metric-positive but not promoted. Excluded from default promotion because alias/name metadata provenance and taxonomy/canonicalization bias risk are not acceptable for the locked default.
+  - [x] evaluate `hobby_text_name_plus_category`
+    - [x] smoke test completed: `e5_domain_candidate_text_category_smoke_100_thread18`
+    - [x] full validation completed: `e5_domain_candidate_text_category_validation_thread18`
+    - [x] validation Recall@10 `0.676062`, NDCG@10 `0.424624`, candidate_recall@50 `0.827669`
+    - [x] Decision: rejected on validation; test skipped because it is below E5-domain default.
+  - [x] evaluate `hobby_text_name_plus_short_description`
+    - [x] validation Recall@10 `0.674035`, NDCG@10 `0.426106`, candidate_recall@50 `0.827669`
+    - [x] Decision: rejected on validation; local profile has no short description coverage.
+  - [x] persist coverage finding: local alias artifact has only 4 aliases / 2 canonical targets, and `hobby_profile.json` has no `short_description` or `description` fields.
+  - [x] verify expanded hobby text policy: alias/category/description builders are excluded from default promotion due metadata provenance, leakage, and taxonomy/canonicalization bias risk.
   - [ ] compare validation Recall@10/NDCG@10 against the promoted E5-small-ko-v2 Stage2 default before any test run; also report Snowflake accuracy reference delta
 - [ ] Governance for all tracks:
   - [ ] one script per experiment purpose; do not silently batch unrelated experiments

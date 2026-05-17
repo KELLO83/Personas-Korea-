@@ -18,7 +18,10 @@
     "artifacts/experiments/phase5_c_text_embedding/e5_small_stage2_single_feature_validation_thread18/validation_metrics.json",
     "artifacts/experiments/phase5_c_text_embedding/e5_small_stage2_single_feature_test_thread18/test_metrics.json",
     "artifacts/experiments/phase5_c_text_embedding/e5_domain_features_validation_thread18/validation_metrics.json",
-    "artifacts/experiments/phase5_c_text_embedding/e5_domain_features_test_thread18/test_metrics.json"
+    "artifacts/experiments/phase5_c_text_embedding/e5_domain_features_test_thread18/test_metrics.json",
+    "artifacts/experiments/phase5_c_text_embedding/e5_domain_candidate_text_aliases_validation_thread18/validation_metrics.json",
+    "artifacts/experiments/phase5_c_text_embedding/e5_domain_candidate_text_aliases_test_thread18/test_metrics.json",
+    "artifacts/experiments/phase5_c_text_embedding/e5_domain_candidate_text_short_description_validation_thread18/validation_metrics.json"
   ],
   "current_system": {
     "stage1": {
@@ -39,6 +42,8 @@
         "include_source_features": false,
         "include_text_embedding_feature": true,
         "include_domain_text_embedding_features": true,
+        "include_text_rank_margin_features": false,
+        "candidate_text_builder": "name_only",
         "feature_columns": [
           "lightgcn_score",
           "cooccurrence_score",
@@ -67,7 +72,7 @@
         "model_path": "artifacts/experiments/phase5_c_text_embedding/snowflake_stage2_single_feature_validation_cpu10/ranker_model.txt",
         "metrics_path": "artifacts/experiments/phase5_c_text_embedding/snowflake_stage2_single_feature_test_thread18/test_metrics.json"
       },
-      "reason": "E5-small-ko-v2 domain-specific Stage2 beats Stage1, KURE-v1 single, E5-small single, and Snowflake-ko single under the same current split and fixed popularity+cooccurrence candidate pool while candidate_recall@50 remains unchanged."
+      "reason": "E5-small-ko-v2 domain-specific Stage2 beats Stage1, KURE-v1 single, E5-small single, and Snowflake-ko single under the same current split and fixed popularity+cooccurrence candidate pool while candidate_recall@50 remains unchanged. The later name_plus_aliases result is held out for governance/control-audit before any default promotion because candidate text provenance and alias coverage need verification."
     },
     "stage2_legacy_fallback": {
       "status": "fallback",
@@ -396,6 +401,23 @@
       "e5_domain_stage2_current_sota_default": {
         "recall@10": 0.6809431703048724,
         "ndcg@10": 0.4366648134158132,
+        "candidate_recall@50": 0.8272082527401676
+      }
+    },
+    "current_split_e5_domain_candidate_text_aliases_test_holdout": {
+      "stage1_baseline": {
+        "recall@10": 0.5697706548770378,
+        "ndcg@10": 0.3563584398054275,
+        "candidate_recall@50": 0.8272082527401676
+      },
+      "previous_e5_domain_default": {
+        "recall@10": 0.6809431703048724,
+        "ndcg@10": 0.4366648134158132,
+        "candidate_recall@50": 0.8272082527401676
+      },
+      "e5_domain_name_plus_aliases_not_promoted": {
+        "recall@10": 0.694206502717141,
+        "ndcg@10": 0.4455497256684378,
         "candidate_recall@50": 0.8272082527401676
       }
     }
@@ -1546,5 +1568,189 @@
     "decision": "promote_e5_domain_stage2_as_current_sota_and_default",
     "reason": "Domain-specific E5-small features let LightGBM learn which persona domain matched the candidate hobby. This improved Recall@10/NDCG@10 over the single mixed cosine feature and over Snowflake-ko single while preserving the fixed candidate pool.",
     "next_step": "Evaluate E5-domain rank/margin features, candidate hobby text expansion, and cold-start/segment qualitative review against this default."
+  },
+  "phase5_c_e5_domain_rank_margin_stage2": {
+    "status": "needs_followup_mixed_test",
+    "default_enabled": false,
+    "run_id": "e5_domain_rank_margin_test_thread18",
+    "train_run_id": "e5_domain_rank_margin_validation_thread18",
+    "stage1": [
+      "popularity",
+      "cooccurrence"
+    ],
+    "stage2": "LightGBM(num_leaves=31) + E5-small-ko-v2 domain-specific similarities + candidate-pool rank/margin features",
+    "embedding_model": "dragonkue/multilingual-e5-small-ko-v2",
+    "model_path": "artifacts/experiments/phase5_c_text_embedding/e5_domain_rank_margin_validation_thread18/ranker_model.txt",
+    "validation_metrics_path": "artifacts/experiments/phase5_c_text_embedding/e5_domain_rank_margin_validation_thread18/validation_metrics.json",
+    "test_metrics_path": "artifacts/experiments/phase5_c_text_embedding/e5_domain_rank_margin_test_thread18/test_metrics.json",
+    "added_feature_columns": [
+      "e5_similarity_rank",
+      "e5_similarity_percentile",
+      "e5_similarity_gap_to_top",
+      "e5_similarity_gap_to_mean"
+    ],
+    "validation_metrics": {
+      "v2_recall@10": 0.702404,
+      "v2_ndcg@10": 0.449661,
+      "candidate_recall@50": 0.827669
+    },
+    "test_metrics": {
+      "v2_recall@10": 0.682509,
+      "v2_ndcg@10": 0.436354,
+      "candidate_recall@50": 0.8272082527401676
+    },
+    "delta_vs_e5_domain_default_validation": {
+      "recall@10": 0.003224,
+      "ndcg@10": 0.000799,
+      "candidate_recall@50": 0.0
+    },
+    "delta_vs_e5_domain_default_test": {
+      "recall@10": 0.001566,
+      "ndcg@10": -0.000311,
+      "candidate_recall@50": 0.0
+    },
+    "resource_policy": {
+      "cpu_thread_count": 18,
+      "feature_builder_parallelism": "auto_thread_pool",
+      "ranking_builder_parallelism": "auto_thread_pool",
+      "progress_mode": "on",
+      "device": "cuda",
+      "embedding_batch_size": "auto_vram"
+    },
+    "decision": "do_not_promote_over_e5_domain_default_yet",
+    "reason": "Validation improved both Recall@10 and NDCG@10, but the winner-only test was mixed: Recall@10 improved slightly while NDCG@10 regressed by 0.000311. Keep the current E5-domain default locked."
+  },
+  "phase5_c_e5_domain_candidate_text_category": {
+    "status": "rejected_validation",
+    "default_enabled": false,
+    "run_id": "e5_domain_candidate_text_category_validation_thread18",
+    "stage1": [
+      "popularity",
+      "cooccurrence"
+    ],
+    "stage2": "LightGBM(num_leaves=31) + E5-small-ko-v2 domain-specific similarities",
+    "embedding_model": "dragonkue/multilingual-e5-small-ko-v2",
+    "candidate_text_builder": "name_plus_category",
+    "model_path": "artifacts/experiments/phase5_c_text_embedding/e5_domain_candidate_text_category_validation_thread18/ranker_model.txt",
+    "validation_metrics_path": "artifacts/experiments/phase5_c_text_embedding/e5_domain_candidate_text_category_validation_thread18/validation_metrics.json",
+    "validation_metrics": {
+      "v2_recall@10": 0.676062,
+      "v2_ndcg@10": 0.424624,
+      "candidate_recall@50": 0.827669
+    },
+    "delta_vs_e5_domain_default_validation": {
+      "recall@10": -0.023118,
+      "ndcg@10": -0.024238,
+      "candidate_recall@50": 0.0
+    },
+    "resource_policy": {
+      "cpu_thread_count": 18,
+      "feature_builder_parallelism": "auto_thread_pool",
+      "ranking_builder_parallelism": "auto_thread_pool",
+      "progress_mode": "on",
+      "device": "cuda",
+      "embedding_batch_size": "auto_vram"
+    },
+    "decision": "reject_on_validation_skip_test",
+    "reason": "Adding taxonomy category text to candidate hobby embedding text reduced validation Recall@10 and NDCG@10 versus the current E5-domain default, while candidate_recall@50 was unchanged."
+  },
+  "phase5_c_e5_domain_candidate_text_aliases": {
+    "status": "needs_governance_audit_not_promoted",
+    "default_enabled": false,
+    "run_id": "e5_domain_candidate_text_aliases_test_thread18",
+    "train_run_id": "e5_domain_candidate_text_aliases_validation_thread18",
+    "stage1": [
+      "popularity",
+      "cooccurrence"
+    ],
+    "stage2": "LightGBM(num_leaves=31) + E5-small-ko-v2 text_embedding_similarity + domain-specific similarities",
+    "embedding_model": "dragonkue/multilingual-e5-small-ko-v2",
+    "candidate_text_builder": "name_plus_aliases",
+    "model_path": "artifacts/experiments/phase5_c_text_embedding/e5_domain_candidate_text_aliases_validation_thread18/ranker_model.txt",
+    "validation_metrics_path": "artifacts/experiments/phase5_c_text_embedding/e5_domain_candidate_text_aliases_validation_thread18/validation_metrics.json",
+    "test_metrics_path": "artifacts/experiments/phase5_c_text_embedding/e5_domain_candidate_text_aliases_test_thread18/test_metrics.json",
+    "feature_columns": [
+      "lightgcn_score",
+      "cooccurrence_score",
+      "segment_popularity_score",
+      "known_hobby_compatibility",
+      "age_group_fit",
+      "occupation_fit",
+      "region_fit",
+      "popularity_prior",
+      "mismatch_penalty",
+      "popularity_penalty",
+      "novelty_bonus",
+      "category_diversity_reward",
+      "is_cold_start",
+      "text_embedding_similarity",
+      "e5_professional_similarity",
+      "e5_sports_similarity",
+      "e5_arts_similarity",
+      "e5_travel_similarity",
+      "e5_food_similarity",
+      "e5_family_similarity"
+    ],
+    "validation_metrics": {
+      "v2_recall@10": 0.7116146265082435,
+      "v2_ndcg@10": 0.4612671033534348,
+      "candidate_recall@50": 0.8276687851155936
+    },
+    "test_metrics": {
+      "v2_recall@10": 0.694206502717141,
+      "v2_ndcg@10": 0.4455497256684378,
+      "candidate_recall@50": 0.8272082527401676
+    },
+    "delta_vs_e5_domain_default_validation": {
+      "recall@10": 0.0124343741365017,
+      "ndcg@10": 0.0124049464195824,
+      "candidate_recall@50": 0.0
+    },
+    "delta_vs_e5_domain_default_test": {
+      "recall@10": 0.0132633324122686,
+      "ndcg@10": 0.0088849122526246,
+      "candidate_recall@50": 0.0
+    },
+    "delta_vs_stage1_test": {
+      "recall@10": 0.1244358478401032,
+      "ndcg@10": 0.0891912858630103,
+      "candidate_recall@50": 0.0
+    },
+    "resource_policy": {
+      "cpu_thread_count": 18,
+      "feature_builder_parallelism": "auto_thread_pool",
+      "ranking_builder_parallelism": "auto_thread_pool",
+      "progress_mode": "on",
+      "device": "cuda",
+      "embedding_batch_size": "auto_vram"
+    },
+    "decision": "hold_out_do_not_promote_until_name_text_governance_and_name_only_retrain_control",
+    "reason": "Validation and test improved, but the result is suspicious because the local alias artifact covers only 4 aliases / 2 canonical targets. Candidate hobby names are allowed as semantic embedding inputs, but alias/category/description text must be provenance-audited and compared against a same-code name_only retrain control before promotion.",
+    "caveat": "Do not treat this as current SOTA/default. Run a same-code name_only retrain/eval control and verify alias provenance/coverage first."
+  },
+  "phase5_c_e5_domain_candidate_text_short_description": {
+    "status": "rejected_validation",
+    "default_enabled": false,
+    "run_id": "e5_domain_candidate_text_short_description_validation_thread18",
+    "stage1": [
+      "popularity",
+      "cooccurrence"
+    ],
+    "stage2": "LightGBM(num_leaves=31) + E5-small-ko-v2 domain-specific similarities",
+    "embedding_model": "dragonkue/multilingual-e5-small-ko-v2",
+    "candidate_text_builder": "name_plus_short_description",
+    "validation_metrics_path": "artifacts/experiments/phase5_c_text_embedding/e5_domain_candidate_text_short_description_validation_thread18/validation_metrics.json",
+    "validation_metrics": {
+      "v2_recall@10": 0.6740351846734826,
+      "v2_ndcg@10": 0.4261055501327611,
+      "candidate_recall@50": 0.8276687851155936
+    },
+    "delta_vs_e5_domain_default_validation": {
+      "recall@10": -0.0251450676982592,
+      "ndcg@10": -0.0227566068010913,
+      "candidate_recall@50": 0.0
+    },
+    "decision": "reject_on_validation_skip_test",
+    "reason": "The local hobby profile has no short_description/description coverage, so this builder effectively adds category text and regresses versus the E5-domain default."
   }
 }

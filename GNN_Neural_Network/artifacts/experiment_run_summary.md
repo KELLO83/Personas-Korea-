@@ -61,6 +61,70 @@ Decision: promote E5-small-ko-v2 domain-specific Stage2 as the current offline
 accuracy SOTA and production default. Future Stage2 experiments compare against
 this artifact first.
 
+## 2026-05-17 E5-domain rank/margin follow-up
+
+Implemented and evaluated four within-candidate-pool E5 similarity features:
+
+```text
+e5_similarity_rank
+e5_similarity_percentile
+e5_similarity_gap_to_top
+e5_similarity_gap_to_mean
+```
+
+Run paths:
+
+- Train/model: `artifacts/experiments/phase5_c_text_embedding/e5_domain_rank_margin_validation_thread18/ranker_model.txt`
+- Validation metrics: `artifacts/experiments/phase5_c_text_embedding/e5_domain_rank_margin_validation_thread18/validation_metrics.json`
+- Test metrics: `artifacts/experiments/phase5_c_text_embedding/e5_domain_rank_margin_test_thread18/test_metrics.json`
+
+| Split | Recall@10 | NDCG@10 | Candidate Recall@50 | Delta vs E5-domain default | Decision |
+| --- | ---: | ---: | ---: | --- | --- |
+| validation | 0.702404 | 0.449661 | 0.827669 | Recall `+0.003224`, NDCG `+0.000799` | passed |
+| test | 0.682509 | 0.436354 | 0.827208 | Recall `+0.001566`, NDCG `-0.000311` | mixed |
+
+Decision: keep current E5-domain default unchanged. Rank/margin improves Recall
+slightly on test but gives a tiny NDCG regression, so it is recorded as
+`needs_followup` rather than promoted.
+
+## 2026-05-17 Candidate hobby text expansion first pass
+
+Added `--candidate-text-builder` with these supported builders:
+
+```text
+name_only
+name_plus_aliases
+name_plus_category
+name_plus_short_description
+```
+
+The feature cache key and metadata now include `candidate_text_builder`, and
+candidate text cache misses are encoded on demand so similarity pair coverage is
+complete.
+
+First full validation run:
+
+- Train/model: `artifacts/experiments/phase5_c_text_embedding/e5_domain_candidate_text_category_validation_thread18/ranker_model.txt`
+- Validation metrics: `artifacts/experiments/phase5_c_text_embedding/e5_domain_candidate_text_category_validation_thread18/validation_metrics.json`
+- Builder: `name_plus_category`
+
+| Builder | Split | Recall@10 | NDCG@10 | Candidate Recall@50 | Decision |
+| --- | --- | ---: | ---: | ---: | --- |
+| `name_plus_category` | validation | 0.676062 | 0.424624 | 0.827669 | rejected; test skipped |
+
+Additional Track D results:
+
+| Builder | Split | Recall@10 | NDCG@10 | Candidate Recall@50 | Decision |
+| --- | --- | ---: | ---: | ---: | --- |
+| `name_plus_aliases` | validation | 0.711615 | 0.461267 | 0.827669 | metric-positive, not promoted |
+| `name_plus_aliases` | test | 0.694207 | 0.445550 | 0.827208 | excluded by governance |
+| `name_plus_short_description` | validation | 0.674035 | 0.426106 | 0.827669 | rejected; test skipped |
+
+Decision: keep the current E5-domain default unchanged. Expanded candidate hobby
+text builders are excluded from default promotion because alias/category/
+description metadata can inject taxonomy or canonicalization bias, and local
+metadata provenance/coverage is not strong enough for the locked default.
+
 ## Phase 2.5 default and cold-start baseline
 
 - Model: `artifacts/experiments/phase2_5_num_leaves_31/ranker_model.txt`

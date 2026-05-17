@@ -1899,3 +1899,316 @@ PoC 이후 성능이 유의미하면 다음 단계로 확장한다.
 5. 추천 이유 생성 로직 추가
 
 향후 API는 기존 추천 라우트와 충돌하지 않도록 설계한다. 후보는 기존 `GET /api/recommend/{uuid}`에 `method=gnn` 옵션을 추가하거나, 별도 라우트를 만들 경우 기존 `/api/recommend/*` 네이밍과 호환되게 문서화한다.
+## 2026-05-17 Stage2 Embedding Follow-Up Decision
+
+The current locked hobby recommender SOTA/default remains:
+
+```text
+Stage1: popularity + cooccurrence
+Stage2: LightGBM(num_leaves=31)
+Embedding: dragonkue/multilingual-e5-small-ko-v2
+Feature shape: text_embedding_similarity + E5 domain-specific similarities
+Model: artifacts/experiments/phase5_c_text_embedding/e5_domain_features_validation_thread18/ranker_model.txt
+```
+
+Follow-up experiment decisions:
+
+- E5-domain rank/margin features were implemented and evaluated.
+  - Added `e5_similarity_rank`, `e5_similarity_percentile`, `e5_similarity_gap_to_top`, and `e5_similarity_gap_to_mean`.
+  - Validation improved slightly over the current default: Recall@10 `+0.003224`, NDCG@10 `+0.000799`.
+  - Test was mixed: Recall@10 `+0.001566`, NDCG@10 `-0.000311`.
+  - Decision: do not promote; keep as optional follow-up.
+- Candidate hobby text expansion was implemented through `--candidate-text-builder`.
+  - Supported builders: `name_only`, `name_plus_aliases`, `name_plus_category`, `name_plus_short_description`.
+  - `name_only` is the original default candidate hobby text path: the canonical candidate hobby name only.
+  - `name_plus_aliases` improved metrics, but is not promoted because expanded name metadata has unacceptable provenance, leakage, and taxonomy/canonicalization bias risk for the locked default.
+  - `name_plus_category` validation failed versus the current default: Recall@10 `0.676062` vs `0.699180`, NDCG@10 `0.424624` vs `0.448862`.
+  - `name_plus_short_description` also failed validation and local short-description coverage is absent.
+  - Decision: exclude expanded candidate hobby text builders from default promotion. Keep E5-domain with candidate hobby name only.
+
+Next experiment priority:
+
+1. Do not continue candidate hobby text expansion experiments unless a new governance-approved, train-split-only metadata source is added.
+2. Move to cold-start/segment qualitative review of the locked E5-domain default.
+
+## 2026-05-17 Stage1 Candidate Pool Improvement Plan
+
+This plan reopens Stage1 improvement only under a narrow constraint:
+`candidate_k=50` stays fixed. The goal is not to replace the current default
+blindly, but to test whether a small number of context-aware candidates can
+improve the fixed 50-slot pool without displacing the strong
+`popularity + cooccurrence` baseline.
+
+Current Stage1 baseline:
+
+```text
+candidate_k = 50
+Stage1 providers = popularity + cooccurrence
+validation Recall@10 = 0.694035
+validation NDCG@10 = 0.435455
+validation candidate_recall@50 = 0.977645
+```
+
+Stage1 후보 provider validation 비교:
+
+| Stage1 후보 구성 | Validation Recall@10 | Validation NDCG@10 | Candidate Recall@50 | 판단 |
+| --- | ---: | ---: | ---: | --- |
+| popularity + cooccurrence | 0.694035 | 0.435455 | 0.977645 | 선택 |
+| LightGCN only | 0.676964 | 0.427976 | 0.967381 | 단독 기본값 부적합 |
+| popularity + cooccurrence + LightGCN | 0.691393 | 0.434389 | 0.977136 | merge해도 baseline보다 낮음 |
+| KURE-v1 Stage1 semantic provider | 0.599705 | 0.370891 | 0.794971 | 거절 |
+| cooccurrence 32 + popularity 13 + similar-person 5 | 0.699457 | 0.448987 | 0.831629 | quota 방식 채택 |
+| cooccurrence 35 + popularity 12 + E5 semantic 3 | 0.694391 | 0.446681 | 0.838077 | 최종 ranking 하락으로 거절 |
+
+### Hypothesis
+
+The previous Stage1 failures replaced or mixed too much of the strong baseline
+candidate pool. A safer design is source-quota retrieval: keep most of the 50
+slots reserved for `cooccurrence` and `popularity`, and allow only a small number
+of new candidates from context-aware sources.
+
+### Track S1-A: Similar-Person Quota Provider
+
+Priority: first Stage1 improvement experiment.
+
+Rationale:
+
+- `DATASET_EXPLAIN.md` identifies similar-person hobby lookup as a valid Stage1
+  source.
+- The local data has rich persona/context fields, while LightGCN only sees
+  `Person -> Hobby` edges.
+- The dataset is synthetic and stereotype-heavy by age, occupation, region, and
+  lifestyle, so context-neighbor hobbies may add useful candidates that
+  graph-only LightGCN misses.
+
+Provider definition:
+
+```text
+target person context/text
+  -> find similar train persons
+  -> collect those persons' train hobbies
+  -> remove target known hobbies
+  -> rank by neighbor similarity weighted hobby frequency
+  -> contribute at most 5 candidates
+```
+
+Similarity sources, in preferred order:
+
+1. E5-small-ko-v2 masked persona/domain text embedding nearest neighbors.
+2. Structured fallback score from `age_group`, `sex`, `occupation`, `province`,
+   `district`, `family_type`, `housing_type`, and `education_level`.
+3. Hybrid score: embedding similarity plus structured exact-match bonuses.
+
+Required leakage rule:
+
+- Neighbor index must be built from train-safe person context and train hobbies.
+- Holdout validation/test hobby labels must not be used to build neighbor
+  hobby counts.
+- If text is used, use the same masking/audit path as Stage2 text features:
+  `mask_holdout_hobbies -> post_mask_leakage_audit -> build_domain_tagged_persona_text`.
+
+Candidate quota:
+
+```text
+candidate_k = 50
+cooccurrence quota = 32
+popularity quota = 13
+similar-person quota = 5
+```
+
+If fewer than 5 valid similar-person candidates remain after dedupe/known-hobby
+filtering, backfill from cooccurrence first, then popularity.
+
+### Track S1-B: E5 Semantic Quota Provider
+
+Priority: second Stage1 improvement experiment, after S1-A.
+
+Rationale:
+
+- E5-small-ko-v2 is the current Stage2 embedding backbone and has strong
+  domain-specific Stage2 performance.
+- Prior Stage1 semantic retrieval failed when it changed too much of the pool.
+  This track is only allowed as a small quota source.
+
+Provider definition:
+
+```text
+masked target persona/domain text
+  -> E5-small-ko-v2 embedding
+candidate hobby text
+  -> E5-small-ko-v2 embedding
+score = cosine(persona_embedding, hobby_embedding)
+top candidates after known-hobby filtering
+```
+
+Candidate quota:
+
+```text
+candidate_k = 50
+cooccurrence quota = 35
+popularity quota = 12
+E5 semantic quota = 3
+```
+
+Do not evaluate E5 semantic Stage1 as a full replacement provider. Any run where
+semantic candidates can displace more than 3 final slots is not comparable to
+this plan.
+
+### Track S1-C: Combined Quota Probe
+
+Run only if S1-A or S1-B passes validation gates.
+
+```text
+candidate_k = 50
+cooccurrence quota = 30
+popularity quota = 12
+similar-person quota = 5
+E5 semantic quota = 3
+```
+
+This is a probe, not a default candidate unless it beats both the baseline and
+the individually passing track.
+
+### Merge Rules
+
+All Stage1 quota experiments must use deterministic source-quota merge:
+
+1. Generate each provider's ranked list independently.
+2. Remove target known hobbies from every provider.
+3. Fill provider quotas in configured order.
+4. Dedupe by canonical `hobby_id`.
+5. If a provider cannot fill its quota, backfill from cooccurrence then
+   popularity.
+6. Persist `source_scores`, `raw_source_scores`, provider name, and source rank
+   for every candidate.
+
+The first implementation should use this fill order:
+
+```text
+cooccurrence -> popularity -> new provider -> cooccurrence backfill -> popularity backfill
+```
+
+### Validation Gates
+
+All Stage1 improvement experiments are validation-first. Do not run test unless
+validation passes.
+
+Hard gates against the current Stage1 baseline:
+
+```text
+candidate_recall@50 >= 0.977645
+Recall@10 >= 0.694035
+NDCG@10 >= 0.435455
+```
+
+Soft gates:
+
+```text
+unique recommended hobbies@50 should not decrease
+long-tail candidate share should not collapse
+per-provider contribution should be reported
+runtime increase should be recorded
+```
+
+Promotion rule:
+
+- If validation passes all hard gates, run one winner-only test.
+- Promote only if test Recall@10 and NDCG@10 are both at least baseline and
+  candidate_recall@50 does not regress.
+- If Stage1 improves candidate_recall@50 but final Stage2 Recall@10/NDCG@10
+  regresses, treat the issue as Stage2 ranking/fitting, not immediate Stage1
+  rejection.
+
+### Required Artifacts
+
+Each run must persist:
+
+```text
+artifacts/experiments/stage1_quota/<run_id>/validation_metrics.json
+artifacts/experiments/stage1_quota/<run_id>/candidate_pool_policy.json
+artifacts/experiments/stage1_quota/<run_id>/provider_contribution.json
+artifacts/experiments/stage1_quota/<run_id>/status.json
+```
+
+`candidate_pool_policy.json` must include:
+
+```json
+{
+  "candidate_k": 50,
+  "providers": [],
+  "quotas": {},
+  "fill_order": [],
+  "backfill_order": [],
+  "dedupe_key": "hobby_id",
+  "known_hobby_filter": "train_known",
+  "text_masking": "holdout_masked_if_text_provider_enabled"
+}
+```
+
+### Non-Goals
+
+- Do not increase `candidate_k` above 50 in this track.
+- Do not reopen LightGCN or KURE-v1 Stage1 full-provider promotion in this
+  track.
+- Do not change Stage2 LightGBM params, negative sampling, E5 domain features,
+  or candidate text builder in the same run.
+- Do not use live Neo4j/FastAPI similar-person lookup for offline validation;
+  any similar-person data must be materialized as train-gated local artifacts.
+
+### 2026-05-17 Stage1 Quota Experiment Results
+
+Comparable baseline for this run is the current E5-domain Stage2 evaluation
+artifact:
+
+```text
+validation Recall@10 = 0.699180
+validation NDCG@10 = 0.448862
+validation candidate_recall@50 = 0.827669
+
+test Recall@10 = 0.680943
+test NDCG@10 = 0.436665
+test candidate_recall@50 = 0.827208
+```
+
+Validation results:
+
+| Run | Quota | Stage2 Recall@10 | Stage2 NDCG@10 | Candidate Recall@50 | Decision |
+| --- | --- | ---: | ---: | ---: | --- |
+| `similar_person_validation` | cooccurrence 32 / popularity 13 / similar-person 5 | 0.699457 | 0.448987 | 0.831629 | pass validation, run test |
+| `e5_semantic_validation` | cooccurrence 35 / popularity 12 / E5 semantic 3 | 0.694391 | 0.446681 | 0.838077 | reject for default; candidate recall improved but ranker metrics regressed |
+
+Winner-only test:
+
+| Run | Recall@10 | NDCG@10 | Candidate Recall@50 | Decision |
+| --- | ---: | ---: | ---: | --- |
+| `similar_person_test` | 0.681496 | 0.436851 | 0.831629 | promote as Stage1 candidate-pool improvement |
+
+Decision:
+
+- Keep `candidate_k=50`.
+- Promote the quota pool `cooccurrence 32 + popularity 13 + similar-person 5`
+  for the next default candidate-pool candidate.
+- Do not promote E5 semantic Stage1 quota. It increased the oracle candidate
+  pool but pushed final LightGBM ranking below the current E5-domain baseline.
+- Do not run the combined quota probe yet. The E5 semantic validation result
+  suggests that adding semantic candidates changes pool composition in a way the
+  current Stage2 ranker does not use well enough.
+
+Artifacts:
+
+```text
+artifacts/experiments/stage1_quota/similar_person_validation/validation_metrics.json
+artifacts/experiments/stage1_quota/similar_person_validation/candidate_pool_policy.json
+artifacts/experiments/stage1_quota/similar_person_validation/provider_contribution.json
+artifacts/experiments/stage1_quota/similar_person_validation/status.json
+
+artifacts/experiments/stage1_quota/e5_semantic_validation/validation_metrics.json
+artifacts/experiments/stage1_quota/e5_semantic_validation/candidate_pool_policy.json
+artifacts/experiments/stage1_quota/e5_semantic_validation/provider_contribution.json
+artifacts/experiments/stage1_quota/e5_semantic_validation/status.json
+
+artifacts/experiments/stage1_quota/similar_person_test/test_metrics.json
+artifacts/experiments/stage1_quota/similar_person_test/candidate_pool_policy.json
+artifacts/experiments/stage1_quota/similar_person_test/provider_contribution.json
+artifacts/experiments/stage1_quota/similar_person_test/status.json
+```
