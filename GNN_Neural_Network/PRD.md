@@ -1957,7 +1957,7 @@ Stage1 후보 provider validation 비교:
 | LightGCN only | 0.676964 | 0.427976 | 0.967381 | 단독 기본값 부적합 |
 | popularity + cooccurrence + LightGCN | 0.691393 | 0.434389 | 0.977136 | merge해도 baseline보다 낮음 |
 | KURE-v1 Stage1 semantic provider | 0.599705 | 0.370891 | 0.794971 | 거절 |
-| cooccurrence 32 + popularity 13 + similar-person 5 | 0.699457 | 0.448987 | 0.831629 | quota 방식 채택 |
+| cooccurrence 32 + popularity 13 + similar-person 5 | 0.699457 | 0.448987 | 0.831629 | metric-positive, non-default |
 | cooccurrence 35 + popularity 12 + E5 semantic 3 | 0.694391 | 0.446681 | 0.838077 | 최종 ranking 하락으로 거절 |
 
 ### Hypothesis
@@ -2174,20 +2174,22 @@ Validation results:
 
 | Run | Quota | Stage2 Recall@10 | Stage2 NDCG@10 | Candidate Recall@50 | Decision |
 | --- | --- | ---: | ---: | ---: | --- |
-| `similar_person_validation` | cooccurrence 32 / popularity 13 / similar-person 5 | 0.699457 | 0.448987 | 0.831629 | pass validation, run test |
+| `similar_person_validation` | cooccurrence 32 / popularity 13 / similar-person 5 | 0.699457 | 0.448987 | 0.831629 | metric-positive, test recorded |
 | `e5_semantic_validation` | cooccurrence 35 / popularity 12 / E5 semantic 3 | 0.694391 | 0.446681 | 0.838077 | reject for default; candidate recall improved but ranker metrics regressed |
 
 Winner-only test:
 
 | Run | Recall@10 | NDCG@10 | Candidate Recall@50 | Decision |
 | --- | ---: | ---: | ---: | --- |
-| `similar_person_test` | 0.681496 | 0.436851 | 0.831629 | promote as Stage1 candidate-pool improvement |
+| `similar_person_test` | 0.681496 | 0.436851 | 0.831629 | metric-positive, not promoted |
 
 Decision:
 
 - Keep `candidate_k=50`.
-- Promote the quota pool `cooccurrence 32 + popularity 13 + similar-person 5`
-  for the next default candidate-pool candidate.
+- Keep Stage1 baseline/default as `popularity + cooccurrence`.
+- Do not promote the quota pool `cooccurrence 32 + popularity 13 + similar-person 5`
+  as the locked baseline/default. It is retained as a metric-positive optional
+  experiment only.
 - Do not promote E5 semantic Stage1 quota. It increased the oracle candidate
   pool but pushed final LightGBM ranking below the current E5-domain baseline.
 - Do not run the combined quota probe yet. The E5 semantic validation result

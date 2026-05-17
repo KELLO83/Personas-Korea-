@@ -21,7 +21,10 @@
     "artifacts/experiments/phase5_c_text_embedding/e5_domain_features_test_thread18/test_metrics.json",
     "artifacts/experiments/phase5_c_text_embedding/e5_domain_candidate_text_aliases_validation_thread18/validation_metrics.json",
     "artifacts/experiments/phase5_c_text_embedding/e5_domain_candidate_text_aliases_test_thread18/test_metrics.json",
-    "artifacts/experiments/phase5_c_text_embedding/e5_domain_candidate_text_short_description_validation_thread18/validation_metrics.json"
+    "artifacts/experiments/phase5_c_text_embedding/e5_domain_candidate_text_short_description_validation_thread18/validation_metrics.json",
+    "artifacts/experiments/stage1_quota/similar_person_validation/validation_metrics.json",
+    "artifacts/experiments/stage1_quota/similar_person_test/test_metrics.json",
+    "artifacts/experiments/stage1_quota/e5_semantic_validation/validation_metrics.json"
   ],
   "current_system": {
     "stage1": {
@@ -29,8 +32,8 @@
         "popularity",
         "cooccurrence"
       ],
-      "status": "selected",
-      "reason": "Keeps the strongest current candidate pool while preserving candidate_recall@50 for Stage2 ranking."
+      "status": "selected_baseline_and_default",
+      "reason": "Stage1 baseline/default remains popularity + cooccurrence. Similar-person quota is metric-positive but non-default; it is not the locked baseline."
     },
     "stage2": {
       "status": "promoted_current_sota_and_production_default",
@@ -1752,5 +1755,60 @@
     },
     "decision": "reject_on_validation_skip_test",
     "reason": "The local hobby profile has no short_description/description coverage, so this builder effectively adds category text and regresses versus the E5-domain default."
+  },
+  "stage1_quota_followup_2026_05_17": {
+    "status": "closed_non_default",
+    "default_enabled": false,
+    "selected_stage1_baseline": [
+      "popularity",
+      "cooccurrence"
+    ],
+    "baseline_rule": "Use popularity + cooccurrence as the Stage1 baseline/default for future comparisons.",
+    "similar_person_quota": {
+      "run_id_validation": "similar_person_validation",
+      "run_id_test": "similar_person_test",
+      "providers": [
+        "cooccurrence",
+        "popularity",
+        "similar_person"
+      ],
+      "quotas": {
+        "cooccurrence": 32,
+        "popularity": 13,
+        "similar_person": 5
+      },
+      "validation_metrics": {
+        "v2_recall@10": 0.6994565717969974,
+        "v2_ndcg@10": 0.4489865071139516,
+        "candidate_recall@50": 0.8316293635442572
+      },
+      "test_metrics": {
+        "v2_recall@10": 0.6814958091553837,
+        "v2_ndcg@10": 0.43685071273943893,
+        "candidate_recall@50": 0.8316293635442572
+      },
+      "decision": "metric_positive_but_not_promoted",
+      "reason": "The test gain over the E5-domain default is tiny, and the user selected popularity + cooccurrence as the Stage1 baseline/default. Keep this as optional evidence only."
+    },
+    "e5_semantic_quota": {
+      "run_id_validation": "e5_semantic_validation",
+      "providers": [
+        "cooccurrence",
+        "popularity",
+        "e5_semantic"
+      ],
+      "quotas": {
+        "cooccurrence": 35,
+        "popularity": 12,
+        "e5_semantic": 3
+      },
+      "validation_metrics": {
+        "v2_recall@10": 0.6943907156673114,
+        "v2_ndcg@10": 0.44668148911137545,
+        "candidate_recall@50": 0.8380768168002211
+      },
+      "decision": "rejected_validation",
+      "reason": "Candidate recall improved, but final Stage2 Recall@10/NDCG@10 regressed versus the E5-domain default."
+    }
   }
 }

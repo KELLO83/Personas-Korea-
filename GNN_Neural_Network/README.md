@@ -14,6 +14,29 @@ Embedding model = dragonkue/multilingual-e5-small-ko-v2
 Feature policy = text_embedding_similarity + E5 domain-specific similarities
 ```
 
+## Test 성능 비교
+
+![Model performance comparison](docs/model_performance.svg)
+
+| Model | Test Recall@10 | Test NDCG@10 | Decision |
+| --- | ---: | ---: | --- |
+| Stage1 popularity + cooccurrence | 0.569771 | 0.356358 | Stage1 baseline |
+| no-text LightGBM | 0.579626 | 0.360270 | baseline |
+| KURE-v1 Stage2 single | 0.617482 | 0.386258 | historical baseline |
+| E5-small-ko-v2 Stage2 single | 0.623837 | 0.393921 | previous production default |
+| Snowflake-ko Stage2 single | 0.637653 | 0.402805 | previous accuracy reference |
+| E5-small-ko-v2 Stage2 domain-specific | 0.680943 | 0.436665 | current SOTA/default |
+
+E5 domain-specific 개선폭:
+
+| 비교 대상 | Recall@10 delta | NDCG@10 delta |
+| --- | ---: | ---: |
+| Stage1 baseline | +0.111173 | +0.080306 |
+| no-text LightGBM | +0.101317 | +0.076395 |
+| E5 single | +0.057106 | +0.042744 |
+| Snowflake single | +0.043290 | +0.033860 |
+| KURE-v1 single | +0.063461 | +0.050407 |
+
 ## 데이터 입력과 전처리
 
 | 입력 | 용도 | 전처리 |
@@ -62,7 +85,7 @@ candidate_k=50 기준 Stage1 후보 provider validation 결과입니다.
 | popularity + cooccurrence | 0.694035 | 0.435455 | 0.977645 | 선택 |
 | LightGCN only | 0.676964 | 0.427976 | 0.967381 | 단독 기본값 부적합 |
 | popularity + cooccurrence + LightGCN | 0.691393 | 0.434389 | 0.977136 | merge해도 baseline보다 낮음 |
-| cooccurrence 32 + popularity 13 + similar-person 5 | 0.699457 | 0.448987 | 0.831629 | quota 방식 채택 |
+| cooccurrence 32 + popularity 13 + similar-person 5 | 0.699457 | 0.448987 | 0.831629 | metric-positive, non-default |
 | cooccurrence 35 + popularity 12 + E5 semantic 3 | 0.694391 | 0.446681 | 0.838077 | 최종 ranking 하락으로 거절 |
 
 방식별 의미:
@@ -72,6 +95,10 @@ candidate_k=50 기준 Stage1 후보 provider validation 결과입니다.
 - `popularity + cooccurrence + LightGCN`: 기존 popularity/cooccurrence 후보에 LightGCN 후보를 함께 merge한 방식입니다.
 - `cooccurrence 32 + popularity 13 + similar-person 5`: 후보 50개 중 cooccurrence 32개, popularity 13개, 비슷한 persona의 train hobby 기반 후보 5개를 고정 quota로 채우는 방식입니다.
 - `cooccurrence 35 + popularity 12 + E5 semantic 3`: 후보 50개 중 cooccurrence 35개, popularity 12개, masked persona text와 hobby text의 E5 cosine similarity 상위 후보 3개를 고정 quota로 넣는 방식입니다.
+
+Stage1 baseline/default remains `popularity + cooccurrence`. The similar-person
+quota result is recorded as a metric-positive experiment only, not as the locked
+baseline/default.
 
 ## Stage2 학습 방식
 
@@ -172,27 +199,6 @@ Korean retrieval task 성능을 높이기 위해 한국어 query-passage pair로
 | E5-small-ko-v2 Stage2 single | popularity + cooccurrence | LightGBM | E5-small 단일 cosine similarity | 이전 production default |
 | Snowflake-ko Stage2 single | popularity + cooccurrence | LightGBM | Snowflake-ko 단일 cosine similarity | 이전 accuracy reference |
 | E5-small-ko-v2 Stage2 domain-specific | popularity + cooccurrence | LightGBM | E5-small 전체 similarity + domain별 similarity | 현재 SOTA/default |
-
-## Test 성능 비교
-
-![Model performance comparison](docs/model_performance.svg)
-
-| Model | Test Recall@10 | Test NDCG@10 | Decision |
-| --- | ---: | ---: | --- |
-| no-text LightGBM | 0.579626 | 0.360270 | baseline |
-| KURE-v1 Stage2 single | 0.617482 | 0.386258 | historical baseline |
-| E5-small-ko-v2 Stage2 single | 0.623837 | 0.393921 | previous production default |
-| Snowflake-ko Stage2 single | 0.637653 | 0.402805 | previous accuracy reference |
-| E5-small-ko-v2 Stage2 domain-specific | 0.680943 | 0.436665 | current SOTA/default |
-
-E5 domain-specific 개선폭:
-
-| 비교 대상 | Recall@10 delta | NDCG@10 delta |
-| --- | ---: | ---: |
-| Stage1/no-text baseline | +0.101317 | +0.076395 |
-| E5 single | +0.057106 | +0.042744 |
-| Snowflake single | +0.043290 | +0.033860 |
-| KURE-v1 single | +0.063461 | +0.050407 |
 
 ## E5 Domain-Specific Feature
 
