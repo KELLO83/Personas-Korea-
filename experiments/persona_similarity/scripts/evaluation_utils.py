@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import math
 import time
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -188,7 +188,7 @@ def evaluate_score_column(
     worker_count = resolve_worker_count(workers)
     payloads = [(group, score_column, tuple(top_k_values)) for group in groups]
     if worker_count > 1:
-        with ProcessPoolExecutor(max_workers=worker_count) as executor:
+        with ThreadPoolExecutor(max_workers=worker_count) as executor:
             iterator = executor.map(_evaluate_group_for_score, payloads)
             if progress:
                 try:

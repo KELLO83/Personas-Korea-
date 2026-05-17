@@ -40,10 +40,6 @@ Most long-running scripts reuse valid artifacts by default. Pass `--force` only 
 .\.venv\Scripts\python.exe experiments\persona_similarity\scripts\train_rank_xendcg.py --config experiments\persona_similarity\configs\lightgbm_reranker.yaml
 .\.venv\Scripts\python.exe experiments\persona_similarity\scripts\evaluate_rank_xendcg.py --config experiments\persona_similarity\configs\lightgbm_reranker.yaml
 
-# Optional CatBoost reranker comparison
-.\.venv\Scripts\python.exe experiments\persona_similarity\scripts\train_catboost_ranker.py --config experiments\persona_similarity\configs\lightgbm_reranker.yaml
-.\.venv\Scripts\python.exe experiments\persona_similarity\scripts\evaluate_catboost_ranker.py --config experiments\persona_similarity\configs\lightgbm_reranker.yaml
-
 # Hybrid score based on a trained model
 .\.venv\Scripts\python.exe experiments\persona_similarity\scripts\evaluate_hybrid_score.py --config experiments\persona_similarity\configs\lightgbm_reranker.yaml --source-experiment lambdarank
 

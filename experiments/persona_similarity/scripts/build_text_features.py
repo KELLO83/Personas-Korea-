@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import sys
 import time
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -75,7 +75,7 @@ def build_text_feature_frame(features: pl.DataFrame, embedding_map: dict[str, np
     records = features.select(["source_uuid", "target_uuid"]).to_dicts()
     if workers > 1:
         chunksize = max(1, min(256, len(records) // (workers * 4) if workers else 1))
-        with ProcessPoolExecutor(
+        with ThreadPoolExecutor(
             max_workers=workers,
             initializer=init_text_feature_worker,
             initargs=(embedding_map, zero),
@@ -94,12 +94,12 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="experiments/persona_similarity/configs/lightgbm_reranker.yaml")
     parser.add_argument("--force", action="store_true")
-    parser.add_argument("--cpu-thread-count", type=int, default=0, help="Process workers for Python-heavy text feature building. 0 uses laptop default.")
-    parser.add_argument("--parallel-backend", choices=["auto", "process", "serial"], default="auto")
+    parser.add_argument("--cpu-thread-count", type=int, default=0, help="Thread workers for Python-heavy text feature building. 0 uses laptop default.")
+    parser.add_argument("--parallel-backend", choices=["auto", "thread", "serial"], default="auto")
     args = parser.parse_args()
     config = load_config(args.config)
     workers = resolve_worker_count(args.cpu_thread_count)
-    parallel_backend = "process" if args.parallel_backend == "auto" else args.parallel_backend
+    parallel_backend = "thread" if args.parallel_backend == "auto" else args.parallel_backend
     if parallel_backend == "serial":
         workers = 1
     cache_metadata = {

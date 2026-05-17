@@ -212,3 +212,20 @@ cached feature matrix에서 평가:
 - `DATASET_EXPLAIN.md`: 데이터 구조와 leakage 참고
 - `artifacts/experiment_decisions.json`: machine-readable 실험 의사결정
 - `artifacts/experiment_run_summary.md`: human-readable 실험 기록
+
+## 2026-05-17 Snowflake-ko Validation Result
+
+`dragonkue/snowflake-arctic-embed-l-v2.0-ko` was evaluated as the same Stage2 `text_embedding_similarity` feature slot. Stage1 stayed fixed as `popularity + cooccurrence`, and the LightGBM recipe stayed fixed at `num_leaves=31`.
+
+| Model | Validation Recall@10 | Validation NDCG@10 | Candidate Recall@50 | Status |
+| --- | ---: | ---: | ---: | --- |
+| KURE-v1 Stage2 current SOTA | 0.634706 | 0.396559 | 0.827669 | current default |
+| Snowflake-ko Stage2 | 0.655430 | 0.410234 | 0.827669 | validation winner candidate |
+
+Snowflake-ko delta vs KURE-v1 Stage2:
+
+- Recall@10 `+0.020724`
+- NDCG@10 `+0.013675`
+- Candidate Recall@50 `+0.000000`
+
+Decision: Snowflake-ko passed the validation gate and is eligible for winner-only test. The test split has not been run, so the current default/SOTA remains KURE-v1 Stage2 until a winner-only test result is recorded.

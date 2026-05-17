@@ -12,7 +12,7 @@ import subprocess
 import time
 import sys
 from collections import Counter, defaultdict
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Iterable, Mapping, cast
 
@@ -291,15 +291,15 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--feature-build-parallelism",
-        choices=["auto", "process", "serial"],
+        choices=["auto", "thread", "serial"],
         default="auto",
-        help="Parallel backend for CPU-bound feature row construction. auto uses process workers on Python 3.11.",
+        help="Parallel backend for CPU-bound feature row construction. auto uses thread workers.",
     )
     parser.add_argument(
         "--ranking-build-parallelism",
-        choices=["auto", "process", "serial"],
+        choices=["auto", "thread", "serial"],
         default="auto",
-        help="Parallel backend for Stage1/V1 ranking construction. auto uses process workers on Python 3.11.",
+        help="Parallel backend for Stage1/V1 ranking construction. auto uses thread workers.",
     )
     return parser.parse_args()
 
@@ -335,8 +335,8 @@ def _resolve_system_resource_plan(args: argparse.Namespace) -> dict[str, object]
         "gpu_total_vram_mb": gpu_total_mb,
         "gpu_used_vram_mb": gpu_used_mb,
         "gpu_free_vram_mb": gpu_free_mb,
-        "feature_builder_parallelism": "auto_process_for_python311",
-        "ranking_builder_parallelism": "auto_process_for_python311",
+        "feature_builder_parallelism": "auto_thread_pool",
+        "ranking_builder_parallelism": "auto_thread_pool",
         "lightgbm_predict_threads": cpu_threads,
         "torch_threads": cpu_threads,
     }
@@ -345,8 +345,8 @@ def _resolve_system_resource_plan(args: argparse.Namespace) -> dict[str, object]
 def _resolve_parallel_backend(value: str) -> str:
     backend = str(value or "auto").strip().lower()
     if backend == "auto":
-        return "process"
-    if backend not in {"process", "serial"}:
+        return "thread"
+    if backend not in {"thread", "serial"}:
         raise ValueError(f"Unsupported parallel backend: {value}")
     return backend
 
@@ -921,7 +921,7 @@ def main() -> None:
         ranking_payloads = [(person_id, pools_by_person.get(person_id, [])) for person_id in truth_person_ids]
         ranking_chunksize = max(1, min(64, len(ranking_payloads) // (ranking_worker_count * 4) if ranking_worker_count else 1))
         if ranking_worker_count > 1:
-            with ProcessPoolExecutor(
+            with ThreadPoolExecutor(
                 max_workers=ranking_worker_count,
                 initializer=_init_ranking_worker,
                 initargs=(
@@ -1002,7 +1002,7 @@ def main() -> None:
         feature_parallelism = _resolve_parallel_backend(args.feature_build_parallelism)
         if feature_parallelism == "serial":
             feature_worker_count = 1
-        use_parallel_feature_build = feature_worker_count > 1 and feature_parallelism == "process"
+        use_parallel_feature_build = feature_worker_count > 1 and feature_parallelism == "thread"
         LOGGER.info(
             "Starting feature row build: persons=%s candidate_rows=%s feature_columns=%s text_lookup_pairs=%s parallel=%s workers=%s backend=%s",
             len(truth_person_ids),
@@ -1026,7 +1026,7 @@ def main() -> None:
                 for person_id in truth_person_ids
             ]
             chunksize = max(1, min(64, len(feature_payloads) // (feature_worker_count * 4) if feature_worker_count else 1))
-            with ProcessPoolExecutor(
+            with ThreadPoolExecutor(
                 max_workers=feature_worker_count,
                 initializer=_init_feature_worker,
                 initargs=(hobby_profile, reranker_config, model_feature_columns),

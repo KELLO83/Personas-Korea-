@@ -336,3 +336,45 @@ Next step when resuming:
   --cpu-thread-count 10 `
   --progress-mode on
 ```
+
+## 2026-05-17 Snowflake-ko Stage2 validation completed
+
+The Snowflake-ko Track A validation-only run completed after resuming with the safer local resource policy:
+
+```text
+run_id = snowflake_stage2_single_feature_validation_cpu10
+embedding_model = dragonkue/snowflake-arctic-embed-l-v2.0-ko
+Stage1 = popularity + cooccurrence
+Stage2 = LightGBM(num_leaves=31) + text_embedding_similarity
+cpu_threads = 2
+feature_build_parallelism = process
+ranking_build_parallelism = process
+progress_mode = on
+device = cuda
+batch_size = 16
+```
+
+Validation result:
+
+| Model | Recall@10 | NDCG@10 | Candidate Recall@50 |
+| --- | ---: | ---: | ---: |
+| KURE-v1 Stage2 current SOTA validation | 0.634706 | 0.396559 | 0.827669 |
+| Snowflake-ko Stage2 validation | 0.655430 | 0.410234 | 0.827669 |
+
+Snowflake-ko delta vs KURE-v1 Stage2 validation:
+
+- Recall@10 `+0.020724`
+- NDCG@10 `+0.013675`
+- Candidate Recall@50 `+0.000000`
+
+Decision:
+
+- Snowflake-ko passed the validation gate and is eligible for winner-only test.
+- Test split was not run in this step.
+- Current default remains KURE-v1 Stage2 until a winner-only test result is recorded and accepted.
+
+Artifacts:
+
+- `artifacts/experiments/phase5_c_text_embedding/snowflake_stage2_single_feature_validation_cpu10/validation_metrics.json`
+- `artifacts/experiments/phase5_c_text_embedding/snowflake_stage2_single_feature_validation_cpu10/validation_metrics.status.json`
+- `artifacts/experiments/phase5_c_text_embedding/snowflake_stage2_single_feature_validation_cpu10/validation_run_20260517_process2.err.log`

@@ -73,7 +73,7 @@ BASELINE_PARAMS: dict[str, Any] = {
     "reg_lambda": 0.1,
     "verbose": -1,
     "seed": 42,
-    "num_threads": -1,
+    "num_threads": 18,
 }
 
 # Tuning grid: param -> list of values to try

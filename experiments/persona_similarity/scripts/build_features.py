@@ -5,7 +5,7 @@ import json
 import random
 import sys
 import time
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -116,7 +116,7 @@ def build_feature_frame(
     records = pair_frame.to_dicts()
     if workers > 1:
         payloads = [(row, weak_weights, deterministic_weights) for row in records]
-        with ProcessPoolExecutor(max_workers=workers) as executor:
+        with ThreadPoolExecutor(max_workers=workers) as executor:
             iterator = executor.map(build_feature_row_from_payload, payloads, chunksize=max(1, min(256, len(payloads) // (workers * 4) if workers else 1)))
             rows = list(iter_records_with_progress(iterator, total=len(records)))
     else:
@@ -132,12 +132,12 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="experiments/persona_similarity/configs/lightgbm_reranker.yaml")
     parser.add_argument("--force", action="store_true")
-    parser.add_argument("--cpu-thread-count", type=int, default=0, help="Process workers for Python-heavy feature building. 0 uses laptop default.")
-    parser.add_argument("--parallel-backend", choices=["auto", "process", "serial"], default="auto")
+    parser.add_argument("--cpu-thread-count", type=int, default=0, help="Thread workers for Python-heavy feature building. 0 uses laptop default.")
+    parser.add_argument("--parallel-backend", choices=["auto", "thread", "serial"], default="auto")
     args = parser.parse_args()
     config = load_config(args.config)
     workers = resolve_worker_count(args.cpu_thread_count)
-    parallel_backend = "process" if args.parallel_backend == "auto" else args.parallel_backend
+    parallel_backend = "thread" if args.parallel_backend == "auto" else args.parallel_backend
     if parallel_backend == "serial":
         workers = 1
 

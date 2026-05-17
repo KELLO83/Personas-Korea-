@@ -4,7 +4,7 @@ import hashlib
 import json
 import random
 from collections import Counter
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, cast
@@ -284,8 +284,8 @@ def build_ranker_dataset(
     text_similarity_fn: Callable[[int, HobbyCandidate], float] | None = None,
     text_similarity_lookup: dict[int, dict[int, float]] | None = None,
     parallel_workers: int | None = None,
-    parallel_backend: str = "process",
-    process_workers: int | None = None,
+    parallel_backend: str = "thread",
+    thread_workers: int | None = None,
     show_progress: bool = False,
     progress_desc: str = "ranker rows",
 ) -> RankerDataset:
@@ -301,12 +301,12 @@ def build_ranker_dataset(
         include_text_embedding_feature=include_text_embedding_feature,
     )
 
-    worker_count = parallel_workers if parallel_workers is not None else process_workers
+    worker_count = parallel_workers if parallel_workers is not None else thread_workers
     workers = max(1, int(worker_count or 1))
     backend = parallel_backend.strip().lower()
     if backend == "auto":
-        backend = "process"
-    if backend not in {"process", "serial"}:
+        backend = "thread"
+    if backend not in {"thread", "serial"}:
         raise ValueError(f"Unsupported ranker dataset parallel_backend: {parallel_backend}")
     if backend == "serial":
         workers = 1
@@ -322,7 +322,7 @@ def build_ranker_dataset(
             for person_id, positive_hobby_ids in positives_by_person.items()
         ]
         chunksize = max(1, min(64, len(payloads) // (workers * 4) if workers else 1))
-        with ProcessPoolExecutor(
+        with ThreadPoolExecutor(
             max_workers=workers,
             initializer=_init_ranker_dataset_worker,
             initargs=(
@@ -525,7 +525,7 @@ class LightGBMRanker:
         "reg_lambda": 0.1,
         "verbose": -1,
         "seed": 42,
-        "num_threads": -1,
+        "num_threads": 18,
     }
 
     def __init__(self, params: dict[str, Any] | None = None):

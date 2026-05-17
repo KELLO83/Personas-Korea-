@@ -123,7 +123,7 @@ def parse_args() -> argparse.Namespace:
         "--cpu-thread-count",
         type=int,
         default=0,
-        help="CPU threads for LightGBM training. Use 0 for max(1, os.cpu_count() - 2).",
+        help="CPU threads for LightGBM training and thread workers. Use 0 for the laptop default policy, currently up to 18.",
     )
     parser.add_argument(
         "--progress-mode",
@@ -507,7 +507,7 @@ def main() -> None:
         params["reg_lambda"] = args.reg_lambda
 
     print(
-        f"[progress] Building ranker train dataset with process workers={cpu_threads} "
+        f"[progress] Building ranker train dataset with thread workers={cpu_threads} "
         f"(neg_ratio={args.neg_ratio}, hard_ratio={args.hard_ratio})...",
         flush=True,
     )
@@ -520,14 +520,14 @@ def main() -> None:
         text_similarity_fn=None,
         text_similarity_lookup=text_similarity_lookup,
         parallel_workers=cpu_threads,
-        parallel_backend="process",
+        parallel_backend="thread",
         show_progress=True,
         progress_desc="ranker train rows",
     )
     train_pos = sum(1 for r in train_ds.rows if r.label == 1)
     print(f"  rows={len(train_ds.rows)} pos={train_pos} neg={len(train_ds.rows) - train_pos}")
 
-    print(f"[progress] Building ranker val dataset with process workers={cpu_threads}...", flush=True)
+    print(f"[progress] Building ranker val dataset with thread workers={cpu_threads}...", flush=True)
     val_ds = build_ranker_dataset(
         ranker_val_edges, pools, all_hobby_ids, train_known,
         id_to_hobby, contexts, id_to_person, hobby_profile, reranker_config,
@@ -537,7 +537,7 @@ def main() -> None:
         text_similarity_fn=None,
         text_similarity_lookup=text_similarity_lookup,
         parallel_workers=cpu_threads,
-        parallel_backend="process",
+        parallel_backend="thread",
         show_progress=True,
         progress_desc="ranker validation rows",
     )
@@ -618,8 +618,8 @@ def main() -> None:
             "requested_cpu_threads": requested_cpu_threads,
             "cpu_threads": cpu_threads,
             "lightgbm_train_threads": cpu_threads,
-            "ranker_dataset_parallel_backend": "process",
-            "ranker_dataset_process_workers": cpu_threads,
+            "ranker_dataset_parallel_backend": "thread",
+            "ranker_dataset_thread_workers": cpu_threads,
         },
         "embedding_model_metadata_path": str(output_dir / "embedding_model_metadata.json"),
         "embedding_model_metadata": embedding_model_metadata,

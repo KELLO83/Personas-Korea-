@@ -30,7 +30,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--feature-cache", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--experiment-id", type=str, default="")
-    parser.add_argument("--cpu-thread-count", type=int, default=10)
+    parser.add_argument("--cpu-thread-count", type=int, default=0)
     parser.add_argument("--progress-mode", choices=["on", "off"], default="on")
     return parser.parse_args()
 

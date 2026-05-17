@@ -66,7 +66,7 @@ BASELINE_PARAMS: dict[str, Any] = {
     "reg_lambda": 0.1,
     "verbose": -1,
     "seed": 42,
-    "num_threads": -1,
+    "num_threads": 18,
 }
 
 NEG_RATIOS = [1, 2, 4, 8]

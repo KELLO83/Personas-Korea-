@@ -57,7 +57,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--save-sample", action="store_true")
     parser.add_argument("--rerank", action="store_true", help="Apply deterministic Stage 2 reranker after Stage 1 candidate generation.")
     parser.add_argument("--use-learned-ranker", action="store_true", help="Apply LightGBM learned ranker (v2) instead of deterministic reranker.")
-    parser.add_argument("--explain", action="store_true", help="Generate SHAP-based explanation reasons (requires --use-learned-ranker).")
+    parser.add_argument("--explain", action="store_true", help="Generate LightGBM contribution-based explanation reasons (requires --use-learned-ranker).")
     parser.add_argument("--use-text-embedding", action="store_true", help="Enable leakage-safe text embedding similarity feature.")
     parser.add_argument("--ranker-model", type=Path, default=Path("GNN_Neural_Network/artifacts/ranker_model.txt"), help="Path to trained LightGBM ranker model.")
     return parser.parse_args()

@@ -5,7 +5,7 @@ import csv
 import logging
 import os
 import sys
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from collections import Counter, defaultdict
 from dataclasses import asdict
 from pathlib import Path
@@ -84,7 +84,7 @@ def parse_args() -> argparse.Namespace:
         "--num-workers",
         type=int,
         default=0,
-        help="CPU worker processes for non-LightGCN reranker evaluation. Use 0 to auto-detect, 1 to disable.",
+        help="CPU worker threads for non-LightGCN reranker evaluation. Use 0 to auto-detect, 1 to disable.",
     )
     parser.add_argument(
         "--worker-chunk-size",
@@ -205,12 +205,12 @@ def main() -> None:
         worker_count,
         os.cpu_count() or 1,
         args.worker_chunk_size,
-        "process_pool" if worker_count > 1 else "single_process",
+        "thread_pool" if worker_count > 1 else "single_thread",
     )
     person_ids = list(truth)
     if worker_count > 1:
         chunks = list(_chunks(person_ids, args.worker_chunk_size))
-        with ProcessPoolExecutor(
+        with ThreadPoolExecutor(
             max_workers=worker_count,
             initializer=_init_reranker_worker,
             initargs=(eval_context,),
@@ -389,14 +389,14 @@ def _resolve_worker_count(requested: int, person_count: int, needs_lightgcn: boo
         raise ValueError("--num-workers must be >= 0")
     if needs_lightgcn:
         if requested > 1:
-            LOGGER.info("Disabling process workers because LightGCN provider/metrics require local model tensors.")
+            LOGGER.info("Disabling thread workers because LightGCN provider/metrics require local model tensors.")
         return 1
     if requested == 1:
         return 1
     logical_cpus = os.cpu_count() or 1
     if requested > 1:
         return min(requested, person_count)
-    return min(max(1, logical_cpus - 1), person_count)
+    return min(max(logical_cpus - 4, 1), 18, person_count)
 
 
 def _chunks(values: list[int], chunk_size: int) -> Iterable[list[int]]:

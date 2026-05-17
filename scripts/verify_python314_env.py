@@ -38,7 +38,6 @@ PACKAGE_CHECKS = [
     PackageCheck("yaml", "pyyaml"),
     PackageCheck("torchinfo"),
     PackageCheck("lightgbm"),
-    PackageCheck("shap"),
     PackageCheck("sklearn", "scikit-learn"),
     PackageCheck("matplotlib"),
     PackageCheck("catboost"),

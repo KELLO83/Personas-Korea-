@@ -60,7 +60,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--split", choices=["validation", "test", "both"], default="validation")
     parser.add_argument("--run-test-if-validation-beats-sota", action="store_true")
-    parser.add_argument("--cpu-thread-count", type=int, default=10)
+    parser.add_argument("--cpu-thread-count", type=int, default=0)
     parser.add_argument("--num-boost-round", type=int, default=500)
     parser.add_argument("--early-stopping", type=int, default=50)
     parser.add_argument("--ranker-val-ratio", type=float, default=0.2)

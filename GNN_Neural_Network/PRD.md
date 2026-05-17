@@ -183,7 +183,7 @@ Track A status board:
 | Model | Role | Status | Validation gate | Test execution | Decision artifact |
 | --- | --- | --- | --- | --- | --- |
 | `nlpai-lab/KURE-v1` | current reference Stage2 text feature backbone | promoted on current split | passed | executed | `artifacts/experiments/phase5_c_text_embedding/current_locked_kure_stage2_num_leaves31_cpu10/` |
-| `dragonkue/snowflake-arctic-embed-l-v2.0-ko` | accuracy-ceiling probe | planned/runnable | must beat KURE-v1 Stage2 on validation Recall@10 and NDCG@10 | winner-only | pending |
+| `dragonkue/snowflake-arctic-embed-l-v2.0-ko` | accuracy-ceiling probe | validation gate passed | Recall@10 `0.655430`, NDCG@10 `0.410234`; beats KURE-v1 Stage2 validation | pending winner-only test | `artifacts/experiments/phase5_c_text_embedding/snowflake_stage2_single_feature_validation_cpu10/` |
 | `dragonkue/multilingual-e5-small-ko-v2` | lightweight speed/cost probe | planned/runnable | must be close in accuracy and materially faster/lighter | winner-only | pending |
 
 Experiment track B: domain-specific KURE features.
@@ -250,7 +250,8 @@ Track A implementation status:
 
 - `train_ranker.py` exposes `--text-embedding-model-name` and `--text-embedding-model-revision`.
 - `PersonEmbeddingCache` and `HobbyEmbeddingCache` use model name/revision in cache identity and SentenceTransformer loading.
-- The next runnable experiment is Snowflake-ko validation-only Stage2 feature comparison against the promoted KURE Stage2 SOTA.
+- Snowflake-ko validation-only Stage2 feature comparison completed on 2026-05-17. It used the same `popularity + cooccurrence` candidate pool, the same LightGBM `num_leaves=31` recipe, and the same `text_embedding_similarity` feature slot. Validation Recall@10 was `0.655430`, NDCG@10 was `0.410234`, and candidate_recall@50 stayed `0.827669`.
+- Snowflake-ko is eligible for winner-only test because it beat the promoted KURE-v1 Stage2 validation baseline (`0.634706` Recall@10, `0.396559` NDCG@10). Test has not been run yet, so the current default remains KURE-v1 Stage2 until a winner-only test decision is recorded.
 
 ### Mandatory Blockers Before KURE Text Feature Ablation
 

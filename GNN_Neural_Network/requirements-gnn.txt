@@ -1,14 +1,11 @@
 # GNN PoC helpers used by offline training scripts.
 # PyTorch itself is expected to be provided by the existing project .venv.
 pyyaml>=6.0.0
-torchinfo>=1.8.0
 tqdm>=4.66.0
 
 # Phase 1 (v2 learned ranker foundation)
 lightgbm>=4.0.0
-shap>=0.45.0
 scikit-learn>=1.3.0
-matplotlib>=3.7.0
 
-# Phase 4 (SHAP + text embedding)
+# Phase 4 (text embedding)
 sentence-transformers>=2.3.0

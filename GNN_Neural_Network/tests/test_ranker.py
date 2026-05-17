@@ -228,10 +228,10 @@ class TestBuildRankerDataset:
             assert r1.hobby_id == r2.hobby_id
             assert r1.label == r2.label
 
-    def test_process_workers_match_serial_schema_and_labels(self) -> None:
+    def test_thread_workers_match_serial_schema_and_labels(self) -> None:
         args = self._make_fixtures()
         serial = build_ranker_dataset(*args, neg_ratio=2, seed=99, parallel_workers=1)
-        parallel = build_ranker_dataset(*args, neg_ratio=2, seed=99, parallel_workers=2, parallel_backend="process")
+        parallel = build_ranker_dataset(*args, neg_ratio=2, seed=99, parallel_workers=2, parallel_backend="thread")
 
         assert parallel.feature_columns == serial.feature_columns
         assert len(parallel.rows) == len(serial.rows)

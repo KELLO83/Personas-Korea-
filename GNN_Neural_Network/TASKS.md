@@ -112,7 +112,11 @@ Do not confuse this with the completed KURE dense MMR sweep.
   - [x] test no-text: Recall@10 `0.579626`, NDCG@10 `0.360270`, candidate_recall@50 `0.827208`
   - [x] test KURE: Recall@10 `0.617482`, NDCG@10 `0.386258`, candidate_recall@50 `0.827208`
   - [x] Decision: on the current split/candidate pool, KURE Stage2 is selected over the current no-text baseline and is the current SOTA/default candidate.
-- [ ] Next Stage2 embedding probe: `dragonkue/snowflake-arctic-embed-l-v2.0-ko` as a single validation-only Stage2 text feature ablation against the KURE Stage2 SOTA.
+- [x] Next Stage2 embedding probe: `dragonkue/snowflake-arctic-embed-l-v2.0-ko` as a single validation-only Stage2 text feature ablation against the KURE Stage2 SOTA.
+  - [x] Validation completed with `--cpu-thread-count 2` and visible progress; current code now uses the thread backend for feature/evaluation workers.
+  - [x] Snowflake validation Recall@10 `0.655430`, NDCG@10 `0.410234`, candidate_recall@50 `0.827669`.
+  - [x] Delta vs promoted KURE Stage2 validation: Recall@10 `+0.020724`, NDCG@10 `+0.013675`, candidate_recall@50 `+0.000000`.
+  - [x] Decision: Snowflake-ko passed the validation gate and is eligible for winner-only test, but test has not been run yet.
 - [ ] Optional Stage2 embedding probe: `dragonkue/multilingual-e5-small-ko-v2` as a lightweight feature ablation if runtime/cost reduction becomes important.
 - [ ] Next candidate hobby text probe: evaluate candidate text builders (`name_only`, `name_plus_aliases`, `name_plus_category`, `name_plus_short_description`) as a separate Track D validation-only ablation. Do not change the embedding backbone in the same run.
 - [ ] Next KURE Stage2 feature-shape probe: split the single cosine feature into domain-specific masked text blocks (`sports`, `arts`, `travel`, `food`, etc.) and compare against the promoted single-feature KURE SOTA.
@@ -129,7 +133,7 @@ Do not confuse this with the completed KURE dense MMR sweep.
   - Stage2 LightGBM recipe must remain `num_leaves=31` unless a separate tuning task is opened
   - Stage2 text feature contract must remain `text_embedding_similarity = cosine(masked persona domain text embedding, candidate hobby text embedding)`
   - persona text path must remain `mask_holdout_hobbies -> post_mask_leakage_audit -> build_domain_tagged_persona_text`
-  - CPU thread count must stay `10` for comparable local runs
+  - CPU thread count should follow the current root resource policy. Full validation now uses thread workers on this laptop to reduce worker memory duplication.
   - progress must be visible for embedding, feature building, training, and evaluation
 - [ ] Track A - embedding backbone swap:
   - [x] define Track A control contract: only the embedding model name/revision may change
@@ -140,15 +144,17 @@ Do not confuse this with the completed KURE dense MMR sweep.
     - [x] `evaluate_ranker.py` supports `--text-embedding-model-revision`
     - [x] `PersonEmbeddingCache` and `HobbyEmbeddingCache` pass model revision to SentenceTransformer loading
     - [x] cache metadata and ranker metadata record model name/revision/preprocessing
-  - [ ] verify Track A runs keep candidate hobby text builder, masking policy, LightGBM params, split, and candidate pool unchanged
-  - [ ] record embedding dimension, pooling behavior when known, device, batch size, cache hit/miss, runtime, and cache fingerprint
-  - [ ] run `dragonkue/snowflake-arctic-embed-l-v2.0-ko` validation-only with the same candidate pool and same feature slot
+  - [x] verify Track A runs keep candidate hobby text builder, masking policy, LightGBM params, split, and candidate pool unchanged
+  - [x] record embedding model metadata, device, batch size, cache hit/miss, runtime, and cache fingerprint
+  - [x] run `dragonkue/snowflake-arctic-embed-l-v2.0-ko` validation-only with the same candidate pool and same feature slot
     - [x] training completed: `snowflake_stage2_single_feature_validation_cpu10`, best AUC `0.873005`, best iteration `95`
     - [x] leakage audit passed: failed `0`, passed `10857`
-    - [x] validation evaluation started and reached `candidates_done`
-    - [ ] validation Recall/NDCG pending; first full evaluation timed out before `validation_metrics.json`
+    - [x] validation evaluation completed after resuming with `--cpu-thread-count 2`
+    - [x] validation Recall@10 `0.655430`, NDCG@10 `0.410234`, candidate_recall@50 `0.827669`
+    - [x] Snowflake-ko beat the promoted KURE Stage2 validation gate and is eligible for winner-only test
   - [ ] run `dragonkue/multilingual-e5-small-ko-v2` validation-only only after Snowflake or as a runtime/cost probe
-  - [ ] promote to test only if validation Recall@10 and NDCG@10 beat KURE-v1 Stage2
+  - [x] promote to test only if validation Recall@10 and NDCG@10 beat KURE-v1 Stage2
+    - [x] Gate passed for Snowflake-ko validation; test remains pending and was not run in this step
 - [ ] Track B - domain-specific KURE feature split:
   - [ ] define masked domain text builders for sports, arts, travel, food, family, and professional context
   - [ ] add feature columns such as `kure_sports_similarity`, `kure_arts_similarity`, `kure_travel_similarity`, and `kure_food_similarity`
@@ -409,7 +415,9 @@ Remaining implementation work before any future text embedding ablation:
 
 Active Stage2 backbone probes:
 
-- [ ] Run `dragonkue/snowflake-arctic-embed-l-v2.0-ko` as a validation-only Stage2 feature ablation against the current KURE Stage2 SOTA.
+- [x] Run `dragonkue/snowflake-arctic-embed-l-v2.0-ko` as a validation-only Stage2 feature ablation against the current KURE Stage2 SOTA.
+  - [x] Validation Recall@10 `0.655430`, NDCG@10 `0.410234`, candidate_recall@50 `0.827669`.
+  - [x] Status: validation winner candidate; winner-only test pending.
 - [ ] Run `dragonkue/multilingual-e5-small-ko-v2` as a validation-only Stage2 feature ablation if Snowflake or runtime/cost results justify the second probe.
 - [ ] Compare any future backbone against KURE-v1 Stage2 on overall and cold-start metrics with the same current candidate pool.
 - [ ] Record each future result as `rejected`, `experimental`, `needs_followup`, or selected for winner-only test.

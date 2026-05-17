@@ -10,6 +10,60 @@ use global/system Python.
 .\.venv\Scripts\python.exe -m uvicorn src.api.main:app
 ```
 
+### Python 3.14t ML Experiment Environment
+
+`.venv314t` is allowed only for local ML experiment acceleration, not for the
+backend, frontend, Neo4j integration, RAG, or production API path.
+
+- Default runtime remains `.venv` Python 3.11.
+- Backend/FastAPI must run with `.venv` Python 3.11.
+- Use `.venv314t` only when the specific training/evaluation path has been
+  verified under free-threaded Python 3.14t.
+- Do not mix `.venv` and `.venv314t` artifacts unless the experiment metadata
+  records the Python executable, package versions, device, and cache identity.
+- `shap` is not required by the current recommender training/evaluation path.
+  Current explanation code uses LightGBM `pred_contrib=True`, not the external
+  SHAP package.
+
+Use `.venv` Python 3.11 for:
+
+- Backend/FastAPI/frontend integration.
+- Neo4j connections and graph exports.
+- Excel exports.
+- pandas/openpyxl/pyarrow-based utility scripts.
+- Dataset download and platform/RAG work.
+
+Use `.venv314t` Python 3.14t only for:
+
+- Reading already-exported local parquet/csv/npz/artifacts.
+- Polars-based feature building.
+- KURE/Snowflake text embedding generation.
+- LightGBM training/evaluation.
+- Python-heavy CPU feature/evaluation loops where free-threaded
+  multithreading reduces memory pressure.
+
+
+Verified `.venv314t` local ML package set:
+
+```text
+torch 2.11.0+cu128
+sentence-transformers 5.5.0
+transformers 5.8.1
+tokenizers 0.23.0-rc0
+polars 1.37.1 + polars-runtime-32-ft 1.37.1
+lightgbm 4.6.0
+numpy/scipy/scikit-learn/tqdm/pyyaml
+psutil
+```
+
+Important caveats:
+
+- `tokenizers 0.23.0-rc0` is a release candidate. It currently keeps the GIL
+  disabled without `-X gil=0` and satisfies `transformers 5.8.1`, but treat this
+  as experimental until a stable `transformers` release accepts
+  `tokenizers 0.23.1`.
+- `polars-runtime-32-ft` is an unofficial wheel and is only for Polars `1.37.1`.
+
 ## Project Map
 
 - `frontend/` - Next.js frontend
@@ -82,13 +136,14 @@ CPU-heavy ML code should default to this laptop profile:
 - Default CPU threads/workers: `18`.
 - Do not default to all logical processors.
 - Recommended fallback: `min(max(os.cpu_count() - 4, 1), 18)`.
-- Apply this to LightGBM `num_threads`, joblib `n_jobs`, process pools, PyTorch
+- Apply this to LightGBM `num_threads`, joblib `n_jobs`, thread pools, PyTorch
   CPU threads, NumPy/BLAS env vars, feature builders, and evaluation.
-- Python 3.11 CPU-bound Python loops are constrained by the GIL. For Python-heavy
-  work such as feature row construction, candidate feature building, text/cache
-  post-processing, and pure-Python evaluation transforms, default to
-  multiprocessing/process pools rather than thread pools. Threads are acceptable
-  for I/O-bound work or native libraries that release the GIL.
+- For recommender ML experiments, use `ThreadPoolExecutor` for Python-heavy
+  feature row construction, candidate feature building, text/cache
+  post-processing, and pure-Python evaluation transforms. The thread-pool
+  policy is used consistently across `.venv` Python 3.11 and `.venv314t` Python
+  3.14t to avoid duplicated worker memory and OOM shutdowns. Record
+  worker/thread counts in experiment metadata.
 
 ```powershell
 $env:OMP_NUM_THREADS = "18"
