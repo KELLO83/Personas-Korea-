@@ -1,28 +1,65 @@
 # GNN Experiment Run Summary
 
-Date: 2026-05-15
+Date: 2026-05-17
 
-This summary records the current offline recommender decision state before any future opt-in KURE/KRUE text feature ablation. The default recommendation path did not change.
+This summary records the current offline recommender decision state after the
+E5-small-ko-v2 domain-specific Stage2 validation and winner-only test. The
+current accuracy SOTA and production default is E5-small-ko-v2 domain-specific
+Stage2.
 
 ## Current default path
 
 ```text
 Stage 1 = popularity + cooccurrence
-Stage 2 = LightGBM learned ranker
+Stage 2 = LightGBM learned ranker + E5-small-ko-v2 single + domain-specific text similarities
+production_embedding_model = dragonkue/multilingual-e5-small-ko-v2
 include_source_features = false
-include_text_embedding_feature = false
+include_text_embedding_feature = true
+include_domain_text_embedding_features = true
 MMR = false
 ```
 
 Stage 1: `popularity + cooccurrence`
-Stage 2: v2 LightGBM ranker
+Stage 2: v2 LightGBM ranker with E5-small-ko-v2 `text_embedding_similarity`
+plus domain-specific E5 similarities.
 
-The closed Phase 2.5 default remains the comparison baseline for all later KURE dense MMR or text embedding feature work.
+Snowflake-ko Stage2 single remains the previous accuracy reference. KURE-v1
+Stage2 remains a historical Stage2 embedding baseline.
 
 ## Key Lessons
 
-- Keep the promoted LightGBM regularized default as the accuracy baseline.
-- Treat KURE/KRUE text feature and MMR work as gated no-go unless validation, leakage, and cold-start checks pass.
+- Keep the fixed `popularity + cooccurrence` candidate pool as the retrieval baseline.
+- Use E5-small-ko-v2 domain-specific Stage2 as the production-default baseline for new Stage2 embedding feature work.
+- Also report deltas against E5-small single and Snowflake-ko single when a feature-shape or backbone comparison needs historical context.
+- Treat Stage1 semantic retrieval, MMR, and unrelated feature changes as gated opt-in work unless validation, leakage, and candidate-recall checks pass.
+
+## 2026-05-17 E5-small domain-specific Stage2 promotion
+
+Run paths:
+
+- Train/model: `artifacts/experiments/phase5_c_text_embedding/e5_domain_features_validation_thread18/ranker_model.txt`
+- Validation metrics: `artifacts/experiments/phase5_c_text_embedding/e5_domain_features_validation_thread18/validation_metrics.json`
+- Test metrics: `artifacts/experiments/phase5_c_text_embedding/e5_domain_features_test_thread18/test_metrics.json`
+
+The run kept Stage1 fixed as `popularity + cooccurrence`, kept the LightGBM
+recipe fixed at `num_leaves=31`, and added six scalar domain-specific E5 cosine
+features next to the existing mixed `text_embedding_similarity`.
+
+| Split | Recall@10 | NDCG@10 | Candidate Recall@50 | Decision |
+| --- | ---: | ---: | ---: | --- |
+| validation | 0.699180 | 0.448862 | 0.827669 | passed |
+| test | 0.680943 | 0.436665 | 0.827208 | promoted current SOTA/default |
+
+Test deltas:
+
+- vs Stage1: Recall@10 `+0.111173`, NDCG@10 `+0.080306`
+- vs E5-small single: Recall@10 `+0.057106`, NDCG@10 `+0.042744`
+- vs Snowflake-ko single: Recall@10 `+0.043290`, NDCG@10 `+0.033860`
+- vs KURE-v1 single: Recall@10 `+0.063461`, NDCG@10 `+0.050407`
+
+Decision: promote E5-small-ko-v2 domain-specific Stage2 as the current offline
+accuracy SOTA and production default. Future Stage2 experiments compare against
+this artifact first.
 
 ## Phase 2.5 default and cold-start baseline
 
@@ -378,3 +415,112 @@ Artifacts:
 - `artifacts/experiments/phase5_c_text_embedding/snowflake_stage2_single_feature_validation_cpu10/validation_metrics.json`
 - `artifacts/experiments/phase5_c_text_embedding/snowflake_stage2_single_feature_validation_cpu10/validation_metrics.status.json`
 - `artifacts/experiments/phase5_c_text_embedding/snowflake_stage2_single_feature_validation_cpu10/validation_run_20260517_process2.err.log`
+
+## 2026-05-17 Snowflake-ko Stage2 winner-only test completed
+
+After the validation gate passed, Snowflake-ko was evaluated once on the test
+split with the same current split, same `popularity + cooccurrence` Stage1
+candidate pool, same LightGBM `num_leaves=31` recipe, and same single
+`text_embedding_similarity` feature slot.
+
+Execution policy:
+
+```text
+run_id = snowflake_stage2_single_feature_test_thread18
+embedding_model = dragonkue/snowflake-arctic-embed-l-v2.0-ko
+Stage1 = popularity + cooccurrence
+Stage2 = LightGBM(num_leaves=31) + text_embedding_similarity
+cpu_threads = 18
+feature_build_parallelism = auto_thread_pool
+ranking_build_parallelism = auto_thread_pool
+progress_mode = on
+device = cuda
+embedding_batch_size = auto_vram
+```
+
+Test result:
+
+| Model | Recall@10 | NDCG@10 | Candidate Recall@50 | Decision |
+| --- | ---: | ---: | ---: | --- |
+| no-text LightGBM | 0.579626 | 0.360270 | 0.827208 | baseline |
+| KURE-v1 Stage2 | 0.617482 | 0.386258 | 0.827208 | previous SOTA |
+| Snowflake-ko Stage2 | 0.637653 | 0.402805 | 0.827208 | previous accuracy reference |
+
+Snowflake-ko delta vs KURE-v1 Stage2 test:
+
+- Recall@10 `+0.020171`
+- NDCG@10 `+0.016547`
+- Candidate Recall@50 `+0.000000`
+
+Decision:
+
+- Snowflake-ko Stage2 was promoted as the offline accuracy SOTA/reference at this point, but is now superseded by E5-small domain-specific Stage2.
+- KURE-v1 Stage2 remains a useful previous SOTA/reference baseline.
+- KURE-v1 Stage1 semantic provider remains rejected because it reduced candidate_recall@50.
+- This section is superseded for production default by the E5-small-ko-v2
+  decision below. Next feature-shape experiments should use E5-small-ko-v2 as
+  the production default and report Snowflake-ko deltas as the accuracy
+  reference.
+
+Artifacts:
+
+- `artifacts/experiments/phase5_c_text_embedding/snowflake_stage2_single_feature_test_thread18/test_metrics.json`
+- `artifacts/experiments/phase5_c_text_embedding/snowflake_stage2_single_feature_validation_cpu10/ranker_model.txt`
+
+## 2026-05-17 E5-small-ko-v2 Stage2 validation and test completed
+
+E5-small-ko-v2 was evaluated as the final planned embedding backbone in the
+same single `text_embedding_similarity` feature slot. Stage1, LightGBM params,
+masking, candidate text, split, and candidate pool stayed fixed.
+
+Execution policy:
+
+```text
+run_id = e5_small_stage2_single_feature_validation_thread18
+test_run_id = e5_small_stage2_single_feature_test_thread18
+embedding_model = dragonkue/multilingual-e5-small-ko-v2
+Stage1 = popularity + cooccurrence
+Stage2 = LightGBM(num_leaves=31) + text_embedding_similarity
+cpu_threads = 18
+feature_build_parallelism = auto_thread_pool
+ranking_build_parallelism = auto_thread_pool
+progress_mode = on
+device = cuda
+embedding_batch_size = auto_vram
+```
+
+Validation/test result:
+
+| Model | Split | Recall@10 | NDCG@10 | Candidate Recall@50 | Decision |
+| --- | --- | ---: | ---: | ---: | --- |
+| KURE-v1 Stage2 | test | 0.617482 | 0.386258 | 0.827208 | previous SOTA |
+| E5-small-ko-v2 Stage2 | validation | 0.645390 | 0.404545 | 0.827669 | production default candidate |
+| E5-small-ko-v2 Stage2 | test | 0.623837 | 0.393921 | 0.827208 | previous production default |
+| Snowflake-ko Stage2 | test | 0.637653 | 0.402805 | 0.827208 | previous accuracy reference |
+
+E5-small-ko-v2 delta vs Snowflake-ko Stage2 test:
+
+- Recall@10 `-0.013816`
+- NDCG@10 `-0.008884`
+- Candidate Recall@50 `+0.000000`
+
+E5-small-ko-v2 delta vs KURE-v1 Stage2 test:
+
+- Recall@10 `+0.006355`
+- NDCG@10 `+0.007663`
+- Candidate Recall@50 `+0.000000`
+
+Decision:
+
+- E5-small-ko-v2 single-feature was promoted as the production/efficiency default because it
+  beats KURE-v1 and remains close to Snowflake-ko while using a much smaller
+  model and embedding dimension. It is now superseded by E5-small domain-specific Stage2.
+- Snowflake-ko remains the previous accuracy reference.
+- Domain-specific Stage2 feature split used E5-small-ko-v2 as the default
+  backbone and was later promoted as the current SOTA/default.
+
+Artifacts:
+
+- `artifacts/experiments/phase5_c_text_embedding/e5_small_stage2_single_feature_validation_thread18/ranker_model.txt`
+- `artifacts/experiments/phase5_c_text_embedding/e5_small_stage2_single_feature_validation_thread18/validation_metrics.json`
+- `artifacts/experiments/phase5_c_text_embedding/e5_small_stage2_single_feature_test_thread18/test_metrics.json`

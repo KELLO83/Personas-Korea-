@@ -4,36 +4,46 @@
 
 This section is the current source of truth for running experiments against the local `GNN_Neural_Network/data` files. It overrides older wording that assumes the local edge CSV already contains stable canonical hobby items.
 
-## Current SOTA And KURE-v1 Decision Update (2026-05-16)
+## Current SOTA And Default Embedding Decision Update (2026-05-17)
 
-Current offline SOTA for the current local data/split is the KURE Stage2
-LightGBM path:
+Current offline accuracy SOTA and production default for the current local
+data/split is the E5-small-ko-v2 domain-specific Stage2 LightGBM path. It beats
+the previous Snowflake-ko single-cosine accuracy reference while keeping the
+same fixed Stage1 candidate pool and candidate_recall@50.
 
 ```text
 Stage 1 = popularity + cooccurrence
-Stage 2 = LightGBM learned ranker + KURE text_embedding_similarity
-model = artifacts/experiments/phase5_c_text_embedding/current_locked_kure_stage2_num_leaves31_cpu10/ranker_model.txt
+Stage 2 = LightGBM learned ranker + E5-small-ko-v2 single + domain-specific text similarities
+production_embedding_model = dragonkue/multilingual-e5-small-ko-v2
+production_model = artifacts/experiments/phase5_c_text_embedding/e5_domain_features_validation_thread18/ranker_model.txt
 include_text_embedding_feature = true
+include_domain_text_embedding_features = true
 MMR = false
 KURE Stage1 semantic provider = false
 ```
 
 Current locked test metrics:
 
-| Metric | Current KURE Stage2 SOTA |
-| --- | ---: |
-| Recall@10 | 0.617482 |
-| NDCG@10 | 0.386258 |
-| candidate_recall@50 | 0.827208 |
+| Model | Split | Recall@10 | NDCG@10 | candidate_recall@50 | Decision |
+| --- | --- | ---: | ---: | ---: | --- |
+| no-text LightGBM | test | 0.579626 | 0.360270 | 0.827208 | baseline |
+| KURE-v1 Stage2 single | test | 0.617482 | 0.386258 | 0.827208 | historical baseline |
+| E5-small-ko-v2 Stage2 single | test | 0.623837 | 0.393921 | 0.827208 | previous production default |
+| Snowflake-ko Stage2 single | test | 0.637653 | 0.402805 | 0.827208 | previous accuracy reference |
+| E5-small-ko-v2 domain-specific Stage2 | test | 0.680943 | 0.436665 | 0.827208 | current SOTA/default |
 
 The latest controlled comparison used the same current split, same Stage1
-candidate pool, and the same LightGBM SOTA recipe (`num_leaves=31`). Only the
-Stage2 KURE feature changed.
+candidate pool, and the same LightGBM SOTA recipe (`num_leaves=31`). The winning
+run changed the Stage2 feature shape from one mixed cosine to one mixed cosine
+plus six domain-specific E5-small cosine features. Candidate recall stayed fixed,
+so the gain is from better ordering inside the same candidate pool.
 
 Decision:
 
-- KURE-v1 domain-tagged text feature is **promoted for Stage2** on the current data/split.
-- The current SOTA/default candidate is `popularity + cooccurrence -> LightGBM(num_leaves=31) + KURE text_embedding_similarity`.
+- E5-small-ko-v2 `dragonkue/multilingual-e5-small-ko-v2` with domain-specific Stage2 features is **promoted as the production default and accuracy SOTA** for Stage2 on the current data/split.
+- Snowflake-ko `dragonkue/snowflake-arctic-embed-l-v2.0-ko` single-feature Stage2 is retained as the previous accuracy reference, not the current top model.
+- The current production default candidate is `popularity + cooccurrence -> LightGBM(num_leaves=31) + E5-small-ko-v2 text_embedding_similarity + E5-small domain similarities`.
+- KURE-v1 remains a validated Stage2 baseline and previous SOTA, but is no longer the top default on the current test split.
 - KURE-v1 semantic Stage1 provider remains **rejected**. On the current split it reduced validation candidate_recall@50 to `0.794971`, while the fixed Stage1 pool used by Stage2 KURE holds `0.827669`.
 - Embedding-model exploration is no longer globally low priority. It is now high priority for **Stage2 feature** ablations, but remains low priority for **Stage1 candidate generation** unless a new retrieval design protects candidate recall.
 
@@ -78,7 +88,7 @@ Current default remains:
 
 ```text
 Stage 1 = popularity + cooccurrence
-Stage 2 = LightGBM learned ranker + KURE-v1 text_embedding_similarity
+Stage 2 = LightGBM learned ranker + E5-small-ko-v2 domain-specific text features
 MMR     = false
 ```
 
@@ -86,7 +96,8 @@ Rationale:
 
 - The Person-Hobby graph is sparse and raw hobby phrases are extremely long-tail.
 - Stage 1 `popularity + cooccurrence` has beaten available graph/item-item provider variants in the current artifacts.
-- Stage 2 LightGBM with KURE-v1 `text_embedding_similarity` is the promoted accuracy-oriented default for the current split.
+- Stage 2 LightGBM with E5-small-ko-v2 domain-specific text features is the promoted production default and accuracy SOTA for the current split.
+- Snowflake-ko single-feature Stage2 remains the previous accuracy reference for offline comparison.
 - The unresolved issue is ranking quality inside the fixed candidate pool, not replacing Stage1 with semantic retrieval. Current candidate_recall@50 is `0.827669` on validation and `0.827208` on test for the locked current split.
 
 ### KURE-v1 Experiment Boundary
@@ -95,7 +106,7 @@ Use the spelling `KURE-v1` for the model (`nlpai-lab/KURE-v1`). Older notes that
 
 Embedding-related experiments are now split by role:
 
-- **Stage2 embedding features are high-priority follow-up work** because KURE-v1 improved the current SOTA recipe on the current data/split.
+- **Stage2 embedding features are high-priority follow-up work** because KURE-v1 improved the no-text recipe, Snowflake-ko further improved KURE-v1, and E5-small-ko-v2 kept near-Snowflake accuracy with much lower model cost.
 - **Stage1 semantic embedding retrieval remains low-priority and opt-in only** because KURE Stage1 reduced candidate_recall@50 and removed too many held-out positives before Stage2 ranking.
 
 Two KURE-related experiment families must stay separate:
@@ -103,7 +114,7 @@ Two KURE-related experiment families must stay separate:
 | Experiment family | Status | Default impact |
 | --- | --- | --- |
 | KURE dense MMR reranking | completed, NO-GO | `MMR=false` remains default |
-| KURE text embedding feature ablation | completed and promoted on current split | `include_text_embedding_feature=true` for current SOTA/default candidate |
+| KURE text embedding feature ablation | completed and superseded by Snowflake-ko on current split | previous SOTA/reference baseline |
 | KURE semantic Stage1 candidate provider | completed/rejected after `kure_stage1_semantic_001_fast_gpu` validation | `kure_semantic` remains opt-in only; default Stage1 unchanged |
 
 The initial KURE text feature run set `include_text_embedding_feature=true`, but the post-mask leakage audit failed above the 5% threshold and the run was excluded before LightGBM fitting:
@@ -133,17 +144,19 @@ validation_delta_ndcg@10_vs_stage1: +0.000197
 decision: rejected_recall_regression
 ```
 
-The corrected audit and current locked reruns showed that KURE-v1 carries useful Stage2 semantic signal. The next recommended work is not another blind KURE rerun; it is a controlled Stage2 feature-improvement program against the promoted KURE Stage2 SOTA.
+The corrected audit and current locked reruns showed that KURE-v1 carries useful Stage2 semantic signal. Snowflake-ko then beat KURE-v1 in the same Stage2 feature slot, and E5-small-ko-v2 kept near-Snowflake test quality with a much smaller model. The next recommended work is not another blind KURE rerun; it is a controlled Stage2 feature-improvement program against the promoted E5-small-ko-v2 production default while keeping Snowflake-ko as the accuracy reference.
 
 ### Stage2 Embedding Feature Improvement Plan
 
 Baseline for all follow-up experiments:
 
 ```text
-run_id = current_locked_kure_stage2_num_leaves31_cpu10
+run_id = e5_domain_features_validation_thread18
 Stage1 = popularity + cooccurrence
 Stage2 = LightGBM(num_leaves=31)
-baseline feature = KURE-v1 text_embedding_similarity
+previous reference feature = KURE-v1 text_embedding_similarity
+previous accuracy reference feature = Snowflake-ko text_embedding_similarity
+production default feature = E5-small-ko-v2 text_embedding_similarity + domain-specific similarities
 candidate_recall@50 validation/test = 0.827669 / 0.827208
 ```
 
@@ -151,20 +164,22 @@ Recommended execution priority:
 
 | Priority | Track | Experiment | Reason |
 | ---: | --- | --- | --- |
-| 1 | Track A | Snowflake-ko embedding backbone swap | Highest-value direct comparison against KURE-v1 while changing only the embedding backbone. |
-| 2 | Track D | Candidate hobby text expansion | Candidate hobby names may be too short; better candidate text can improve the same KURE-v1 feature without changing the model. |
-| 3 | Track B | Domain-specific KURE feature split | Lets LightGBM learn which persona domain matched the hobby instead of receiving one mixed cosine score. |
-| 4 | Track C | KURE rank/margin features | Adds relative semantic position inside the fixed candidate pool after the main semantic text quality questions are answered. |
+| 1 | Track C | E5-small domain rank/margin features | Adds relative semantic position inside the fixed candidate pool on top of the promoted E5-domain default. |
+| 2 | Track D | Candidate hobby text expansion | Candidate hobby names may be too short; better candidate text can improve the same E5-domain feature path without changing the model. |
+| 3 | Segment/cold-start review | Review cold-start, age/sex segments, and qualitative top-k failure modes before production API wiring. |
+| 4 | Track A | Additional embedding backbone swap | Closed for now; reopen only if a concrete new Korean retrieval model has a cost/accuracy rationale. |
 
-Do not reorder this priority without a new decision note. Track A and Track D must
-stay isolated until each has a separate validation artifact.
+Do not reorder this priority without a new decision note. Track A is now closed
+for the planned embedding-model comparison set: KURE-v1, Snowflake-ko, and
+E5-small-ko. Track B is now completed and promoted; Track C and Track D must stay
+isolated until each has a separate validation artifact.
 
 Experiment track A: embedding backbone swap.
 
 | Candidate | Purpose | Rule |
 | --- | --- | --- |
 | `dragonkue/snowflake-arctic-embed-l-v2.0-ko` | higher-quality Korean embedding probe | validation first; test only if it beats KURE-v1 Stage2 on Recall@10 and NDCG@10 |
-| `dragonkue/multilingual-e5-small-ko-v2` | lightweight speed/cost probe | validation first; may be accepted only if close in accuracy with material runtime/cache benefit |
+| `dragonkue/multilingual-e5-small-ko-v2` | production/efficiency default | accepted because it is close to Snowflake accuracy with a materially smaller model |
 
 Track A experiment-control contract:
 
@@ -182,34 +197,72 @@ Track A status board:
 
 | Model | Role | Status | Validation gate | Test execution | Decision artifact |
 | --- | --- | --- | --- | --- | --- |
-| `nlpai-lab/KURE-v1` | current reference Stage2 text feature backbone | promoted on current split | passed | executed | `artifacts/experiments/phase5_c_text_embedding/current_locked_kure_stage2_num_leaves31_cpu10/` |
-| `dragonkue/snowflake-arctic-embed-l-v2.0-ko` | accuracy-ceiling probe | validation gate passed | Recall@10 `0.655430`, NDCG@10 `0.410234`; beats KURE-v1 Stage2 validation | pending winner-only test | `artifacts/experiments/phase5_c_text_embedding/snowflake_stage2_single_feature_validation_cpu10/` |
-| `dragonkue/multilingual-e5-small-ko-v2` | lightweight speed/cost probe | planned/runnable | must be close in accuracy and materially faster/lighter | winner-only | pending |
+| `nlpai-lab/KURE-v1` | previous reference Stage2 text feature backbone | superseded by Snowflake-ko | passed | executed | `artifacts/experiments/phase5_c_text_embedding/current_locked_kure_stage2_num_leaves31_cpu10/` |
+| `dragonkue/snowflake-arctic-embed-l-v2.0-ko` | accuracy SOTA/reference backbone | promoted as accuracy reference | Recall@10 `0.655430`, NDCG@10 `0.410234` | test Recall@10 `0.637653`, NDCG@10 `0.402805` | `artifacts/experiments/phase5_c_text_embedding/snowflake_stage2_single_feature_validation_cpu10/`, `artifacts/experiments/phase5_c_text_embedding/snowflake_stage2_single_feature_test_thread18/` |
+| `dragonkue/multilingual-e5-small-ko-v2` | production/efficiency default backbone | promoted as production default | Recall@10 `0.645390`, NDCG@10 `0.404545` | test Recall@10 `0.623837`, NDCG@10 `0.393921` | `artifacts/experiments/phase5_c_text_embedding/e5_small_stage2_single_feature_validation_thread18/`, `artifacts/experiments/phase5_c_text_embedding/e5_small_stage2_single_feature_test_thread18/` |
 
-Experiment track B: domain-specific KURE features.
+Experiment track B: domain-specific E5-small features.
 
 Replace the single persona-text cosine with multiple masked domain block similarities while keeping the same candidate pool:
 
 ```text
-kure_sports_similarity
-kure_arts_similarity
-kure_travel_similarity
-kure_food_similarity
-kure_family_similarity
-kure_professional_similarity
+e5_sports_similarity
+e5_arts_similarity
+e5_travel_similarity
+e5_food_similarity
+e5_family_similarity
+e5_professional_similarity
 ```
 
-This tests whether LightGBM benefits from knowing which persona domain matched the hobby instead of receiving one mixed cosine score.
+This tests whether LightGBM benefits from knowing which persona domain matched
+the hobby instead of receiving one mixed cosine score. The validation/test runs
+passed and this feature shape is now the current SOTA/default.
 
-Experiment track C: KURE rank/margin features inside the fixed candidate pool.
+Track B completed result:
 
-Add ranking features derived from the KURE scores for the same 50 candidates:
+| Split | Recall@10 | NDCG@10 | candidate_recall@50 | Decision |
+| --- | ---: | ---: | ---: | --- |
+| validation | 0.699180 | 0.448862 | 0.827669 | passed |
+| test | 0.680943 | 0.436665 | 0.827208 | promoted current SOTA/default |
+
+Test deltas:
+
+- vs E5-small single: Recall@10 `+0.057106`, NDCG@10 `+0.042744`
+- vs Snowflake single: Recall@10 `+0.043290`, NDCG@10 `+0.033860`
+- vs KURE-v1 single: Recall@10 `+0.063461`, NDCG@10 `+0.050407`
+- vs Stage1: Recall@10 `+0.111173`, NDCG@10 `+0.080306`
+
+Track B implementation contract:
+
+- Keep the current single `text_embedding_similarity` column as the control
+  feature.
+- Add domain-specific scalar cosine features; do not add raw embedding
+  dimensions to LightGBM.
+- Domain text is built from the same masked persona fields used by the current
+  leakage-safe text path:
+  `professional_text`, `sports_text`, `arts_text`, `travel_text`,
+  `culinary_text`, and `family_text`.
+- Candidate hobby text remains the canonical candidate hobby name.
+- Feature columns for the first implementation:
+  `e5_professional_similarity`, `e5_sports_similarity`,
+  `e5_arts_similarity`, `e5_travel_similarity`, `e5_food_similarity`,
+  `e5_family_similarity`.
+- Train and evaluation must compute identical domain features from the model's
+  persisted `feature_columns`.
+- Cache metadata must distinguish the single-feature run from the domain-feature
+  run via feature column names and preprocessing version.
+- Progress must be visible during domain embedding prewarm, feature building,
+  training, and evaluation.
+
+Experiment track C: E5-small rank/margin features inside the fixed candidate pool.
+
+Add ranking features derived from the E5-small scores for the same 50 candidates:
 
 ```text
-kure_similarity_percentile
-kure_similarity_rank
-kure_similarity_gap_to_top
-kure_similarity_gap_to_mean
+e5_similarity_percentile
+e5_similarity_rank
+e5_similarity_gap_to_top
+e5_similarity_gap_to_mean
 ```
 
 These features must not change Stage1 candidate generation. They only describe a candidate's semantic position inside the already fixed pool.
@@ -241,7 +294,7 @@ Promotion gates for all embedding-feature tracks:
 - Validation-first.
 - Winner-only test.
 - Candidate pool must remain `popularity + cooccurrence`; `candidate_recall@50` must not regress.
-- Must beat the promoted KURE Stage2 SOTA on validation Recall@10 and NDCG@10 before test.
+- For production-default follow-ups, compare against the promoted E5-small-ko-v2 Stage2 default first. Also report the Snowflake-ko accuracy reference delta.
 - Must preserve leakage controls: `mask_holdout_hobbies`, `post_mask_leakage_audit`, domain-tagged text builder, and model-specific cache metadata.
 - Must record runtime, device, batch size, cache hit/miss, and feature columns.
 - Track A code must expose the embedding backbone as an explicit CLI/config value, record `model_name` and `model_revision`, and prevent KURE/Snowflake/E5 caches from mixing.
@@ -250,8 +303,9 @@ Track A implementation status:
 
 - `train_ranker.py` exposes `--text-embedding-model-name` and `--text-embedding-model-revision`.
 - `PersonEmbeddingCache` and `HobbyEmbeddingCache` use model name/revision in cache identity and SentenceTransformer loading.
-- Snowflake-ko validation-only Stage2 feature comparison completed on 2026-05-17. It used the same `popularity + cooccurrence` candidate pool, the same LightGBM `num_leaves=31` recipe, and the same `text_embedding_similarity` feature slot. Validation Recall@10 was `0.655430`, NDCG@10 was `0.410234`, and candidate_recall@50 stayed `0.827669`.
-- Snowflake-ko is eligible for winner-only test because it beat the promoted KURE-v1 Stage2 validation baseline (`0.634706` Recall@10, `0.396559` NDCG@10). Test has not been run yet, so the current default remains KURE-v1 Stage2 until a winner-only test decision is recorded.
+- Snowflake-ko validation and winner-only test completed on 2026-05-17. It used the same `popularity + cooccurrence` candidate pool, the same LightGBM `num_leaves=31` recipe, and the same `text_embedding_similarity` feature slot. Validation Recall@10 was `0.655430`, NDCG@10 was `0.410234`, and candidate_recall@50 stayed `0.827669`.
+- Snowflake-ko test Recall@10 was `0.637653`, NDCG@10 was `0.402805`, and candidate_recall@50 stayed `0.827208`. It beat KURE-v1 Stage2 test (`0.617482` Recall@10, `0.386258` NDCG@10), so Snowflake-ko is retained as the accuracy SOTA/reference.
+- E5-small-ko-v2 test Recall@10 was `0.623837`, NDCG@10 was `0.393921`, and candidate_recall@50 stayed `0.827208`. It beat KURE-v1 and kept near-Snowflake quality with a much smaller model, so E5-small-ko-v2 is promoted as the production/efficiency default.
 
 ### Mandatory Blockers Before KURE Text Feature Ablation
 
@@ -328,27 +382,27 @@ Outcome recorded for `kure_stage1_semantic_001_fast_gpu`:
 - Stage1 provider path: `popularity + cooccurrence + kure_semantic`.
 - Validation v2 Recall@10 `0.599705`, NDCG@10 `0.370891`, candidate_recall@50 `0.794971`.
 - Historical closed Phase 2.5 validation baseline: Recall@10 `0.739051`, NDCG@10 `0.457970`, candidate_recall@50 `0.977645`.
-- Decision: rejected; current default remains `popularity + cooccurrence -> LightGBM + KURE Stage2 text_embedding_similarity`, with `kure_semantic` opt-in only.
+- Decision: rejected; current production default remains `popularity + cooccurrence -> LightGBM + E5-small-ko-v2 domain-specific Stage2 text features`, with `kure_semantic` opt-in only.
 
 ### Text Embedding Backbone Follow-Up Candidates
 
-KURE-v1 is the current reference backbone for leakage-safe Stage2 text embedding feature experiments. Because KURE-v1 improved the current locked SOTA recipe on the current data/split, additional embedding probes are now active Stage2 follow-up work, not deferred work.
+E5-small-ko-v2 domain-specific Stage2 is the current production default and accuracy SOTA for leakage-safe Stage2 text embedding feature experiments. Snowflake-ko single-feature remains the previous accuracy reference, and KURE-v1 remains the historical reference baseline because it improved the no-text recipe on the current data/split. Additional embedding probes are closed for now unless a concrete new Korean retrieval model has a clear cost/accuracy rationale.
 
 Two additional backbones may be evaluated only as Phase 5-C follow-up ablations under the same masking, leakage-audit, cache, validation-first, and winner-only-test rules:
 
 | Candidate | Role | Rationale | Promotion impact |
 | --- | --- | --- | --- |
-| `dragonkue/snowflake-arctic-embed-l-v2.0-ko` | accuracy-ceiling probe | Korean retrieval benchmarks suggest it can exceed KURE-v1 quality, but it is not expected to be materially lighter | may replace KURE-v1 only if it beats the current KURE Stage2 SOTA on validation Recall@10 and NDCG@10 |
-| `dragonkue/multilingual-e5-small-ko-v2` | lightweight probe | 118M parameter / 384-dim class model; useful if validation quality is close enough while reducing VRAM, cache, and runtime cost | may become a lightweight candidate only after validation gate, runtime review, and cold-start review |
+| `dragonkue/snowflake-arctic-embed-l-v2.0-ko` | accuracy backbone | Beat KURE-v1 on validation and winner-only test while preserving candidate_recall@50 | accuracy SOTA/reference |
+| `dragonkue/multilingual-e5-small-ko-v2` | production/efficiency backbone | 118M parameter / 384-dim class model; test quality is close to Snowflake while model/cache cost is much lower | production default |
 
 These runs must not reuse incompatible KURE feature caches. Cache metadata and feature-cache keys must include the embedding model name or revision so KURE-v1, Snowflake-ko, and E5-small-ko vectors cannot mix.
 
 Caution from completed KURE-v1 experiments:
 
 - Do not use semantic embeddings as a Stage1 candidate generator by default. `kure_stage1_semantic_001_fast_gpu` reduced validation candidate_recall@50 from `0.977645` to `0.794971`, which lowered the maximum possible Stage2 accuracy.
-- Do not assume a stronger embedding backbone will fix ranking collapse by itself. The current test is narrower: can the same Stage2 feature slot beat the promoted KURE-v1 Stage2 baseline without changing the candidate pool?
-- If Snowflake-ko or E5-small-ko is tested, prefer a single validation-only Stage2 feature probe first. Stage1 semantic retrieval with another embedding model is lower priority and requires a separate PRD/TASKS reopening note.
-- A future embedding run must be stopped at validation if Recall@10/NDCG@10 miss the current KURE Stage2 SOTA gate or if candidate_recall@50 regresses materially.
+- Do not assume a stronger embedding backbone will fix ranking collapse by itself. The current evidence is narrower: E5-small-ko-v2 and Snowflake-ko improve ordering inside the same Stage2 feature slot without changing the candidate pool.
+- Stage1 semantic retrieval with another embedding model is lower priority and requires a separate PRD/TASKS reopening note.
+- A future embedding run must be stopped at validation if Recall@10/NDCG@10 miss the current E5-small-ko-v2 production default gate or if candidate_recall@50 regresses materially. Also report the Snowflake-ko accuracy reference delta.
 
 ## 문서 계층 및 우선순위
 
@@ -375,7 +429,7 @@ Caution from completed KURE-v1 experiments:
 
 ### Phase 5-B/C. Text Embedding Status And Follow-Up Boundary
 
-Phase 5-B/C text-embedding work is reopened as an active **Stage2 feature** improvement path. The current locked same-split rerun promoted KURE-v1 `text_embedding_similarity`, and the current default candidate is `include_text_embedding_feature=true` for the Stage2 ranker.
+Phase 5-B/C text-embedding work is reopened as an active **Stage2 feature** improvement path. The current locked same-split rerun promoted E5-small-ko-v2 `text_embedding_similarity` as the production default, and the current default candidate is `include_text_embedding_feature=true` for the Stage2 ranker.
 
 Completed result:
 
@@ -398,7 +452,7 @@ Follow-up may continue, but it must be implementation/governance first: model/re
 ### Feature Policy
 
 - `include_source_features=false`: current default. Source one-hot features were evaluated and rejected for the default path.
-- `include_text_embedding_feature=true`: current default candidate for the promoted KURE Stage2 path on the current data/split. Raw or unmasked text features remain disallowed.
+- `include_text_embedding_feature=true`: current default candidate for the promoted E5-small-ko-v2 Stage2 path on the current data/split. Raw or unmasked text features remain disallowed.
 - Text embedding ablations must use leakage-safe `[ACT]` masking, domain-tagged persona text, persisted `post_mask_leakage_audit()`, and identical train/eval feature construction.
 - Text/embedding cache keys must include the embedding model name or revision plus masking/feature policy metadata so KURE-v1, Snowflake-ko, and E5-small-ko vectors cannot mix.
 - `candidate_k=50` pool based reranking experiments must preserve the full candidate pool before selecting top-k.

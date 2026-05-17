@@ -6,6 +6,8 @@ import math
 from .data import PersonContext
 from .recommend import Candidate
 
+_MAX_TRAIN_POPULARITY_CACHE_KEY = "__max_train_popularity"
+
 
 @dataclass(frozen=True)
 class HobbyCandidate:
@@ -221,20 +223,14 @@ def _known_hobby_compatibility(profile: dict[str, object], known_hobby_names: se
 
 def _popularity_prior(profile: dict[str, object], hobby_profile: dict[str, object]) -> float:
     count = _safe_float(profile.get("train_popularity", 0.0))
-    hobbies = hobby_profile.get("hobbies", {})
-    if not isinstance(hobbies, dict) or not hobbies:
-        return 0.0
-    max_count = max((_train_popularity(entry) for entry in hobbies.values() if isinstance(entry, dict)), default=0.0)
+    max_count = _max_train_popularity(hobby_profile)
     return count / max_count if max_count else 0.0
 
 
 def _popularity_penalty(profile: dict[str, object], hobby_profile: dict[str, object]) -> float:
     """Penalize very popular items. Uses log-normalized popularity."""
     count = _safe_float(profile.get("train_popularity", 0.0))
-    hobbies = hobby_profile.get("hobbies", {})
-    if not isinstance(hobbies, dict) or not hobbies:
-        return 0.0
-    max_count = max((_train_popularity(entry) for entry in hobbies.values() if isinstance(entry, dict)), default=0.0)
+    max_count = _max_train_popularity(hobby_profile)
     if max_count <= 0.0:
         return 0.0
     return math.log1p(count) / math.log1p(max_count)
@@ -272,6 +268,18 @@ def _has_distribution(profile: dict[str, object], field: str) -> bool:
 def _train_popularity(entry: dict[object, object]) -> float:
     value = entry.get("train_popularity", 0.0)
     return _safe_float(value)
+
+
+def _max_train_popularity(hobby_profile: dict[str, object]) -> float:
+    cached = hobby_profile.get(_MAX_TRAIN_POPULARITY_CACHE_KEY)
+    if isinstance(cached, int | float | str):
+        return _safe_float(cached)
+    hobbies = hobby_profile.get("hobbies", {})
+    if not isinstance(hobbies, dict) or not hobbies:
+        return 0.0
+    max_count = max((_train_popularity(entry) for entry in hobbies.values() if isinstance(entry, dict)), default=0.0)
+    hobby_profile[_MAX_TRAIN_POPULARITY_CACHE_KEY] = max_count
+    return max_count
 
 
 def _safe_float(value: object) -> float:

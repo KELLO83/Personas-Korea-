@@ -12,7 +12,13 @@
     "artifacts/experiments/phase2_5_cold_start_baseline/validation_metrics.json",
     "artifacts/experiments/phase2_5_cold_start_baseline/test_metrics.json",
     "artifacts/experiments/phase5_d_stage1_kure_semantic/kure_stage1_semantic_001_fast_gpu/validation_metrics.json",
-    "artifacts/experiments/phase5_d_stage1_kure_semantic/kure_stage1_semantic_001_fast_gpu/validation_metrics.status.json"
+    "artifacts/experiments/phase5_d_stage1_kure_semantic/kure_stage1_semantic_001_fast_gpu/validation_metrics.status.json",
+    "artifacts/experiments/phase5_c_text_embedding/snowflake_stage2_single_feature_validation_cpu10/validation_metrics.json",
+    "artifacts/experiments/phase5_c_text_embedding/snowflake_stage2_single_feature_test_thread18/test_metrics.json",
+    "artifacts/experiments/phase5_c_text_embedding/e5_small_stage2_single_feature_validation_thread18/validation_metrics.json",
+    "artifacts/experiments/phase5_c_text_embedding/e5_small_stage2_single_feature_test_thread18/test_metrics.json",
+    "artifacts/experiments/phase5_c_text_embedding/e5_domain_features_validation_thread18/validation_metrics.json",
+    "artifacts/experiments/phase5_c_text_embedding/e5_domain_features_test_thread18/test_metrics.json"
   ],
   "current_system": {
     "stage1": {
@@ -21,12 +27,47 @@
         "cooccurrence"
       ],
       "status": "selected",
-      "reason": "Best validation recall@10 among tested provider combinations while keeping strong ndcg@10 and candidate recall."
+      "reason": "Keeps the strongest current candidate pool while preserving candidate_recall@50 for Stage2 ranking."
     },
     "stage2": {
-      "status": "promoted",
-      "strategy": "LightGBM binary classifier learned ranker",
-      "reason": "Beat both the selected Stage 1 baseline and the v1 deterministic reranker on validation and test."
+      "status": "promoted_current_sota_and_production_default",
+      "strategy": "LightGBM learned ranker with E5-small-ko-v2 single + domain-specific text similarities",
+      "embedding_model": "dragonkue/multilingual-e5-small-ko-v2",
+      "model_path": "artifacts/experiments/phase5_c_text_embedding/e5_domain_features_validation_thread18/ranker_model.txt",
+      "metrics_path": "artifacts/experiments/phase5_c_text_embedding/e5_domain_features_test_thread18/test_metrics.json",
+      "feature_policy": {
+        "include_source_features": false,
+        "include_text_embedding_feature": true,
+        "include_domain_text_embedding_features": true,
+        "feature_columns": [
+          "lightgcn_score",
+          "cooccurrence_score",
+          "segment_popularity_score",
+          "known_hobby_compatibility",
+          "age_group_fit",
+          "occupation_fit",
+          "region_fit",
+          "popularity_prior",
+          "mismatch_penalty",
+          "popularity_penalty",
+          "novelty_bonus",
+          "category_diversity_reward",
+          "is_cold_start",
+          "text_embedding_similarity",
+          "e5_professional_similarity",
+          "e5_sports_similarity",
+          "e5_arts_similarity",
+          "e5_travel_similarity",
+          "e5_food_similarity",
+          "e5_family_similarity"
+        ]
+      },
+      "previous_accuracy_reference": {
+        "embedding_model": "dragonkue/snowflake-arctic-embed-l-v2.0-ko",
+        "model_path": "artifacts/experiments/phase5_c_text_embedding/snowflake_stage2_single_feature_validation_cpu10/ranker_model.txt",
+        "metrics_path": "artifacts/experiments/phase5_c_text_embedding/snowflake_stage2_single_feature_test_thread18/test_metrics.json"
+      },
+      "reason": "E5-small-ko-v2 domain-specific Stage2 beats Stage1, KURE-v1 single, E5-small single, and Snowflake-ko single under the same current split and fixed popularity+cooccurrence candidate pool while candidate_recall@50 remains unchanged."
     },
     "stage2_legacy_fallback": {
       "status": "fallback",
@@ -90,6 +131,167 @@
       },
       "decision": "validation failed promotion gate; test skipped; default unchanged",
       "reason": "KURE semantic Stage1 greatly reduced candidate recall versus the closed Phase 2.5 candidate pool, causing v2 Recall@10 and NDCG@10 to miss the accuracy gate."
+    },
+    "phase5_c_snowflake_stage2": {
+      "status": "previous_accuracy_reference",
+      "default_enabled": false,
+      "run_id": "snowflake_stage2_single_feature_test_thread18",
+      "stage1": [
+        "popularity",
+        "cooccurrence"
+      ],
+      "stage2": "LightGBM(num_leaves=31) + Snowflake-ko text_embedding_similarity",
+      "embedding_model": "dragonkue/snowflake-arctic-embed-l-v2.0-ko",
+      "validation_metrics": {
+        "v2_recall@10": 0.65543,
+        "v2_ndcg@10": 0.410234,
+        "candidate_recall@50": 0.827669
+      },
+      "test_metrics": {
+        "v2_recall@10": 0.6376531270148291,
+        "v2_ndcg@10": 0.4028052183056824,
+        "candidate_recall@50": 0.8272082527401676
+      },
+      "delta_vs_kure_stage2_test": {
+        "recall@10": 0.0201713180436584,
+        "ndcg@10": 0.0165470043646314,
+        "candidate_recall@50": 0.0
+      },
+      "resource_policy": {
+        "cpu_thread_count": 18,
+        "feature_builder_parallelism": "auto_thread_pool",
+        "ranking_builder_parallelism": "auto_thread_pool",
+        "progress_mode": "on",
+        "device": "cuda"
+      },
+      "decision": "keep_as_accuracy_sota_reference",
+      "reason": "Snowflake-ko passed validation and winner-only test under the fixed current candidate pool. It improves Recall@10 and NDCG@10 over KURE-v1 Stage2 with no candidate_recall@50 regression.",
+      "next_step": "Use as accuracy reference while production default uses E5-small-ko-v2.",
+      "superseded_by": "phase5_c_e5_domain_stage2"
+    },
+    "phase5_c_e5_small_stage2": {
+      "status": "superseded_by_e5_domain_stage2",
+      "default_enabled": false,
+      "run_id": "e5_small_stage2_single_feature_test_thread18",
+      "stage1": [
+        "popularity",
+        "cooccurrence"
+      ],
+      "stage2": "LightGBM(num_leaves=31) + E5-small-ko-v2 text_embedding_similarity",
+      "embedding_model": "dragonkue/multilingual-e5-small-ko-v2",
+      "validation_metrics": {
+        "v2_recall@10": 0.64539,
+        "v2_ndcg@10": 0.404545,
+        "candidate_recall@50": 0.827669
+      },
+      "test_metrics": {
+        "v2_recall@10": 0.623837,
+        "v2_ndcg@10": 0.393921,
+        "candidate_recall@50": 0.8272082527401676
+      },
+      "delta_vs_snowflake_stage2_test": {
+        "recall@10": -0.013816,
+        "ndcg@10": -0.008884,
+        "candidate_recall@50": 0.0
+      },
+      "delta_vs_kure_stage2_test": {
+        "recall@10": 0.006355,
+        "ndcg@10": 0.007663,
+        "candidate_recall@50": 0.0
+      },
+      "resource_policy": {
+        "cpu_thread_count": 18,
+        "feature_builder_parallelism": "auto_thread_pool",
+        "ranking_builder_parallelism": "auto_thread_pool",
+        "progress_mode": "on",
+        "device": "cuda"
+      },
+      "decision": "promote_e5_small_stage2_as_production_default",
+      "reason": "E5-small-ko-v2 is slightly below Snowflake-ko on test accuracy but materially smaller. It beats KURE-v1 and is selected as the production/efficiency default. Snowflake-ko remains accuracy SOTA/reference.",
+      "next_step": "Run domain-specific E5-small Stage2 feature split against the E5-small single-feature production default and report Snowflake accuracy-reference deltas.",
+      "superseded_by": "phase5_c_e5_domain_stage2"
+    },
+    "phase5_c_e5_domain_stage2": {
+      "status": "promoted_current_sota_and_production_default",
+      "default_enabled": true,
+      "run_id": "e5_domain_features_test_thread18",
+      "train_run_id": "e5_domain_features_validation_thread18",
+      "stage1": [
+        "popularity",
+        "cooccurrence"
+      ],
+      "stage2": "LightGBM(num_leaves=31) + E5-small-ko-v2 text_embedding_similarity + domain-specific similarities",
+      "embedding_model": "dragonkue/multilingual-e5-small-ko-v2",
+      "model_path": "artifacts/experiments/phase5_c_text_embedding/e5_domain_features_validation_thread18/ranker_model.txt",
+      "validation_metrics_path": "artifacts/experiments/phase5_c_text_embedding/e5_domain_features_validation_thread18/validation_metrics.json",
+      "test_metrics_path": "artifacts/experiments/phase5_c_text_embedding/e5_domain_features_test_thread18/test_metrics.json",
+      "feature_columns": [
+        "lightgcn_score",
+        "cooccurrence_score",
+        "segment_popularity_score",
+        "known_hobby_compatibility",
+        "age_group_fit",
+        "occupation_fit",
+        "region_fit",
+        "popularity_prior",
+        "mismatch_penalty",
+        "popularity_penalty",
+        "novelty_bonus",
+        "category_diversity_reward",
+        "is_cold_start",
+        "text_embedding_similarity",
+        "e5_professional_similarity",
+        "e5_sports_similarity",
+        "e5_arts_similarity",
+        "e5_travel_similarity",
+        "e5_food_similarity",
+        "e5_family_similarity"
+      ],
+      "validation_metrics": {
+        "v2_recall@10": 0.6991802523717418,
+        "v2_ndcg@10": 0.4488621569338524,
+        "candidate_recall@50": 0.8276687851155936,
+        "cold_start_recall@10": 0.7133014130561719,
+        "cold_start_ndcg@10": 0.4591525729409681
+      },
+      "test_metrics": {
+        "v2_recall@10": 0.6809431703048724,
+        "v2_ndcg@10": 0.4366648134158132,
+        "candidate_recall@50": 0.8272082527401676,
+        "cold_start_recall@10": 0.6944995912647437,
+        "cold_start_ndcg@10": 0.4444349889871841
+      },
+      "delta_vs_stage1_test": {
+        "recall@10": 0.11117251542783457,
+        "ndcg@10": 0.08030637361038573,
+        "candidate_recall@50": 0.0
+      },
+      "delta_vs_e5_single_stage2_test": {
+        "recall@10": 0.0571061703048724,
+        "ndcg@10": 0.0427438134158132,
+        "candidate_recall@50": 0.0
+      },
+      "delta_vs_snowflake_stage2_test": {
+        "recall@10": 0.0432900432900433,
+        "ndcg@10": 0.0338595951101308,
+        "candidate_recall@50": 0.0
+      },
+      "delta_vs_kure_stage2_test": {
+        "recall@10": 0.0634613613337017,
+        "ndcg@10": 0.0504065994747622,
+        "candidate_recall@50": 0.0
+      },
+      "resource_policy": {
+        "cpu_thread_count": 18,
+        "feature_builder_parallelism": "auto_thread_pool",
+        "ranking_builder_parallelism": "auto_thread_pool",
+        "progress_mode": "on",
+        "device": "cuda",
+        "embedding_batch_size": "auto_vram"
+      },
+      "decision": "promote_e5_domain_stage2_as_current_sota_and_default",
+      "reason": "Domain-specific E5-small features let LightGBM learn which persona domain matched the candidate hobby. This improved Recall@10/NDCG@10 over the single mixed cosine feature and over Snowflake-ko single while preserving the fixed candidate pool.",
+      "next_step": "Evaluate E5-domain rank/margin features, candidate hobby text expansion, and cold-start/segment qualitative review against this default."
     }
   },
   "final_metrics": {
@@ -130,6 +332,72 @@
       "stage2_coverage_ratio": 0.3777777777777778,
       "stage1_avg_popularity_rank": 6.752443857331572,
       "stage2_avg_popularity_rank": 8.255502489584392
+    },
+    "current_split_snowflake_stage2_test": {
+      "stage1_baseline": {
+        "recall@10": 0.5697706548770378,
+        "ndcg@10": 0.3563584398054275,
+        "candidate_recall@50": 0.8272082527401676
+      },
+      "kure_stage2_previous_sota": {
+        "recall@10": 0.6174818089711707,
+        "ndcg@10": 0.386258213941051,
+        "candidate_recall@50": 0.8272082527401676
+      },
+      "snowflake_stage2_current_sota": {
+        "recall@10": 0.6376531270148291,
+        "ndcg@10": 0.4028052183056824,
+        "candidate_recall@50": 0.8272082527401676
+      }
+    },
+    "current_split_e5_small_stage2_test": {
+      "stage1_baseline": {
+        "recall@10": 0.5697706548770378,
+        "ndcg@10": 0.3563584398054275,
+        "candidate_recall@50": 0.8272082527401676
+      },
+      "kure_stage2_previous_sota": {
+        "recall@10": 0.6174818089711707,
+        "ndcg@10": 0.386258213941051,
+        "candidate_recall@50": 0.8272082527401676
+      },
+      "e5_small_stage2_production_default": {
+        "recall@10": 0.623837,
+        "ndcg@10": 0.393921,
+        "candidate_recall@50": 0.8272082527401676
+      },
+      "snowflake_stage2_accuracy_reference": {
+        "recall@10": 0.6376531270148291,
+        "ndcg@10": 0.4028052183056824,
+        "candidate_recall@50": 0.8272082527401676
+      }
+    },
+    "current_split_e5_domain_stage2_test": {
+      "stage1_baseline": {
+        "recall@10": 0.5697706548770378,
+        "ndcg@10": 0.3563584398054275,
+        "candidate_recall@50": 0.8272082527401676
+      },
+      "kure_stage2_historical_baseline": {
+        "recall@10": 0.6174818089711707,
+        "ndcg@10": 0.386258213941051,
+        "candidate_recall@50": 0.8272082527401676
+      },
+      "e5_small_stage2_single_previous_default": {
+        "recall@10": 0.623837,
+        "ndcg@10": 0.393921,
+        "candidate_recall@50": 0.8272082527401676
+      },
+      "snowflake_stage2_single_previous_accuracy_reference": {
+        "recall@10": 0.6376531270148291,
+        "ndcg@10": 0.4028052183056824,
+        "candidate_recall@50": 0.8272082527401676
+      },
+      "e5_domain_stage2_current_sota_default": {
+        "recall@10": 0.6809431703048724,
+        "ndcg@10": 0.4366648134158132,
+        "candidate_recall@50": 0.8272082527401676
+      }
     }
   },
   "accepted_components": [
@@ -255,18 +523,18 @@
   "next_priorities": [
     {
       "priority": 1,
-      "task": "LightGBM regularization tuning follow-up audit",
-      "goal": "Keep the promoted num_leaves=31 default documented and monitor overfitting risk when later text-feature experiments are compared."
+      "task": "E5-domain rank/margin feature validation",
+      "goal": "Add within-candidate-pool E5 semantic rank, percentile, and gap features without changing Stage1 retrieval."
     },
     {
       "priority": 2,
-      "task": "Gated KURE/KRUE text embedding feature ablation",
-      "goal": "Run only with explicit opt-in, masking, post-mask leakage audit, validation-first selection, and no default change unless gates pass."
+      "task": "E5-domain candidate hobby text expansion",
+      "goal": "Test richer candidate hobby text builders while keeping the E5-domain model, split, candidate pool, and LightGBM recipe fixed."
     },
     {
       "priority": 3,
-      "task": "Cold-start and taxonomy review of any KURE/KRUE result",
-      "goal": "Compare sparse-user metrics and taxonomy concentration before treating diversity gains as production-ready."
+      "task": "Cold-start, segment, and qualitative review",
+      "goal": "Audit the promoted E5-domain default for sparse users, age/sex segments, and top-k recommendation failure modes before API default wiring."
     }
   ],
   "phase4_implementation": {
@@ -969,13 +1237,13 @@
     ],
     "next_step": "Run KURE/KRUE text embedding only as an explicit opt-in validation-first ablation with leakage audit and no default change unless gates pass."
   },
-    "phase5_c_kure_domain_tagged_text_005": {
-        "experiment": "Phase5_C_KURE_Domain_Tagged_Text_Feature_005",
-        "timestamp": "2026-05-16",
-        "status": "superseded_by_current_locked_comparison",
-        "decision": "historical_result_superseded_do_not_use_as_current_default_decision",
-        "default_change": false,
-        "superseded_by": "phase5_c_current_locked_kure_stage2",
+  "phase5_c_kure_domain_tagged_text_005": {
+    "experiment": "Phase5_C_KURE_Domain_Tagged_Text_Feature_005",
+    "timestamp": "2026-05-16",
+    "status": "superseded_by_current_locked_comparison",
+    "decision": "historical_result_superseded_do_not_use_as_current_default_decision",
+    "default_change": false,
+    "superseded_by": "phase5_c_current_locked_kure_stage2",
     "current_sota": {
       "run_id": "phase2_5_num_leaves_31",
       "model_path": "artifacts/experiments/phase2_5_num_leaves_31/ranker_model.txt",
@@ -1013,16 +1281,16 @@
       },
       "delta_kure_vs_no_text": {
         "recall@10": 0.04301372386478775,
-        "ndcg@10": 0.030504357100953504
+        "ndcg@10": 0.030504357100953505
       },
       "resource_policy": {
         "cpu_thread_count": 10,
         "progress_mode": "on"
       }
     },
-        "reason": "This record used the older closed Phase 2.5 absolute SOTA as the comparison target and is retained as historical context. The later current-locked no-text vs KURE Stage2 comparison is the valid current default decision source.",
-        "next_step": "Use phase5_c_current_locked_kure_stage2 for current default decisions. Continue Stage2 embedding follow-up against the promoted KURE Stage2 SOTA."
-    },
+    "reason": "This record used the older closed Phase 2.5 absolute SOTA as the comparison target and is retained as historical context. The later current-locked no-text vs KURE Stage2 comparison is the valid current default decision source.",
+    "next_step": "Use phase5_c_current_locked_kure_stage2 for current default decisions. Continue Stage2 embedding follow-up against the promoted KURE Stage2 SOTA."
+  },
   "phase5_c_strict_sota_pool_kure_stage2_feature": {
     "experiment": "Strict_SOTA_Candidate_Pool_Plus_KURE_Stage2_Feature",
     "timestamp": "2026-05-16",
@@ -1048,9 +1316,9 @@
   "phase5_c_current_locked_kure_stage2": {
     "experiment": "Current_Locked_No_Text_vs_KURE_Stage2_Num_Leaves_31",
     "timestamp": "2026-05-16",
-    "status": "promoted_current_split",
+    "status": "superseded_by_snowflake_stage2",
     "decision": "promote_kure_stage2_for_current_split",
-    "default_change": true,
+    "default_change": false,
     "comparison_path": "artifacts/experiments/phase5_c_text_embedding/current_locked_num_leaves31_comparison.json",
     "protocol": "current split/current candidate pool; Stage1 popularity+cooccurrence fixed; Stage2 LightGBM no-text vs KURE text_embedding_similarity; num_leaves=31 SOTA recipe",
     "resource_policy": {
@@ -1089,8 +1357,9 @@
         "ndcg@10": 0.02598844476451334
       }
     },
-    "reason": "Under the current split and fixed current candidate pool, KURE Stage2 improves Recall@10 and NDCG@10 on validation and the winner-only test while candidate_recall@50 remains unchanged. This promotes KURE Stage2 as the current SOTA/default candidate for the current data baseline.",
-    "next_step": "Use KURE as a Stage2 feature by default for the current offline recommender. Keep KURE Stage1 semantic provider disabled because it regressed candidate recall."
+    "reason": "Under the current split and fixed current candidate pool, KURE Stage2 improves Recall@10 and NDCG@10 on validation and the winner-only test while candidate_recall@50 remains unchanged. This promotes KURE Stage2 as the current SOTA/default candidate for the current data baseline. Later Snowflake-ko Stage2 beat this KURE-v1 Stage2 result on the winner-only test, so KURE is now the previous SOTA/reference baseline.",
+    "next_step": "Use KURE as a Stage2 feature by default for the current offline recommender. Keep KURE Stage1 semantic provider disabled because it regressed candidate recall.",
+    "superseded_by": "phase5_c_snowflake_stage2"
   },
   "phase5_c_kure_role_decision": {
     "experiment": "KURE_Stage1_vs_Stage2_Role_Decision",
@@ -1116,5 +1385,166 @@
     },
     "reason": "Stage1 KURE semantic retrieval changed the candidate pool and lost held-out positives before ranking. Stage2 KURE preserved the stronger popularity+cooccurrence pool and improved ordering inside the same pool.",
     "next_step": "Prioritize additional embedding models as Stage2 feature ablations. Do not reopen Stage1 semantic KURE unless the retrieval design explicitly protects candidate recall."
+  },
+  "phase5_c_snowflake_stage2": {
+    "status": "previous_accuracy_reference",
+    "default_enabled": false,
+    "run_id": "snowflake_stage2_single_feature_test_thread18",
+    "stage1": [
+      "popularity",
+      "cooccurrence"
+    ],
+    "stage2": "LightGBM(num_leaves=31) + Snowflake-ko text_embedding_similarity",
+    "embedding_model": "dragonkue/snowflake-arctic-embed-l-v2.0-ko",
+    "validation_metrics": {
+      "v2_recall@10": 0.65543,
+      "v2_ndcg@10": 0.410234,
+      "candidate_recall@50": 0.827669
+    },
+    "test_metrics": {
+      "v2_recall@10": 0.6376531270148291,
+      "v2_ndcg@10": 0.4028052183056824,
+      "candidate_recall@50": 0.8272082527401676
+    },
+    "delta_vs_kure_stage2_test": {
+      "recall@10": 0.0201713180436584,
+      "ndcg@10": 0.0165470043646314,
+      "candidate_recall@50": 0.0
+    },
+    "resource_policy": {
+      "cpu_thread_count": 18,
+      "feature_builder_parallelism": "auto_thread_pool",
+      "ranking_builder_parallelism": "auto_thread_pool",
+      "progress_mode": "on",
+      "device": "cuda"
+    },
+    "decision": "keep_as_accuracy_sota_reference",
+    "reason": "Snowflake-ko passed validation and winner-only test under the fixed current candidate pool. It improves Recall@10 and NDCG@10 over KURE-v1 Stage2 with no candidate_recall@50 regression.",
+    "next_step": "Use as accuracy reference while production default uses E5-small-ko-v2.",
+    "superseded_by": "phase5_c_e5_domain_stage2"
+  },
+  "phase5_c_e5_small_stage2": {
+    "status": "superseded_by_e5_domain_stage2",
+    "default_enabled": false,
+    "run_id": "e5_small_stage2_single_feature_test_thread18",
+    "stage1": [
+      "popularity",
+      "cooccurrence"
+    ],
+    "stage2": "LightGBM(num_leaves=31) + E5-small-ko-v2 text_embedding_similarity",
+    "embedding_model": "dragonkue/multilingual-e5-small-ko-v2",
+    "validation_metrics": {
+      "v2_recall@10": 0.64539,
+      "v2_ndcg@10": 0.404545,
+      "candidate_recall@50": 0.827669
+    },
+    "test_metrics": {
+      "v2_recall@10": 0.623837,
+      "v2_ndcg@10": 0.393921,
+      "candidate_recall@50": 0.8272082527401676
+    },
+    "delta_vs_snowflake_stage2_test": {
+      "recall@10": -0.013816,
+      "ndcg@10": -0.008884,
+      "candidate_recall@50": 0.0
+    },
+    "delta_vs_kure_stage2_test": {
+      "recall@10": 0.006355,
+      "ndcg@10": 0.007663,
+      "candidate_recall@50": 0.0
+    },
+    "resource_policy": {
+      "cpu_thread_count": 18,
+      "feature_builder_parallelism": "auto_thread_pool",
+      "ranking_builder_parallelism": "auto_thread_pool",
+      "progress_mode": "on",
+      "device": "cuda"
+    },
+    "decision": "promote_e5_small_stage2_as_production_default",
+    "reason": "E5-small-ko-v2 is slightly below Snowflake-ko on test accuracy but materially smaller. It beats KURE-v1 and is selected as the production/efficiency default. Snowflake-ko remains accuracy SOTA/reference.",
+    "next_step": "Run domain-specific E5-small Stage2 feature split against the E5-small single-feature production default and report Snowflake accuracy-reference deltas.",
+    "superseded_by": "phase5_c_e5_domain_stage2"
+  },
+  "phase5_c_e5_domain_stage2": {
+    "status": "promoted_current_sota_and_production_default",
+    "default_enabled": true,
+    "run_id": "e5_domain_features_test_thread18",
+    "train_run_id": "e5_domain_features_validation_thread18",
+    "stage1": [
+      "popularity",
+      "cooccurrence"
+    ],
+    "stage2": "LightGBM(num_leaves=31) + E5-small-ko-v2 text_embedding_similarity + domain-specific similarities",
+    "embedding_model": "dragonkue/multilingual-e5-small-ko-v2",
+    "model_path": "artifacts/experiments/phase5_c_text_embedding/e5_domain_features_validation_thread18/ranker_model.txt",
+    "validation_metrics_path": "artifacts/experiments/phase5_c_text_embedding/e5_domain_features_validation_thread18/validation_metrics.json",
+    "test_metrics_path": "artifacts/experiments/phase5_c_text_embedding/e5_domain_features_test_thread18/test_metrics.json",
+    "feature_columns": [
+      "lightgcn_score",
+      "cooccurrence_score",
+      "segment_popularity_score",
+      "known_hobby_compatibility",
+      "age_group_fit",
+      "occupation_fit",
+      "region_fit",
+      "popularity_prior",
+      "mismatch_penalty",
+      "popularity_penalty",
+      "novelty_bonus",
+      "category_diversity_reward",
+      "is_cold_start",
+      "text_embedding_similarity",
+      "e5_professional_similarity",
+      "e5_sports_similarity",
+      "e5_arts_similarity",
+      "e5_travel_similarity",
+      "e5_food_similarity",
+      "e5_family_similarity"
+    ],
+    "validation_metrics": {
+      "v2_recall@10": 0.6991802523717418,
+      "v2_ndcg@10": 0.4488621569338524,
+      "candidate_recall@50": 0.8276687851155936,
+      "cold_start_recall@10": 0.7133014130561719,
+      "cold_start_ndcg@10": 0.4591525729409681
+    },
+    "test_metrics": {
+      "v2_recall@10": 0.6809431703048724,
+      "v2_ndcg@10": 0.4366648134158132,
+      "candidate_recall@50": 0.8272082527401676,
+      "cold_start_recall@10": 0.6944995912647437,
+      "cold_start_ndcg@10": 0.4444349889871841
+    },
+    "delta_vs_stage1_test": {
+      "recall@10": 0.11117251542783457,
+      "ndcg@10": 0.08030637361038573,
+      "candidate_recall@50": 0.0
+    },
+    "delta_vs_e5_single_stage2_test": {
+      "recall@10": 0.0571061703048724,
+      "ndcg@10": 0.0427438134158132,
+      "candidate_recall@50": 0.0
+    },
+    "delta_vs_snowflake_stage2_test": {
+      "recall@10": 0.0432900432900433,
+      "ndcg@10": 0.0338595951101308,
+      "candidate_recall@50": 0.0
+    },
+    "delta_vs_kure_stage2_test": {
+      "recall@10": 0.0634613613337017,
+      "ndcg@10": 0.0504065994747622,
+      "candidate_recall@50": 0.0
+    },
+    "resource_policy": {
+      "cpu_thread_count": 18,
+      "feature_builder_parallelism": "auto_thread_pool",
+      "ranking_builder_parallelism": "auto_thread_pool",
+      "progress_mode": "on",
+      "device": "cuda",
+      "embedding_batch_size": "auto_vram"
+    },
+    "decision": "promote_e5_domain_stage2_as_current_sota_and_default",
+    "reason": "Domain-specific E5-small features let LightGBM learn which persona domain matched the candidate hobby. This improved Recall@10/NDCG@10 over the single mixed cosine feature and over Snowflake-ko single while preserving the fixed candidate pool.",
+    "next_step": "Evaluate E5-domain rank/margin features, candidate hobby text expansion, and cold-start/segment qualitative review against this default."
   }
 }

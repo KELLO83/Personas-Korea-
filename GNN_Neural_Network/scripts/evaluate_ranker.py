@@ -5,6 +5,7 @@ import csv
 import hashlib
 import json
 import logging
+import math
 import os
 import random
 import shlex
@@ -33,6 +34,7 @@ from GNN_Neural_Network.gnn_recommender.config import load_config, validate_expe
 from GNN_Neural_Network.gnn_recommender.data import (
     LEAKAGE_TEXT_FIELDS,
     PersonContext,
+    build_domain_persona_texts,
     build_domain_tagged_persona_text,
     empty_person_context,
     load_alias_map,
@@ -53,6 +55,7 @@ from GNN_Neural_Network.gnn_recommender.diversity import (
 )
 from GNN_Neural_Network.gnn_recommender.ranker import (
     LightGBMRanker,
+    RANKER_DOMAIN_TEXT_FEATURE_COLUMNS,
     load_or_build_candidate_pool,
     get_candidate_pool_cache_key,
     build_kure_semantic_candidate_scores,
@@ -108,6 +111,7 @@ _TQDM_KWARGS = {
 }
 FEATURE_CACHE_VERSION = 2
 _feature_worker_hobby_profile: dict[str, object] | None = None
+_feature_worker_profile_cache: dict[str, dict[str, object]] = {}
 _feature_worker_reranker_config: Any = None
 _feature_worker_model_feature_columns: list[str] = []
 _ranking_worker_train_known: dict[int, set[int]] = {}
@@ -132,15 +136,19 @@ def _init_feature_worker(
     model_feature_columns: list[str],
 ) -> None:
     global _feature_worker_hobby_profile
+    global _feature_worker_profile_cache
     global _feature_worker_reranker_config
     global _feature_worker_model_feature_columns
     _feature_worker_hobby_profile = hobby_profile
+    _feature_worker_profile_cache = _build_profile_feature_cache(hobby_profile)
     _feature_worker_reranker_config = reranker_config
     _feature_worker_model_feature_columns = model_feature_columns
 
 
-def _build_feature_rows_for_person(payload: tuple[int, PersonContext, list[Any], set[str], dict[int, float]]) -> tuple[int, list[list[float]], list[int], bool]:
-    person_id, person_context, hobby_candidates, known_names, text_scores = payload
+def _build_feature_rows_for_person(
+    payload: tuple[int, PersonContext, list[Any], set[str], dict[int, float], dict[int, dict[str, float]]],
+) -> tuple[int, list[list[float]], list[int], bool]:
+    person_id, person_context, hobby_candidates, known_names, text_scores, domain_scores = payload
     if not hobby_candidates:
         return person_id, [], [], True
     if _feature_worker_hobby_profile is None or _feature_worker_reranker_config is None:
@@ -149,19 +157,148 @@ def _build_feature_rows_for_person(payload: tuple[int, PersonContext, list[Any],
     rows: list[list[float]] = []
     hobby_ids: list[int] = []
     for candidate in hobby_candidates:
-        features = build_rerank_features(
+        features = _build_fast_rerank_features(
             person_context,
             candidate,
-            _feature_worker_hobby_profile,
             known_names,
             _feature_worker_reranker_config,
             text_embedding_similarity=float(text_scores.get(candidate.hobby_id, 0.0)),
+            domain_text_embedding_similarities=domain_scores.get(candidate.hobby_id, {}),
         )
-        features.pop("similar_person_score", None)
-        features.pop("persona_text_fit", None)
         rows.append([features.get(col, 0.0) for col in _feature_worker_model_feature_columns])
         hobby_ids.append(candidate.hobby_id)
     return person_id, rows, hobby_ids, False
+
+
+def _build_profile_feature_cache(hobby_profile: dict[str, object] | None) -> dict[str, dict[str, object]]:
+    if not isinstance(hobby_profile, dict):
+        return {}
+    hobbies = hobby_profile.get("hobbies", {})
+    if not isinstance(hobbies, dict):
+        return {}
+    max_popularity = 0.0
+    for entry in hobbies.values():
+        if isinstance(entry, dict):
+            max_popularity = max(max_popularity, _safe_float(entry.get("train_popularity", 0.0)))
+
+    cache: dict[str, dict[str, object]] = {}
+    for hobby_name, entry in hobbies.items():
+        if not isinstance(entry, dict):
+            continue
+        popularity = _safe_float(entry.get("train_popularity", 0.0))
+        distributions = entry.get("distributions", {})
+        if not isinstance(distributions, dict):
+            distributions = {}
+        cooccurring_pairs: list[tuple[str, float]] = []
+        cooccurring_total = 0.0
+        cooccurring = entry.get("cooccurring_hobbies", [])
+        if isinstance(cooccurring, list):
+            for item in cooccurring:
+                if not isinstance(item, dict):
+                    continue
+                count = _safe_float(item.get("count", 0.0))
+                cooccurring_total += count
+                cooccurring_pairs.append((str(item.get("hobby_name", "")), count))
+        popularity_penalty = (
+            math.log1p(popularity) / math.log1p(max_popularity)
+            if max_popularity > 0.0
+            else 0.0
+        )
+        cache[str(hobby_name)] = {
+            "distributions": distributions,
+            "cooccurring_pairs": cooccurring_pairs,
+            "cooccurring_total": cooccurring_total,
+            "popularity_prior": popularity / max_popularity if max_popularity else 0.0,
+            "popularity_penalty": popularity_penalty,
+            "novelty_bonus": 1.0 - popularity_penalty,
+        }
+    return cache
+
+
+def _build_fast_rerank_features(
+    context: PersonContext,
+    candidate: Any,
+    known_hobby_names: set[str],
+    config: Any,
+    text_embedding_similarity: float = 0.0,
+    domain_text_embedding_similarities: Mapping[str, float] | None = None,
+) -> dict[str, float]:
+    cached = _feature_worker_profile_cache.get(str(candidate.hobby_name), {})
+    distributions = cached.get("distributions", {})
+    distributions = distributions if isinstance(distributions, dict) else {}
+    source_scores = candidate.source_scores or {}
+    source_keys = set(source_scores)
+    source_is_popularity = 1.0 if "popularity" in source_keys else 0.0
+    source_is_cooccurrence = 1.0 if "cooccurrence" in source_keys else 0.0
+    features = {
+        "lightgcn_score": _safe_float(source_scores.get("lightgcn", 0.0)),
+        "cooccurrence_score": _safe_float(source_scores.get("cooccurrence", 0.0)),
+        "segment_popularity_score": _safe_float(source_scores.get("segment_popularity", 0.0)),
+        "similar_person_score": 0.0,
+        "persona_text_fit": 0.0,
+        "known_hobby_compatibility": _known_hobby_compatibility_cached(cached, known_hobby_names),
+        "age_group_fit": _distribution_fit_cached(distributions, "age_group", context.age_group),
+        "occupation_fit": _distribution_fit_cached(distributions, "occupation", context.occupation),
+        "region_fit": max(
+            _distribution_fit_cached(distributions, "province", context.province),
+            _distribution_fit_cached(distributions, "district", context.district),
+        ),
+        "popularity_prior": _safe_float(cached.get("popularity_prior", 0.0)),
+        "mismatch_penalty": _mismatch_penalty_cached(distributions, context),
+        "popularity_penalty": _safe_float(cached.get("popularity_penalty", 0.0)),
+        "novelty_bonus": _safe_float(cached.get("novelty_bonus", 0.0)),
+        "category_diversity_reward": 0.0,
+        "is_cold_start": 1.0 if len(known_hobby_names) <= 1 else 0.0,
+        "source_is_popularity": source_is_popularity,
+        "source_is_cooccurrence": source_is_cooccurrence,
+        "source_count": source_is_popularity + source_is_cooccurrence,
+        "text_embedding_similarity": text_embedding_similarity,
+    }
+    if domain_text_embedding_similarities:
+        for column in RANKER_DOMAIN_TEXT_FEATURE_COLUMNS:
+            features[column] = _safe_float(domain_text_embedding_similarities.get(column, 0.0))
+    return features
+
+
+def _distribution_fit_cached(distributions: dict[object, object], field: str, value: str) -> float:
+    if not value:
+        return 0.0
+    distribution = distributions.get(field, {})
+    if not isinstance(distribution, dict) or not distribution:
+        return 0.0
+    total = sum(_safe_float(count) for count in distribution.values())
+    return _safe_float(distribution.get(value, 0.0)) / total if total else 0.0
+
+
+def _known_hobby_compatibility_cached(cached: dict[str, object], known_hobby_names: set[str]) -> float:
+    if not known_hobby_names:
+        return 0.0
+    pairs = cached.get("cooccurring_pairs", [])
+    total = _safe_float(cached.get("cooccurring_total", 0.0))
+    if not isinstance(pairs, list) or total <= 0.0:
+        return 0.0
+    matched = sum(count for name, count in pairs if name in known_hobby_names)
+    return matched / total if total else 0.0
+
+
+def _mismatch_penalty_cached(distributions: dict[object, object], context: PersonContext) -> float:
+    fields = {
+        "age_group": context.age_group,
+        "occupation": context.occupation,
+        "sex": context.sex,
+    }
+    penalties = []
+    for field, value in fields.items():
+        distribution = distributions.get(field, {})
+        if value and isinstance(distribution, dict) and distribution:
+            fit = _distribution_fit_cached(distributions, field, value)
+            if fit < 0.05:
+                penalties.append(1.0 - fit)
+    return sum(penalties) / len(fields) if penalties else 0.0
+
+
+def _safe_float(value: object) -> float:
+    return float(value) if isinstance(value, int | float | str) else 0.0
 
 
 def _init_ranking_worker(
@@ -694,16 +831,19 @@ def main() -> None:
         LOGGER.info("Feature cache disabled; feature rows will be rebuilt.")
 
     include_text_embedding_feature = model_feature_policy["include_text_embedding_feature"]
+    include_domain_text_embedding_features = model_feature_policy["include_domain_text_embedding_features"]
     embedding_resource_plan = _resolve_embedding_resource_plan(args)
     effective_embedding_batch_size = int(embedding_resource_plan["effective_batch_size"])
     text_cache_dir = args.embedding_cache_dir or (config.paths.artifact_dir / "text_embedding_cache")
     text_device = str(embedding_resource_plan.get("device", ""))
     text_similarity_fn: Any = None
     text_similarity_lookup: dict[int, dict[int, float]] = {}
+    domain_similarity_lookup: dict[int, dict[int, dict[str, float]]] = {}
     LOGGER.info(
-        "Checking feature cache before KURE preparation: split=%s include_text_embedding_feature=%s",
+        "Checking feature cache before KURE preparation: split=%s include_text_embedding_feature=%s include_domain_text_embedding_features=%s",
         args.split,
         include_text_embedding_feature,
+        include_domain_text_embedding_features,
     )
     cached_features = _load_feature_cache(
         args,
@@ -719,7 +859,8 @@ def main() -> None:
     if feature_cache_hit:
         LOGGER.info("Feature cache hit; skipping KURE text embedding prewarm and feature rebuild.")
     text_embedding_audit: dict[str, object] = {
-        "enabled": include_text_embedding_feature,
+        "enabled": include_text_embedding_feature or include_domain_text_embedding_features,
+        "include_domain_text_embedding_features": include_domain_text_embedding_features,
         "cache_dir": "",
         "resource_plan": embedding_resource_plan,
         "known_hobbies_masked": False,
@@ -729,7 +870,7 @@ def main() -> None:
         "failed_person_count": 0,
     }
 
-    if include_text_embedding_feature and not feature_cache_hit:
+    if (include_text_embedding_feature or include_domain_text_embedding_features) and not feature_cache_hit:
         text_prepare_start = time.perf_counter()
         LOGGER.info(
             "KURE embedding resource plan: device=%s, requested_batch_size=%s, "
@@ -779,6 +920,7 @@ def main() -> None:
             alias_map=hobby_aliases,
         )
         person_text_by_id = text_prepare_payload["person_text_by_id"]
+        person_domain_texts_by_id = text_prepare_payload["person_domain_texts_by_id"]
         person_audit_pass = text_prepare_payload["person_audit_pass"]
         text_embedding_audit.update(text_prepare_payload["summary"])
         text_embedding_audit["cache_dir"] = str(text_cache_dir)
@@ -801,6 +943,7 @@ def main() -> None:
             )
             _prewarm_text_embedding_caches(
                 person_text_by_id=person_text_by_id,
+                person_domain_texts_by_id=person_domain_texts_by_id if include_domain_text_embedding_features else None,
                 person_embedding_cache=person_embedding_cache,
                 hobby_embedding_cache=hobby_embedding_cache,
                 candidate_pools=pools_by_person,
@@ -814,8 +957,18 @@ def main() -> None:
                 hobby_embedding_cache=hobby_embedding_cache,
                 candidate_pools=pools_by_person,
             )
+            if include_domain_text_embedding_features:
+                domain_similarity_lookup = _build_domain_similarity_lookup(
+                    person_domain_texts_by_id=person_domain_texts_by_id,
+                    person_audit_pass=person_audit_pass,
+                    person_embedding_cache=person_embedding_cache,
+                    hobby_embedding_cache=hobby_embedding_cache,
+                    candidate_pools=pools_by_person,
+                )
             text_embedding_audit["similarity_lookup_person_count"] = len(text_similarity_lookup)
             text_embedding_audit["similarity_lookup_pair_count"] = sum(len(values) for values in text_similarity_lookup.values())
+            text_embedding_audit["domain_similarity_lookup_person_count"] = len(domain_similarity_lookup)
+            text_embedding_audit["domain_similarity_lookup_pair_count"] = sum(len(values) for values in domain_similarity_lookup.values())
             text_similarity_fn = None
             LOGGER.info(
                 "KURE text similarity lookup ready: persons=%s pairs=%s dynamic_fallback=%s",
@@ -833,7 +986,7 @@ def main() -> None:
     text_has_eligible_persons = int(text_embedding_audit.get("audit_eligible_person_count", 0)) > 0
     text_has_passed_persons = int(text_embedding_audit.get("passed_person_count", 0)) > 0
     should_disable_text_eval = (
-        include_text_embedding_feature
+        (include_text_embedding_feature or include_domain_text_embedding_features)
         and not feature_cache_hit
         and (
             text_audit_failure_rate > 0.05
@@ -869,7 +1022,8 @@ def main() -> None:
             "feature_policy": {
                 "feature_columns": model_feature_columns,
                 "include_source_features": model_feature_policy["include_source_features"],
-                "include_text_embedding_feature": True,
+                "include_text_embedding_feature": include_text_embedding_feature,
+                "include_domain_text_embedding_features": include_domain_text_embedding_features,
             },
             "text_embedding_audit": text_embedding_audit,
             "disabled_summary": disabled_summary,
@@ -1022,15 +1176,13 @@ def main() -> None:
                     pools_by_person.get(person_id, []),
                     {id_to_hobby[hid] for hid in train_known.get(person_id, set()) if hid in id_to_hobby},
                     text_similarity_lookup.get(person_id, {}),
+                    domain_similarity_lookup.get(person_id, {}),
                 )
                 for person_id in truth_person_ids
             ]
             chunksize = max(1, min(64, len(feature_payloads) // (feature_worker_count * 4) if feature_worker_count else 1))
-            with ThreadPoolExecutor(
-                max_workers=feature_worker_count,
-                initializer=_init_feature_worker,
-                initargs=(hobby_profile, reranker_config, model_feature_columns),
-            ) as executor:
+            _init_feature_worker(hobby_profile, reranker_config, model_feature_columns)
+            with ThreadPoolExecutor(max_workers=feature_worker_count) as executor:
                 results = executor.map(_build_feature_rows_for_person, feature_payloads, chunksize=chunksize)
                 for person_id, rows, hobby_ids_list, is_fallback in _iter_with_progress(
                     args,
@@ -1050,6 +1202,7 @@ def main() -> None:
                     person_to_feature_slice[person_id] = (start, feature_row_offset)
                     hobby_ids_by_person[person_id] = hobby_ids_list
         else:
+            _init_feature_worker(hobby_profile, reranker_config, model_feature_columns)
             for person_id in _iter_with_progress(args, truth_person_ids, desc=f"features ({args.split})"):
                 person_uuid = id_to_person.get(person_id, "")
                 person_context = contexts.get(person_uuid) or empty_person_context(person_uuid)
@@ -1068,16 +1221,14 @@ def main() -> None:
                                 text_embedding_similarity = float(text_similarity_fn(person_id, candidate))
                             except Exception:
                                 text_embedding_similarity = 0.0
-                        features = build_rerank_features(
+                        features = _build_fast_rerank_features(
                             person_context,
                             candidate,
-                            hobby_profile,
                             known_names,
                             reranker_config,
                             text_embedding_similarity=text_embedding_similarity,
+                            domain_text_embedding_similarities=domain_similarity_lookup.get(person_id, {}).get(candidate.hobby_id, {}),
                         )
-                        features.pop("similar_person_score", None)
-                        features.pop("persona_text_fit", None)
                         feature_matrix[feature_row_offset] = np.asarray(
                             [features.get(col, 0.0) for col in model_feature_columns],
                             dtype=np.float32,
@@ -1390,7 +1541,8 @@ def main() -> None:
             "mmr_embedding_meta": mmr_embedding_meta if (args.use_mmr or args.use_dpp) else None,
             "mmr_embedding_batch_size": args.embedding_batch_size if (args.use_mmr or args.use_dpp) else None,
             "text_embedding_feature": {
-                "enabled": include_text_embedding_feature,
+                "enabled": include_text_embedding_feature or include_domain_text_embedding_features,
+                "include_domain_text_embedding_features": include_domain_text_embedding_features,
                 "effective_embedding_batch_size": effective_embedding_batch_size,
                 "audit": text_embedding_audit,
             },
@@ -1420,16 +1572,17 @@ def main() -> None:
         },
         "promotion_decision": promotion,
     }
+    text_embedding_enabled = include_text_embedding_feature or include_domain_text_embedding_features
     embedding_model_metadata = _embedding_model_metadata(
-        enabled=include_text_embedding_feature or args.stage1_kure_semantic_provider or (
+        enabled=text_embedding_enabled or args.stage1_kure_semantic_provider or (
             (args.use_mmr or args.use_dpp) and args.mmr_embedding_method == "kure"
         ),
         model_name=text_embedding_model_name,
         model_revision=text_embedding_model_revision,
-        cache_dir=text_cache_dir if (include_text_embedding_feature or args.stage1_kure_semantic_provider) else mmr_cache_dir,
-        batch_size=effective_embedding_batch_size if (include_text_embedding_feature or args.stage1_kure_semantic_provider) else mmr_embedding_batch_size,
-        device=text_device if (include_text_embedding_feature or args.stage1_kure_semantic_provider) else str(mmr_embedding_plan.get("device", "")),
-        resource_plan=embedding_resource_plan if (include_text_embedding_feature or args.stage1_kure_semantic_provider) else mmr_embedding_plan,
+        cache_dir=text_cache_dir if (text_embedding_enabled or args.stage1_kure_semantic_provider) else mmr_cache_dir,
+        batch_size=effective_embedding_batch_size if (text_embedding_enabled or args.stage1_kure_semantic_provider) else mmr_embedding_batch_size,
+        device=text_device if (text_embedding_enabled or args.stage1_kure_semantic_provider) else str(mmr_embedding_plan.get("device", "")),
+        resource_plan=embedding_resource_plan if (text_embedding_enabled or args.stage1_kure_semantic_provider) else mmr_embedding_plan,
     )
     payload["embedding_model_metadata"] = embedding_model_metadata
     if not args.skip_v1:
@@ -1640,10 +1793,20 @@ def _save_feature_cache(
                 "feature_columns": feature_columns,
                 "feature_policy": _feature_policy(feature_columns),
                 "text_embedding": {
-                    "model_name": KURE_MODEL_NAME if "text_embedding_similarity" in feature_columns else "",
+                    "model_name": str(getattr(args, "text_embedding_model_name", KURE_MODEL_NAME) or KURE_MODEL_NAME)
+                    if _feature_policy(feature_columns)["include_text_embedding_feature"]
+                    else "",
                     "model_revision": "",
-                    "preprocessing_version": TEXT_EMBEDDING_PREPROCESSING_VERSION if "text_embedding_similarity" in feature_columns else "",
-                    "text_builder": "build_domain_tagged_persona_text" if "text_embedding_similarity" in feature_columns else "",
+                    "preprocessing_version": TEXT_EMBEDDING_PREPROCESSING_VERSION
+                    if _feature_policy(feature_columns)["include_text_embedding_feature"]
+                    else "",
+                    "text_builder": (
+                        "build_domain_tagged_persona_text+build_domain_persona_texts"
+                        if _feature_policy(feature_columns)["include_domain_text_embedding_features"]
+                        else "build_domain_tagged_persona_text"
+                    )
+                    if _feature_policy(feature_columns)["include_text_embedding_feature"]
+                    else "",
                     "masking": "mask_holdout_hobbies",
                     "similarity": "precomputed_lookup",
                 },
@@ -1715,10 +1878,22 @@ def _feature_cache_key(
             "hobby_aliases": _file_fingerprint(hobby_aliases_path),
         },
         "text_embedding": {
-            "model_name": str(getattr(args, "text_embedding_model_name", KURE_MODEL_NAME) or KURE_MODEL_NAME) if "text_embedding_similarity" in feature_columns else "",
-            "model_revision": str(getattr(args, "text_embedding_model_revision", "") or "") if "text_embedding_similarity" in feature_columns else "",
-            "preprocessing_version": TEXT_EMBEDDING_PREPROCESSING_VERSION if "text_embedding_similarity" in feature_columns else "",
-            "text_builder": "build_domain_tagged_persona_text" if "text_embedding_similarity" in feature_columns else "",
+            "model_name": str(getattr(args, "text_embedding_model_name", KURE_MODEL_NAME) or KURE_MODEL_NAME)
+            if _feature_policy(feature_columns)["include_text_embedding_feature"]
+            else "",
+            "model_revision": str(getattr(args, "text_embedding_model_revision", "") or "")
+            if _feature_policy(feature_columns)["include_text_embedding_feature"]
+            else "",
+            "preprocessing_version": TEXT_EMBEDDING_PREPROCESSING_VERSION
+            if _feature_policy(feature_columns)["include_text_embedding_feature"]
+            else "",
+            "text_builder": (
+                "build_domain_tagged_persona_text+build_domain_persona_texts"
+                if _feature_policy(feature_columns)["include_domain_text_embedding_features"]
+                else "build_domain_tagged_persona_text"
+            )
+            if _feature_policy(feature_columns)["include_text_embedding_feature"]
+            else "",
             "masking": "mask_holdout_hobbies",
             "similarity": "precomputed_lookup",
         },
@@ -1755,6 +1930,7 @@ def _feature_policy(feature_columns: list[str]) -> dict[str, bool]:
     return {
         "include_source_features": any(col.startswith("source_") for col in feature_columns),
         "include_text_embedding_feature": "text_embedding_similarity" in feature_columns,
+        "include_domain_text_embedding_features": any(col in feature_columns for col in RANKER_DOMAIN_TEXT_FEATURE_COLUMNS),
     }
 
 
@@ -2085,6 +2261,7 @@ def _prepare_text_leakage_context(
         known_by_person[person_id].add(hobby_id)
 
     person_text_by_id: dict[int, str] = {}
+    person_domain_texts_by_id: dict[int, dict[str, str]] = {}
     person_audit_pass: dict[int, bool] = {}
     passed_person_ids: list[int] = []
     failed_person_ids: list[int] = []
@@ -2126,12 +2303,14 @@ def _prepare_text_leakage_context(
         person_audit_pass[person_id] = bool(audit_ok)
         if audit_ok and masked:
             person_text_by_id[person_id] = masked
+            person_domain_texts_by_id[person_id] = build_domain_persona_texts(context, masked_field_values)
             passed_person_ids.append(person_id)
         else:
             failed_person_ids.append(person_id)
 
     return {
         "person_text_by_id": person_text_by_id,
+        "person_domain_texts_by_id": person_domain_texts_by_id,
         "person_audit_pass": person_audit_pass,
         "summary": {
             "audit_pass": not failed_person_ids,
@@ -2173,6 +2352,7 @@ def _make_text_similarity_fn(
 def _prewarm_text_embedding_caches(
     *,
     person_text_by_id: dict[int, str],
+    person_domain_texts_by_id: dict[int, dict[str, str]] | None = None,
     person_embedding_cache: PersonEmbeddingCache,
     hobby_embedding_cache: HobbyEmbeddingCache,
     candidate_pools: dict[int, list[Any]],
@@ -2181,6 +2361,9 @@ def _prewarm_text_embedding_caches(
 ) -> None:
     prewarm_start = time.perf_counter()
     person_texts = list(person_text_by_id.values())
+    if person_domain_texts_by_id:
+        for domain_texts in person_domain_texts_by_id.values():
+            person_texts.extend(domain_texts.values())
     if person_texts:
         person_start = time.perf_counter()
         LOGGER.info("Prewarming KURE persona embeddings for evaluation: %s unique texts", len(set(person_texts)))
@@ -2256,6 +2439,82 @@ def _build_text_similarity_lookup(
 
     LOGGER.info(
         "Built KURE similarity lookup: persons=%s, hobbies=%s, pairs=%s, seconds=%.3f",
+        len(lookup),
+        len(hobby_vectors),
+        pair_count,
+        time.perf_counter() - start_time,
+    )
+    return lookup
+
+
+def _build_domain_similarity_lookup(
+    *,
+    person_domain_texts_by_id: dict[int, dict[str, str]],
+    person_audit_pass: dict[int, bool],
+    person_embedding_cache: PersonEmbeddingCache,
+    hobby_embedding_cache: HobbyEmbeddingCache,
+    candidate_pools: dict[int, list[Any]],
+) -> dict[int, dict[int, dict[str, float]]]:
+    start_time = time.perf_counter()
+    lookup: dict[int, dict[int, dict[str, float]]] = {}
+    person_vectors: dict[int, dict[str, np.ndarray]] = {}
+    hobby_vectors: dict[int, np.ndarray] = {}
+
+    domain_to_feature = {
+        "professional": "e5_professional_similarity",
+        "sports": "e5_sports_similarity",
+        "arts": "e5_arts_similarity",
+        "travel": "e5_travel_similarity",
+        "food": "e5_food_similarity",
+        "family": "e5_family_similarity",
+    }
+
+    for person_id, domain_texts in person_domain_texts_by_id.items():
+        if not person_audit_pass.get(person_id, False):
+            continue
+        vectors: dict[str, np.ndarray] = {}
+        for domain, text in domain_texts.items():
+            vector = person_embedding_cache.get(text)
+            if vector is not None:
+                vectors[domain] = _normalize_vector_np(vector)
+        if vectors:
+            person_vectors[person_id] = vectors
+
+    for candidates in candidate_pools.values():
+        for candidate in candidates:
+            candidate_name = str(getattr(candidate, "hobby_name", "") or "").strip()
+            candidate_id = int(getattr(candidate, "hobby_id", -1))
+            if candidate_id < 0 or candidate_id in hobby_vectors or not candidate_name:
+                continue
+            vector = hobby_embedding_cache.get(candidate_name)
+            if vector is not None:
+                hobby_vectors[candidate_id] = _normalize_vector_np(vector)
+
+    pair_count = 0
+    for person_id, candidates in candidate_pools.items():
+        domain_vectors = person_vectors.get(person_id)
+        if not domain_vectors:
+            continue
+        person_lookup: dict[int, dict[str, float]] = {}
+        for candidate in candidates:
+            candidate_id = int(getattr(candidate, "hobby_id", -1))
+            hobby_vector = hobby_vectors.get(candidate_id)
+            if hobby_vector is None:
+                continue
+            scores: dict[str, float] = {}
+            for domain, person_vector in domain_vectors.items():
+                feature_name = domain_to_feature.get(domain)
+                if not feature_name:
+                    continue
+                scores[feature_name] = max(0.0, min(1.0, float(np.dot(person_vector, hobby_vector))))
+            if scores:
+                person_lookup[candidate_id] = scores
+        if person_lookup:
+            pair_count += len(person_lookup)
+            lookup[person_id] = person_lookup
+
+    LOGGER.info(
+        "Built domain similarity lookup: persons=%s, hobbies=%s, pairs=%s, seconds=%.3f",
         len(lookup),
         len(hobby_vectors),
         pair_count,

@@ -12,8 +12,10 @@ if str(ROOT) not in sys.path:
 
 from GNN_Neural_Network.gnn_recommender.ranker import (
     RANKER_CATEGORICAL_FEATURES,
+    RANKER_DOMAIN_TEXT_FEATURE_COLUMNS,
     RANKER_FEATURE_COLUMNS,
     RANKER_FEATURE_COLUMNS_WITH_SOURCE,
+    RANKER_FEATURE_COLUMNS_WITH_TEXT_AND_DOMAIN,
     LightGBMRanker,
     RankerDataset,
     RankerRow,
@@ -257,6 +259,33 @@ class TestBuildRankerDataset:
         assert row_by_hobby[102].features["source_is_popularity"] == 0.0
         assert row_by_hobby[102].features["source_is_cooccurrence"] == 1.0
         assert row_by_hobby[102].features["source_count"] == 1.0
+
+    def test_domain_text_features_added_when_enabled(self) -> None:
+        args = self._make_fixtures()
+        lookup = {
+            0: {
+                100: {
+                    "e5_sports_similarity": 0.7,
+                    "e5_food_similarity": 0.2,
+                }
+            }
+        }
+        ds = build_ranker_dataset(
+            *args,
+            neg_ratio=1,
+            seed=42,
+            include_text_embedding_feature=True,
+            include_domain_text_embedding_features=True,
+            text_similarity_lookup={0: {100: 0.5}},
+            domain_similarity_lookup=lookup,
+        )
+        assert ds.feature_columns == RANKER_FEATURE_COLUMNS_WITH_TEXT_AND_DOMAIN
+        row_by_hobby = {row.hobby_id: row for row in ds.rows}
+        assert row_by_hobby[100].features["text_embedding_similarity"] == 0.5
+        assert row_by_hobby[100].features["e5_sports_similarity"] == 0.7
+        assert row_by_hobby[100].features["e5_food_similarity"] == 0.2
+        for column in RANKER_DOMAIN_TEXT_FEATURE_COLUMNS:
+            assert column in ds.feature_columns
 
 
 class TestLightGBMRanker:

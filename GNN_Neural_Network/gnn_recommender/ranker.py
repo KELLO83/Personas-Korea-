@@ -30,6 +30,8 @@ _ranker_worker_neg_ratio = 4
 _ranker_worker_hard_ratio = 0.8
 _ranker_worker_include_text_embedding_feature = False
 _ranker_worker_text_similarity_lookup: dict[int, dict[int, float]] = {}
+_ranker_worker_include_domain_text_embedding_features = False
+_ranker_worker_domain_similarity_lookup: dict[int, dict[int, dict[str, float]]] = {}
 
 
 # --- Ranker Row Schema ---
@@ -53,6 +55,15 @@ RANKER_TEXT_FEATURE_COLUMNS: list[str] = [
     "text_embedding_similarity",
 ]
 
+RANKER_DOMAIN_TEXT_FEATURE_COLUMNS: list[str] = [
+    "e5_professional_similarity",
+    "e5_sports_similarity",
+    "e5_arts_similarity",
+    "e5_travel_similarity",
+    "e5_food_similarity",
+    "e5_family_similarity",
+]
+
 RANKER_SOURCE_FEATURE_COLUMNS: list[str] = [
     "source_is_popularity",
     "source_is_cooccurrence",
@@ -61,8 +72,19 @@ RANKER_SOURCE_FEATURE_COLUMNS: list[str] = [
 
 RANKER_FEATURE_COLUMNS: list[str] = list(RANKER_BASE_FEATURE_COLUMNS)
 RANKER_FEATURE_COLUMNS_WITH_TEXT: list[str] = list(RANKER_BASE_FEATURE_COLUMNS) + list(RANKER_TEXT_FEATURE_COLUMNS)
+RANKER_FEATURE_COLUMNS_WITH_TEXT_AND_DOMAIN: list[str] = (
+    list(RANKER_BASE_FEATURE_COLUMNS)
+    + list(RANKER_TEXT_FEATURE_COLUMNS)
+    + list(RANKER_DOMAIN_TEXT_FEATURE_COLUMNS)
+)
 RANKER_FEATURE_COLUMNS_WITH_SOURCE: list[str] = list(RANKER_BASE_FEATURE_COLUMNS) + list(RANKER_SOURCE_FEATURE_COLUMNS)
 RANKER_FEATURE_COLUMNS_WITH_SOURCE_AND_TEXT: list[str] = list(RANKER_BASE_FEATURE_COLUMNS) + list(RANKER_SOURCE_FEATURE_COLUMNS) + list(RANKER_TEXT_FEATURE_COLUMNS)
+RANKER_FEATURE_COLUMNS_WITH_SOURCE_TEXT_AND_DOMAIN: list[str] = (
+    list(RANKER_BASE_FEATURE_COLUMNS)
+    + list(RANKER_SOURCE_FEATURE_COLUMNS)
+    + list(RANKER_TEXT_FEATURE_COLUMNS)
+    + list(RANKER_DOMAIN_TEXT_FEATURE_COLUMNS)
+)
 
 RANKER_CATEGORICAL_FEATURES: list[str] = ["is_cold_start"]
 RANKER_CATEGORICAL_FEATURES_WITH_SOURCE: list[str] = [
@@ -75,7 +97,12 @@ RANKER_CATEGORICAL_FEATURES_WITH_SOURCE: list[str] = [
 def get_ranker_feature_columns(
     include_source_features: bool = False,
     include_text_embedding_feature: bool = False,
+    include_domain_text_embedding_features: bool = False,
 ) -> list[str]:
+    if include_domain_text_embedding_features:
+        if include_source_features:
+            return list(RANKER_FEATURE_COLUMNS_WITH_SOURCE_TEXT_AND_DOMAIN)
+        return list(RANKER_FEATURE_COLUMNS_WITH_TEXT_AND_DOMAIN)
     if include_source_features and include_text_embedding_feature:
         return list(RANKER_FEATURE_COLUMNS_WITH_SOURCE_AND_TEXT)
     if include_source_features:
@@ -281,8 +308,10 @@ def build_ranker_dataset(
     seed: int = 42,
     include_source_features: bool = False,
     include_text_embedding_feature: bool = False,
+    include_domain_text_embedding_features: bool = False,
     text_similarity_fn: Callable[[int, HobbyCandidate], float] | None = None,
     text_similarity_lookup: dict[int, dict[int, float]] | None = None,
+    domain_similarity_lookup: dict[int, dict[int, dict[str, float]]] | None = None,
     parallel_workers: int | None = None,
     parallel_backend: str = "thread",
     thread_workers: int | None = None,
@@ -299,6 +328,7 @@ def build_ranker_dataset(
     feature_columns = get_ranker_feature_columns(
         include_source_features=include_source_features,
         include_text_embedding_feature=include_text_embedding_feature,
+        include_domain_text_embedding_features=include_domain_text_embedding_features,
     )
 
     worker_count = parallel_workers if parallel_workers is not None else thread_workers
@@ -337,6 +367,8 @@ def build_ranker_dataset(
                 hard_ratio,
                 include_text_embedding_feature,
                 text_similarity_lookup or {},
+                include_domain_text_embedding_features,
+                domain_similarity_lookup or {},
             ),
         ) as executor:
             iterator = executor.map(_build_ranker_rows_for_person_worker, payloads, chunksize=chunksize)
@@ -367,6 +399,8 @@ def build_ranker_dataset(
                     include_text_embedding_feature=include_text_embedding_feature,
                     text_similarity_fn=text_similarity_fn,
                     text_similarity_lookup=text_similarity_lookup or {},
+                    include_domain_text_embedding_features=include_domain_text_embedding_features,
+                    domain_similarity_lookup=domain_similarity_lookup or {},
                 ),
             )
 
@@ -385,6 +419,8 @@ def _init_ranker_dataset_worker(
     hard_ratio: float,
     include_text_embedding_feature: bool,
     text_similarity_lookup: dict[int, dict[int, float]],
+    include_domain_text_embedding_features: bool,
+    domain_similarity_lookup: dict[int, dict[int, dict[str, float]]],
 ) -> None:
     global _ranker_worker_all_hobby_ids
     global _ranker_worker_known_by_person
@@ -397,6 +433,8 @@ def _init_ranker_dataset_worker(
     global _ranker_worker_hard_ratio
     global _ranker_worker_include_text_embedding_feature
     global _ranker_worker_text_similarity_lookup
+    global _ranker_worker_include_domain_text_embedding_features
+    global _ranker_worker_domain_similarity_lookup
     _ranker_worker_all_hobby_ids = all_hobby_ids
     _ranker_worker_known_by_person = known_by_person
     _ranker_worker_id_to_hobby = id_to_hobby
@@ -408,6 +446,8 @@ def _init_ranker_dataset_worker(
     _ranker_worker_hard_ratio = hard_ratio
     _ranker_worker_include_text_embedding_feature = include_text_embedding_feature
     _ranker_worker_text_similarity_lookup = text_similarity_lookup
+    _ranker_worker_include_domain_text_embedding_features = include_domain_text_embedding_features
+    _ranker_worker_domain_similarity_lookup = domain_similarity_lookup
 
 
 def _build_ranker_rows_for_person_worker(
@@ -433,6 +473,8 @@ def _build_ranker_rows_for_person_worker(
         include_text_embedding_feature=_ranker_worker_include_text_embedding_feature,
         text_similarity_fn=None,
         text_similarity_lookup=_ranker_worker_text_similarity_lookup,
+        include_domain_text_embedding_features=_ranker_worker_include_domain_text_embedding_features,
+        domain_similarity_lookup=_ranker_worker_domain_similarity_lookup,
     )
 
 
@@ -454,6 +496,8 @@ def _build_ranker_rows_for_person(
     include_text_embedding_feature: bool,
     text_similarity_fn: Callable[[int, HobbyCandidate], float] | None,
     text_similarity_lookup: dict[int, dict[int, float]],
+    include_domain_text_embedding_features: bool,
+    domain_similarity_lookup: dict[int, dict[int, dict[str, float]]],
 ) -> list[RankerRow]:
     person_uuid = id_to_person.get(person_id)
     if not person_uuid:
@@ -496,6 +540,9 @@ def _build_ranker_rows_for_person(
                     text_embedding_similarity = float(text_similarity_fn(person_id, candidate))
                 except Exception:
                     text_embedding_similarity = 0.0
+        domain_similarities: dict[str, float] = {}
+        if include_domain_text_embedding_features:
+            domain_similarities = domain_similarity_lookup.get(person_id, {}).get(candidate.hobby_id, {})
         features = build_rerank_features(
             context,
             candidate,
@@ -504,6 +551,8 @@ def _build_ranker_rows_for_person(
             reranker_config,
             text_embedding_similarity=text_embedding_similarity,
         )
+        if domain_similarities:
+            features.update(domain_similarities)
         features.pop("similar_person_score", None)
         features.pop("persona_text_fit", None)
         return RankerRow(person_id=person_id, hobby_id=hid, label=label, features=features)

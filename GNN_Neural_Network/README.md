@@ -1,231 +1,153 @@
 # GNN_Neural_Network: 취미 추천 시스템
 
-이 폴더는 `Nemotron-Personas-Korea` 데이터에서 `Person -> Hobby` 취미 추천을 실험하는 오프라인 추천 시스템 workspace입니다.
+이 폴더는 `Nemotron-Personas-Korea` 데이터에서 `Person -> Hobby` 추천을
+실험하는 오프라인 추천 시스템 workspace입니다. 현재 문서의 기준일은
+2026-05-17입니다.
 
-## 현재 SOTA
+## 현재 결론
 
-현재 로컬 데이터와 현재 split 기준 SOTA는 다음 구성입니다.
+현재 로컬 데이터와 현재 split 기준 accuracy SOTA와 production default는 모두
+E5-small-ko-v2 domain-specific Stage2입니다.
 
 ```text
 Stage1 = popularity + cooccurrence
-Stage2 = LightGBM learned ranker
-Stage2 feature = KURE-v1 text_embedding_similarity enabled
-LightGBM num_leaves = 31
+Stage2 = LightGBM(num_leaves=31)
+Embedding model = dragonkue/multilingual-e5-small-ko-v2
+Feature policy = text_embedding_similarity + E5 domain-specific similarities
 MMR = false
 KURE Stage1 semantic provider = false
 ```
 
-선택된 모델:
+현재 기본 모델:
 
 ```text
-GNN_Neural_Network/artifacts/experiments/phase5_c_text_embedding/current_locked_kure_stage2_num_leaves31_cpu10/ranker_model.txt
+GNN_Neural_Network/artifacts/experiments/phase5_c_text_embedding/e5_domain_features_validation_thread18/ranker_model.txt
 ```
 
-핵심 결론:
+## 현재 Test 결과
 
-- KURE-v1은 **Stage2 feature**로 사용할 때 현재 split에서 성능이 좋아졌습니다.
-- KURE-v1을 **Stage1 semantic candidate provider**로 쓰는 방식은 거절합니다. 후보 recall이 떨어져서 Stage2가 맞출 수 있는 정답 후보가 줄어듭니다.
-- 따라서 현재 default 후보는 `popularity + cooccurrence -> LightGBM(num_leaves=31) + KURE text_embedding_similarity`입니다.
+같은 current split, 같은 Stage1 후보풀, 같은 LightGBM recipe를 고정했습니다.
+바뀐 것은 Stage2에 들어가는 embedding feature 형태입니다.
 
-## 최신 동일 데이터 비교
+| Model | Test Recall@10 | Test NDCG@10 | Candidate Recall@50 | Decision |
+| --- | ---: | ---: | ---: | --- |
+| no-text LightGBM | 0.579626 | 0.360270 | 0.827208 | baseline |
+| KURE-v1 Stage2 single | 0.617482 | 0.386258 | 0.827208 | historical baseline |
+| E5-small-ko-v2 Stage2 single | 0.623837 | 0.393921 | 0.827208 | previous production default |
+| Snowflake-ko Stage2 single | 0.637653 | 0.402805 | 0.827208 | previous accuracy reference |
+| E5-small-ko-v2 Stage2 domain-specific | 0.680943 | 0.436665 | 0.827208 | current SOTA/default |
 
-최신 promotion-grade 비교는 현재 데이터, 현재 split, 같은 Stage1 후보풀, 같은 LightGBM recipe(`num_leaves=31`)를 고정했습니다. 바뀐 것은 Stage2에 KURE feature를 넣었는지 여부뿐입니다.
+E5 domain-specific delta:
 
-| Split | Model | Recall@10 | NDCG@10 | Candidate Recall@50 | Decision |
-| --- | --- | ---: | ---: | ---: | --- |
-| validation | no-text LightGBM | 0.591876 | 0.366105 | 0.827669 | baseline |
-| validation | LightGBM + KURE Stage2 | 0.634706 | 0.396559 | 0.827669 | selected |
-| test | no-text LightGBM | 0.579626 | 0.360270 | 0.827208 | baseline |
-| test | LightGBM + KURE Stage2 | 0.617482 | 0.386258 | 0.827208 | current SOTA |
-
-KURE Stage2 개선폭:
-
-| Split | Recall@10 delta | NDCG@10 delta |
+| 비교 대상 | Recall@10 delta | NDCG@10 delta |
 | --- | ---: | ---: |
-| validation | +0.042830 | +0.030454 |
-| test | +0.037856 | +0.025988 |
+| Stage1 | +0.111173 | +0.080306 |
+| E5 single | +0.057106 | +0.042744 |
+| Snowflake single | +0.043290 | +0.033860 |
+| KURE-v1 single | +0.063461 | +0.050407 |
 
-결론:
+## 왜 E5 Domain-Specific이 기본값인가
 
-```text
-현재 데이터/현재 split/동일 후보풀 기준에서는 KURE-v1 Stage2 feature가 no-text LightGBM보다 좋다.
-KURE Stage2 text_embedding_similarity를 현재 오프라인 추천기의 SOTA/default 후보로 승격한다.
-```
+기존 E5/Snowflake/KURE 단일 feature는 persona 전체 텍스트와 후보 hobby 텍스트의
+cosine similarity 하나만 LightGBM에 넣었습니다. 현재 기본값은 여기에 더해
+persona text를 domain별로 나눈 similarity를 함께 넣습니다.
 
-주요 비교 artifact:
-
-```text
-GNN_Neural_Network/artifacts/experiments/phase5_c_text_embedding/current_locked_num_leaves31_comparison.json
-```
-
-## 추천 구조
-
-```mermaid
-flowchart LR
-    A[Persona] --> B[Known hobbies and context]
-    B --> C[Stage1 candidate generation]
-    C --> C1[Popularity]
-    C --> C2[Co-occurrence]
-    C1 --> D[Candidate pool]
-    C2 --> D
-    D --> E[Stage2 LightGBM ranker]
-    E --> E1[KURE text_embedding_similarity]
-    E1 --> F[Top-K hobby recommendations]
-```
-
-Stage1은 후보를 만드는 단계입니다. Stage2는 고정된 후보풀 안에서 순서를 다시 정렬하는 단계입니다. KURE는 현재 Stage2 feature로만 사용합니다.
-
-## 실험 의사결정
-
-| 실험 계열 | 역할 | 결과 | 현재 결정 |
-| --- | --- | --- | --- |
-| `popularity + cooccurrence` | Stage1 후보 생성 | 현재 후보풀에서 가장 안정적 | 유지 |
-| LightGBM no-text | Stage2 baseline | 강한 baseline이지만 KURE Stage2보다 낮음 | 현재 split에서는 대체됨 |
-| KURE text feature | Stage2 보조 feature | candidate recall 유지 상태에서 Recall/NDCG 개선 | 현재 split SOTA로 승격 |
-| KURE semantic Stage1 | Stage1 후보 생성 | candidate_recall@50 하락 | 거절 |
-| KURE dense MMR | diversity reranker | accuracy gate 실패 | 거절 |
-| source one-hot features | Stage2 feature | 성능 하락 | 거절 |
-
-## 다음 실험
-
-다음 실험은 Stage1을 고정하고 Stage2 embedding feature만 개선하는 방향입니다.
-
-1. 같은 `text_embedding_similarity` feature slot에서 다른 embedding backbone을 교체 비교합니다.
-   - 1순위: `dragonkue/snowflake-arctic-embed-l-v2.0-ko`
-   - 2순위: `dragonkue/multilingual-e5-small-ko-v2`
-2. 현재 단일 KURE cosine feature를 domain별 feature로 분해합니다.
-   - `kure_sports_similarity`
-   - `kure_arts_similarity`
-   - `kure_travel_similarity`
-   - `kure_food_similarity`
-   - 필요 시 `kure_family_similarity`, `kure_professional_similarity`
-3. 고정 후보풀 내부에서 KURE rank/margin feature를 추가합니다.
-   - `kure_similarity_percentile`
-   - `kure_similarity_rank`
-   - `kure_similarity_gap_to_top`
-   - `kure_similarity_gap_to_mean`
-
-모든 후속 실험 규칙:
-
-- validation-first입니다.
-- test split은 validation winner에 대해서만 1회 실행합니다.
-- Stage1 후보풀은 `popularity + cooccurrence`로 고정합니다.
-- candidate_recall@50이 떨어지면 승격하지 않습니다.
-- 진행바는 항상 표시해야 합니다.
-- 로컬 비교 run은 CPU thread count `10`을 사용합니다.
-- cache/model metadata에는 embedding model, revision, preprocessing, masking, feature columns를 기록해야 합니다.
-
-## 왜 이전 결과가 헷갈렸나
-
-비교 기준이 두 개 섞여 있었기 때문입니다.
-
-1. 예전 closed Phase 2.5 artifact
-2. 현재 로컬 50K 데이터와 현재 split artifact
-
-예전 closed Phase 2.5 feature cache는 validation person 수가 `9,841`명이고, 현재 validation split은 `10,857`명입니다. split/cache provenance가 다르기 때문에 예전 absolute metric과 현재 locked comparison을 직접 섞으면 안 됩니다.
-
-현재 default 판단은 아래 조건의 비교만 사용합니다.
+추가 feature:
 
 ```text
-same current split
-same current candidate pool
-same LightGBM recipe
-no-text vs KURE Stage2 feature
+e5_professional_similarity
+e5_sports_similarity
+e5_arts_similarity
+e5_travel_similarity
+e5_food_similarity
+e5_family_similarity
 ```
 
-이 통제 비교에서는 KURE Stage2가 이겼습니다.
+즉 LightGBM은 "전체적으로 비슷한가"뿐 아니라 "스포츠/예술/여행/음식/가족/직업
+맥락 중 어디에서 매칭됐는가"를 함께 학습합니다. 이 구조가 test에서 Snowflake
+single-feature보다도 높게 나왔으므로 현재 SOTA로 승격했습니다.
 
-## 현재 데이터 상태
+## 모델 역할
 
-현재 로컬 입력 파일:
+| 구성 | 현재 역할 | 결정 |
+| --- | --- | --- |
+| `popularity + cooccurrence` | Stage1 후보 생성 | 유지 |
+| LightGBM ranker | Stage2 정렬 | 유지 |
+| E5-small domain-specific features | Stage2 semantic feature | 현재 SOTA/default |
+| Snowflake single feature | 이전 accuracy reference | 보존 |
+| E5-small single feature | 이전 lightweight baseline | 보존 |
+| KURE-v1 Stage2 single | historical Stage2 baseline | 보존 |
+| KURE-v1 Stage1 semantic provider | Stage1 semantic 후보 생성 | 거절 |
+| KURE dense MMR | diversity reranker | 거절 |
 
-```text
-GNN_Neural_Network/data/person_hobby_edges.csv
-GNN_Neural_Network/data/person_context.csv
+Stage1에 semantic embedding을 넣는 방식은 현재 추천하지 않습니다. KURE Stage1
+semantic provider는 candidate_recall@50을 떨어뜨렸고, Stage2가 맞출 수 있는
+정답 후보 자체를 줄였습니다. 현재 증거상 embedding은 Stage2 feature로 쓰는 것이
+맞습니다.
+
+## 실행 명령
+
+백엔드, export, Neo4j, API는 기본 `.venv` Python 3.11로 실행합니다.
+검증된 ML 학습/평가는 `.venv314t` Python 3.14t로 실행할 수 있습니다.
+
+현재 기본 모델 test 평가:
+
+```powershell
+.\.venv314t\Scripts\python.exe GNN_Neural_Network\scripts\evaluate_ranker.py `
+  --config GNN_Neural_Network\configs\kure_text_optin_ranker.yaml `
+  --split test `
+  --model-path GNN_Neural_Network\artifacts\experiments\phase5_c_text_embedding\e5_domain_features_validation_thread18\ranker_model.txt `
+  --output GNN_Neural_Network\artifacts\experiments\phase5_c_text_embedding\e5_domain_features_test_thread18\test_metrics.json `
+  --experiment-id e5_domain_features_test_thread18 `
+  --text-embedding-model-name dragonkue/multilingual-e5-small-ko-v2 `
+  --embedding-batch-size 0 `
+  --embedding-vram-utilization 0.85 `
+  --cpu-thread-count 18 `
+  --feature-build-parallelism auto `
+  --ranking-build-parallelism auto `
+  --skip-v1 `
+  --progress-mode on
 ```
-
-현재 로컬 shape:
-
-| 항목 | 값 |
-| --- | ---: |
-| edge rows | 50,000 |
-| context rows | 50,000 |
-| hobby edge가 있는 person | 17,907 |
-| unique raw hobby strings | 49,558 |
-| person당 평균 hobby 수 | 2.79 |
-| person당 중앙값 hobby 수 | 3 |
-
-raw hobby phrase는 안정적인 item ID가 아닙니다. promotion-grade 실험은 canonical/fallback item pipeline과 locked split artifact를 사용해야 합니다.
 
 ## 주요 Artifact
 
 | 목적 | 경로 |
 | --- | --- |
-| 현재 SOTA 비교 | `artifacts/experiments/phase5_c_text_embedding/current_locked_num_leaves31_comparison.json` |
-| 현재 SOTA 모델 | `artifacts/experiments/phase5_c_text_embedding/current_locked_kure_stage2_num_leaves31_cpu10/ranker_model.txt` |
-| 현재 no-text baseline 모델 | `artifacts/experiments/phase5_c_text_embedding/current_locked_no_text_num_leaves31_cpu10/ranker_model.txt` |
-| 실험 의사결정 | `artifacts/experiment_decisions.json` |
+| 현재 SOTA/default 모델 | `artifacts/experiments/phase5_c_text_embedding/e5_domain_features_validation_thread18/ranker_model.txt` |
+| 현재 SOTA/default validation 결과 | `artifacts/experiments/phase5_c_text_embedding/e5_domain_features_validation_thread18/validation_metrics.json` |
+| 현재 SOTA/default test 결과 | `artifacts/experiments/phase5_c_text_embedding/e5_domain_features_test_thread18/test_metrics.json` |
+| 이전 E5 single test 결과 | `artifacts/experiments/phase5_c_text_embedding/e5_small_stage2_single_feature_test_thread18/test_metrics.json` |
+| 이전 Snowflake single test 결과 | `artifacts/experiments/phase5_c_text_embedding/snowflake_stage2_single_feature_test_thread18/test_metrics.json` |
+| 이전 KURE current-split 비교 | `artifacts/experiments/phase5_c_text_embedding/current_locked_num_leaves31_comparison.json` |
+| 실험 의사결정 JSON | `artifacts/experiment_decisions.json` |
 | 사람이 읽는 실험 요약 | `artifacts/experiment_run_summary.md` |
 
-## 실행 명령
+## 다음 실험 우선순위
 
-모든 명령은 repo root에서 `.venv` Python으로 실행합니다.
+1. E5-domain rank/margin feature
+   - `e5_similarity_percentile`
+   - `e5_similarity_rank`
+   - `e5_similarity_gap_to_top`
+   - `e5_similarity_gap_to_mean`
+2. Candidate hobby text expansion
+   - `name_only`
+   - `name_plus_aliases`
+   - `name_plus_category`
+   - `name_plus_short_description`
+3. Cold-start, segment, qualitative review
+   - `known_hobbies <= 1`
+   - age/sex segment gap
+   - top-k 추천 실패 사례 점검
 
-설치:
+모든 후속 실험은 validation-first로 진행하고, test split은 validation winner에
+대해서만 1회 실행합니다. 진행바는 항상 표시해야 하며, cache/model metadata에는
+embedding model, revision, preprocessing, masking, feature columns, worker/thread
+count를 기록해야 합니다.
 
-```powershell
-.\.venv\Scripts\python.exe -m pip install -r GNN_Neural_Network\requirements-gnn.txt
-```
+## 관련 문서
 
-현재 SOTA KURE Stage2 ranker 학습:
-
-```powershell
-.\.venv\Scripts\python.exe GNN_Neural_Network\scripts\train_ranker.py `
-  --config GNN_Neural_Network\configs\kure_text_optin_ranker.yaml `
-  --output-dir GNN_Neural_Network\artifacts\experiments\phase5_c_text_embedding\current_locked_kure_stage2_num_leaves31_cpu10 `
-  --experiment-id current_locked_kure_stage2_num_leaves31_cpu10 `
-  --include-text-embedding-feature `
-  --num-leaves 31 `
-  --cpu-thread-count 10 `
-  --text-embedding-batch-size 32 `
-  --progress-mode on
-```
-
-cached feature matrix에서 평가:
-
-```powershell
-.\.venv\Scripts\python.exe GNN_Neural_Network\scripts\evaluate_cached_ranker_matrix.py `
-  --config GNN_Neural_Network\configs\kure_text_optin_ranker.yaml `
-  --split test `
-  --model-path GNN_Neural_Network\artifacts\experiments\phase5_c_text_embedding\current_locked_kure_stage2_num_leaves31_cpu10\ranker_model.txt `
-  --feature-cache GNN_Neural_Network\artifacts\experiments\phase5_c_text_embedding\kure_text_feature_005_domain_tagged_full_validation\feature_cache\cache\features_14e3fdd1c821675f.npz `
-  --output GNN_Neural_Network\artifacts\experiments\phase5_c_text_embedding\current_locked_kure_stage2_num_leaves31_cpu10\test_cached_metrics.json `
-  --experiment-id current_locked_kure_stage2_num_leaves31_cpu10 `
-  --cpu-thread-count 10 `
-  --progress-mode on
-```
-
-## 문서
-
-- `PRD.md`: 현재 요구사항, 모델 결정, promotion rule
+- `PRD.md`: 요구사항, 현재 SOTA/default 결정, promotion rule
 - `TASKS.md`: 실행 가능한 작업 상태
-- `DATASET_EXPLAIN.md`: 데이터 구조와 leakage 참고
+- `DATASET_EXPLAIN.md`: 데이터셋 구조와 leakage 참고
 - `artifacts/experiment_decisions.json`: machine-readable 실험 의사결정
 - `artifacts/experiment_run_summary.md`: human-readable 실험 기록
-
-## 2026-05-17 Snowflake-ko Validation Result
-
-`dragonkue/snowflake-arctic-embed-l-v2.0-ko` was evaluated as the same Stage2 `text_embedding_similarity` feature slot. Stage1 stayed fixed as `popularity + cooccurrence`, and the LightGBM recipe stayed fixed at `num_leaves=31`.
-
-| Model | Validation Recall@10 | Validation NDCG@10 | Candidate Recall@50 | Status |
-| --- | ---: | ---: | ---: | --- |
-| KURE-v1 Stage2 current SOTA | 0.634706 | 0.396559 | 0.827669 | current default |
-| Snowflake-ko Stage2 | 0.655430 | 0.410234 | 0.827669 | validation winner candidate |
-
-Snowflake-ko delta vs KURE-v1 Stage2:
-
-- Recall@10 `+0.020724`
-- NDCG@10 `+0.013675`
-- Candidate Recall@50 `+0.000000`
-
-Decision: Snowflake-ko passed the validation gate and is eligible for winner-only test. The test split has not been run, so the current default/SOTA remains KURE-v1 Stage2 until a winner-only test result is recorded.

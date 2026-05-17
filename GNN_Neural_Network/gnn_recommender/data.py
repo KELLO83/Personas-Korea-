@@ -50,6 +50,29 @@ def build_domain_tagged_persona_text(
     return " ".join(filtered_blocks)
 
 
+DOMAIN_TEXT_BLOCKS: tuple[tuple[str, str, str], ...] = (
+    ("professional", "professional_text", "[PROF]"),
+    ("sports", "sports_text", "[SPORT]"),
+    ("arts", "arts_text", "[ART]"),
+    ("travel", "travel_text", "[TRAV]"),
+    ("food", "culinary_text", "[FOOD]"),
+    ("family", "family_text", "[FAM]"),
+)
+
+
+def build_domain_persona_texts(
+    context: PersonContext,
+    field_values: Mapping[str, str] | None = None,
+) -> dict[str, str]:
+    values = field_values or {}
+    domain_texts: dict[str, str] = {}
+    for domain, field, tag in DOMAIN_TEXT_BLOCKS:
+        text = str(values.get(field, getattr(context, field, "")) or "").strip()
+        if text:
+            domain_texts[domain] = f"{tag} {text}"
+    return domain_texts
+
+
 @dataclass(frozen=True)
 class IndexedEdges:
     edges: list[tuple[int, int]]

@@ -28,6 +28,7 @@ from GNN_Neural_Network.gnn_recommender.baseline import (  # noqa: E402
 from GNN_Neural_Network.gnn_recommender.config import load_config, validate_experimental_feature_policy  # noqa: E402
 from GNN_Neural_Network.gnn_recommender.data import (
     LEAKAGE_TEXT_FIELDS,
+    build_domain_persona_texts,
     build_domain_tagged_persona_text,
     load_alias_map,
     normalize_hobby_name,
@@ -38,6 +39,7 @@ from GNN_Neural_Network.gnn_recommender.data import (
 from GNN_Neural_Network.gnn_recommender.embedding_cache import HobbyEmbeddingCache, PersonEmbeddingCache  # noqa: E402
 from GNN_Neural_Network.gnn_recommender.ranker import (
     LightGBMRanker,
+    RANKER_DOMAIN_TEXT_FEATURE_COLUMNS,
     build_ranker_dataset,
     create_lambda_rank_dataset,
     load_or_build_candidate_pool,
@@ -62,6 +64,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-persons", type=int, default=0, help="Optional validation-person cap for fast pilot runs")
     parser.add_argument("--include-source-features", action="store_true")
     parser.add_argument("--include-text-embedding-feature", action="store_true", help="Enable leakage-safe text embedding similarity feature")
+    parser.add_argument(
+        "--include-domain-text-embedding-features",
+        action="store_true",
+        help="Enable E5 domain-specific Stage2 text similarity features in addition to text_embedding_similarity.",
+    )
     parser.add_argument("--stage1-kure-semantic-provider", action="store_true", help="Enable opt-in KURE-v1 Stage1 semantic candidate provider")
     parser.add_argument("--stage1-kure-score-batch-size", type=int, default=128, help="Person batch size for KURE Stage1 semantic scoring")
     parser.add_argument("--text-embedding-cache-dir", type=Path, default=None, help="Directory for persona/hobby KURE embedding cache")
@@ -79,18 +86,24 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--text-embedding-batch-size",
+        "--embedding-batch-size",
+        dest="text_embedding_batch_size",
         type=int,
         default=32,
         help="KURE batch size. Use 0 to auto-size from available GPU VRAM.",
     )
     parser.add_argument(
         "--text-embedding-vram-utilization",
+        "--embedding-vram-utilization",
+        dest="text_embedding_vram_utilization",
         type=float,
         default=0.85,
         help="Target fraction of currently free GPU VRAM to use when --text-embedding-batch-size=0.",
     )
     parser.add_argument(
         "--text-embedding-target-vram-mb",
+        "--embedding-target-vram-mb",
+        dest="text_embedding_target_vram_mb",
         type=int,
         default=0,
         help="Absolute target GPU VRAM MB for KURE embedding auto batch. Overrides utilization when >0.",
@@ -138,6 +151,8 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
     _configure_third_party_logging()
     args = parse_args()
+    if args.include_domain_text_embedding_features:
+        args.include_text_embedding_feature = True
     start_time = time.perf_counter()
     text_embedding_model_name = str(args.text_embedding_model_name or KURE_MODEL_NAME).strip() or KURE_MODEL_NAME
     text_embedding_model_revision = str(args.text_embedding_model_revision or "").strip()
@@ -207,8 +222,10 @@ def main() -> None:
     person_embedding_cache: PersonEmbeddingCache | None = None
     hobby_embedding_cache: HobbyEmbeddingCache | None = None
     person_masked_text: dict[int, str] = {}
+    person_domain_texts: dict[int, dict[str, str]] = {}
     person_audit_pass: dict[int, bool] = {}
     text_similarity_lookup: dict[int, dict[int, float]] = {}
+    domain_similarity_lookup: dict[int, dict[int, dict[str, float]]] = {}
     kure_device = ""
     embedding_resource_plan: dict[str, object] = {}
     effective_text_batch_size = 0
@@ -281,6 +298,7 @@ def main() -> None:
             alias_map=hobby_aliases,
         )
         person_masked_text = text_leakage_payload["person_masked_text"]
+        person_domain_texts = text_leakage_payload["person_domain_texts"]
         person_audit_pass = text_leakage_payload["person_audit_pass"]
         text_leakage_audit.update(text_leakage_payload["summary"])
 
@@ -326,8 +344,9 @@ def main() -> None:
             "data_split": data_split,
             "input_config_summary": input_config_summary,
             "feature_policy": {
-                "include_source_features": args.include_source_features,
-                "include_text_embedding_feature": True,
+            "include_source_features": args.include_source_features,
+            "include_text_embedding_feature": True,
+            "include_domain_text_embedding_features": args.include_domain_text_embedding_features,
             },
             "text_leakage_audit_path": str(text_leakage_audit_path),
             "text_leakage_audit": disabled_summary,
@@ -368,6 +387,7 @@ def main() -> None:
                 alias_map=hobby_aliases,
             )
             person_masked_text = text_leakage_payload["person_masked_text"]
+            person_domain_texts = text_leakage_payload["person_domain_texts"]
             person_audit_pass = text_leakage_payload["person_audit_pass"]
             text_leakage_audit.update(text_leakage_payload["summary"])
         if _text_audit_failure_rate(text_leakage_audit) > 0.05:
@@ -455,6 +475,7 @@ def main() -> None:
     if args.include_text_embedding_feature and text_similarity_fn is not None:
         _prewarm_text_embedding_caches(
             person_masked_text=person_masked_text,
+            person_domain_texts=person_domain_texts if args.include_domain_text_embedding_features else None,
             person_embedding_cache=person_embedding_cache,
             hobby_embedding_cache=hobby_embedding_cache,
             id_to_hobby=id_to_hobby,
@@ -469,6 +490,18 @@ def main() -> None:
                 hobby_embedding_cache=hobby_embedding_cache,
                 candidate_pools=pools,
             )
+            if args.include_domain_text_embedding_features:
+                domain_similarity_lookup = _build_domain_similarity_lookup(
+                    person_domain_texts=person_domain_texts,
+                    person_audit_pass=person_audit_pass,
+                    person_embedding_cache=person_embedding_cache,
+                    hobby_embedding_cache=hobby_embedding_cache,
+                    candidate_pools=pools,
+                )
+                text_leakage_audit["domain_similarity_lookup_person_count"] = len(domain_similarity_lookup)
+                text_leakage_audit["domain_similarity_lookup_pair_count"] = sum(
+                    len(values) for values in domain_similarity_lookup.values()
+                )
 
             def _lookup_text_similarity(person_id: int, candidate: HobbyCandidate) -> float:
                 return text_similarity_lookup.get(person_id, {}).get(candidate.hobby_id, 0.0)
@@ -517,8 +550,10 @@ def main() -> None:
         neg_ratio=args.neg_ratio, hard_ratio=args.hard_ratio, seed=args.seed,
         include_source_features=args.include_source_features,
         include_text_embedding_feature=args.include_text_embedding_feature,
+        include_domain_text_embedding_features=args.include_domain_text_embedding_features,
         text_similarity_fn=None,
         text_similarity_lookup=text_similarity_lookup,
+        domain_similarity_lookup=domain_similarity_lookup,
         parallel_workers=cpu_threads,
         parallel_backend="thread",
         show_progress=True,
@@ -534,8 +569,10 @@ def main() -> None:
         neg_ratio=args.neg_ratio, hard_ratio=args.hard_ratio, seed=args.seed + 1,
         include_source_features=args.include_source_features,
         include_text_embedding_feature=args.include_text_embedding_feature,
+        include_domain_text_embedding_features=args.include_domain_text_embedding_features,
         text_similarity_fn=None,
         text_similarity_lookup=text_similarity_lookup,
+        domain_similarity_lookup=domain_similarity_lookup,
         parallel_workers=cpu_threads,
         parallel_backend="thread",
         show_progress=True,
@@ -601,7 +638,8 @@ def main() -> None:
         "lightgbm_params": params,
         "text_leakage_audit_path": str(text_leakage_audit_path),
         "text_leakage_audit": {
-            "enabled": args.include_text_embedding_feature,
+            "enabled": args.include_text_embedding_feature or args.include_domain_text_embedding_features,
+            "include_domain_text_embedding_features": args.include_domain_text_embedding_features,
             "pass": bool(text_leakage_audit.get("pass", False)),
             "failed_person_count": int(text_leakage_audit.get("failed_person_count", 0)),
             "passed_person_count": int(text_leakage_audit.get("passed_person_count", 0)),
@@ -609,6 +647,9 @@ def main() -> None:
         "feature_policy": {
             "include_source_features": args.include_source_features,
             "include_text_embedding_feature": "text_embedding_similarity" in train_ds.feature_columns,
+            "include_domain_text_embedding_features": any(
+                column in train_ds.feature_columns for column in RANKER_DOMAIN_TEXT_FEATURE_COLUMNS
+            ),
         },
         "candidate_pool_policy": candidate_pool_policy,
         "stage1_kure_semantic_provider": stage1_kure_metadata,
@@ -633,6 +674,7 @@ def main() -> None:
         input_config_summary=input_config_summary,
         summary={
             "text_embedding_enabled": args.include_text_embedding_feature,
+            "domain_text_embedding_enabled": args.include_domain_text_embedding_features,
             "text_embedding_audit_path": str(text_leakage_audit_path),
             "text_embedding_audit_pass": bool(text_leakage_audit.get("pass", False)),
         },
@@ -932,6 +974,7 @@ def _make_text_similarity_fn(
 def _prewarm_text_embedding_caches(
     *,
     person_masked_text: dict[int, str],
+    person_domain_texts: dict[int, dict[str, str]] | None = None,
     person_embedding_cache: PersonEmbeddingCache,
     hobby_embedding_cache: HobbyEmbeddingCache,
     id_to_hobby: dict[int, str],
@@ -939,6 +982,9 @@ def _prewarm_text_embedding_caches(
     show_progress_bar: bool = False,
 ) -> None:
     person_texts = list(person_masked_text.values())
+    if person_domain_texts:
+        for domain_texts in person_domain_texts.values():
+            person_texts.extend(domain_texts.values())
     if person_texts:
         LOGGER.info("Prewarming text persona embeddings: %s unique texts", len(set(person_texts)))
         person_embedding_cache.encode_batch(
@@ -1014,6 +1060,79 @@ def _build_text_similarity_lookup(
     return lookup
 
 
+def _build_domain_similarity_lookup(
+    *,
+    person_domain_texts: dict[int, dict[str, str]],
+    person_audit_pass: dict[int, bool],
+    person_embedding_cache: PersonEmbeddingCache,
+    hobby_embedding_cache: HobbyEmbeddingCache,
+    candidate_pools: dict[int, list[HobbyCandidate]],
+) -> dict[int, dict[int, dict[str, float]]]:
+    start_time = time.perf_counter()
+    lookup: dict[int, dict[int, dict[str, float]]] = {}
+    person_vectors: dict[int, dict[str, np.ndarray]] = {}
+    hobby_vectors: dict[int, np.ndarray] = {}
+    domain_to_feature = {
+        "professional": "e5_professional_similarity",
+        "sports": "e5_sports_similarity",
+        "arts": "e5_arts_similarity",
+        "travel": "e5_travel_similarity",
+        "food": "e5_food_similarity",
+        "family": "e5_family_similarity",
+    }
+
+    for person_id, domain_text_by_name in person_domain_texts.items():
+        if not person_audit_pass.get(person_id, False):
+            continue
+        vectors: dict[str, np.ndarray] = {}
+        for domain, text in domain_text_by_name.items():
+            vector = person_embedding_cache.get(text)
+            if vector is not None:
+                vectors[domain] = _normalize_vector_np(vector)
+        if vectors:
+            person_vectors[person_id] = vectors
+
+    for candidates in candidate_pools.values():
+        for candidate in candidates:
+            candidate_name = (candidate.hobby_name or "").strip()
+            if candidate.hobby_id in hobby_vectors or not candidate_name:
+                continue
+            vector = hobby_embedding_cache.get(candidate_name)
+            if vector is not None:
+                hobby_vectors[candidate.hobby_id] = _normalize_vector_np(vector)
+
+    pair_count = 0
+    for person_id, candidates in candidate_pools.items():
+        domain_vectors = person_vectors.get(person_id)
+        if not domain_vectors:
+            continue
+        person_lookup: dict[int, dict[str, float]] = {}
+        for candidate in candidates:
+            hobby_vector = hobby_vectors.get(candidate.hobby_id)
+            if hobby_vector is None:
+                continue
+            scores: dict[str, float] = {}
+            for domain, person_vector in domain_vectors.items():
+                feature_name = domain_to_feature.get(domain)
+                if not feature_name:
+                    continue
+                scores[feature_name] = max(0.0, min(1.0, float(np.dot(person_vector, hobby_vector))))
+            if scores:
+                person_lookup[candidate.hobby_id] = scores
+        if person_lookup:
+            pair_count += len(person_lookup)
+            lookup[person_id] = person_lookup
+
+    LOGGER.info(
+        "Built domain training similarity lookup: persons=%s hobbies=%s pairs=%s seconds=%.3f",
+        len(lookup),
+        len(hobby_vectors),
+        pair_count,
+        time.perf_counter() - start_time,
+    )
+    return lookup
+
+
 def _normalize_vector_np(vector: Any) -> np.ndarray:
     array = np.asarray(vector, dtype=np.float32).reshape(-1)
     norm = float(np.linalg.norm(array))
@@ -1035,6 +1154,7 @@ def _prepare_text_leakage_context(
         known_by_person[person_id].add(hobby_id)
 
     person_masked_text: dict[int, str] = {}
+    person_domain_texts: dict[int, dict[str, str]] = {}
     person_audit_pass: dict[int, bool] = {}
     passed: list[int] = []
     failed: list[int] = []
@@ -1078,11 +1198,13 @@ def _prepare_text_leakage_context(
             passed.append(person_id)
             if masked:
                 person_masked_text[person_id] = masked
+                person_domain_texts[person_id] = build_domain_persona_texts(context, masked_field_values)
         else:
             failed.append(person_id)
 
     return {
         "person_masked_text": person_masked_text,
+        "person_domain_texts": person_domain_texts,
         "person_audit_pass": person_audit_pass,
         "summary": {
             "pass": not failed,
