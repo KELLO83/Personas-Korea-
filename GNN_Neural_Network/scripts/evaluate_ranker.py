@@ -2502,6 +2502,8 @@ def _build_text_similarity_lookup(
             if candidate_id < 0 or candidate_id in hobby_vectors or not candidate_name:
                 continue
             vector = hobby_embedding_cache.get(candidate_name)
+            if vector is None:
+                vector = hobby_embedding_cache.encode(candidate_name)
             if vector is not None:
                 hobby_vectors[candidate_id] = _normalize_vector_np(vector)
 
@@ -2572,6 +2574,8 @@ def _build_domain_similarity_lookup(
             if candidate_id < 0 or candidate_id in hobby_vectors or not candidate_name:
                 continue
             vector = hobby_embedding_cache.get(candidate_name)
+            if vector is None:
+                vector = hobby_embedding_cache.encode(candidate_name)
             if vector is not None:
                 hobby_vectors[candidate_id] = _normalize_vector_np(vector)
 

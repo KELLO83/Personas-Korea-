@@ -12,8 +12,6 @@ Stage1 = popularity + cooccurrence
 Stage2 = LightGBM(num_leaves=31)
 Embedding model = dragonkue/multilingual-e5-small-ko-v2
 Feature policy = text_embedding_similarity + E5 domain-specific similarities
-MMR = false
-KURE Stage1 semantic provider = false
 ```
 
 ## 데이터 입력과 전처리
@@ -52,9 +50,8 @@ Stage1의 목적은 각 persona마다 Stage2가 다시 정렬할 후보 취미 p
    - 같은 hobby가 여러 provider에서 나오면 하나로 합치고 source score를 보존합니다.
    - 최종 Stage1 pool은 person별 최대 50개 후보입니다.
 
-현재 기본 모델에서는 KURE/E5 semantic embedding을 Stage1 후보 생성에 넣지 않습니다.
-이 방식은 후보 recall을 낮춰 Stage2가 맞출 수 있는 정답 후보 자체를 줄였기 때문에
-비채택했습니다.
+현재 기본 실험 경로에서 semantic embedding은 Stage1 후보 생성이 아니라 Stage2
+ranking feature로만 사용합니다.
 
 ## Stage2 학습 방식
 
@@ -148,13 +145,13 @@ Korean retrieval task 성능을 높이기 위해 한국어 query-passage pair로
 모든 실험은 같은 current split, 같은 Stage1 후보풀, 같은 LightGBM recipe를
 고정했습니다. 비교 대상은 Stage2에 들어가는 semantic feature 구성입니다.
 
-| 실험 모델 | Stage1 후보 생성 | Stage2 모델 | Embedding / Semantic feature | MMR | 현재 판단 |
-| --- | --- | --- | --- | --- | --- |
-| no-text LightGBM | popularity + cooccurrence | LightGBM | 없음 | false | baseline |
-| KURE-v1 Stage2 single | popularity + cooccurrence | LightGBM | KURE-v1 단일 cosine similarity | false | historical baseline |
-| E5-small-ko-v2 Stage2 single | popularity + cooccurrence | LightGBM | E5-small 단일 cosine similarity | false | 이전 production default |
-| Snowflake-ko Stage2 single | popularity + cooccurrence | LightGBM | Snowflake-ko 단일 cosine similarity | false | 이전 accuracy reference |
-| E5-small-ko-v2 Stage2 domain-specific | popularity + cooccurrence | LightGBM | E5-small 전체 similarity + domain별 similarity | false | 현재 SOTA/default |
+| 실험 모델 | Stage1 후보 생성 | Stage2 모델 | Embedding / Semantic feature | 현재 판단 |
+| --- | --- | --- | --- | --- |
+| no-text LightGBM | popularity + cooccurrence | LightGBM | 없음 | baseline |
+| KURE-v1 Stage2 single | popularity + cooccurrence | LightGBM | KURE-v1 단일 cosine similarity | historical baseline |
+| E5-small-ko-v2 Stage2 single | popularity + cooccurrence | LightGBM | E5-small 단일 cosine similarity | 이전 production default |
+| Snowflake-ko Stage2 single | popularity + cooccurrence | LightGBM | Snowflake-ko 단일 cosine similarity | 이전 accuracy reference |
+| E5-small-ko-v2 Stage2 domain-specific | popularity + cooccurrence | LightGBM | E5-small 전체 similarity + domain별 similarity | 현재 SOTA/default |
 
 ## Test 성능 비교
 
@@ -183,7 +180,67 @@ E5 domain-specific 개선폭:
 cosine similarity 하나만 LightGBM에 넣었습니다. 현재 선택 모델은 여기에 더해
 persona text를 domain별로 나눈 similarity를 함께 사용합니다.
 
+### Single Feature 입력 방식
+
+single feature 실험은 persona의 여러 텍스트 필드를 하나의 긴 문장으로 합친 뒤,
+후보 hobby 텍스트와 한 번만 비교합니다.
+
 ```text
+persona input =
+  [PROF] professional_text
+  [SPORT] sports_text
+  [ART] arts_text
+  [CULT] persona_text
+  [TRAV] travel_text
+  [FOOD] culinary_text
+  [FAM] family_text
+
+hobby input =
+  hobby_name
+
+feature =
+  cosine(E5(persona input), E5(hobby input))
+  -> text_embedding_similarity
+```
+
+예를 들면 한 persona가 직업, 스포츠, 예술, 여행, 음식, 가족 관련 설명을 모두 갖고
+있어도 single 방식에서는 이 정보가 하나의 embedding으로 압축됩니다.
+
+```text
+persona vector: E5("[PROF] ... [SPORT] ... [ART] ... [TRAV] ... [FOOD] ... [FAM] ...")
+hobby vector:   E5("등산")
+feature:        text_embedding_similarity = cosine(persona vector, hobby vector)
+```
+
+장점은 단순하고 빠르다는 점입니다. 단점은 어떤 domain 때문에 hobby와 잘 맞는지
+LightGBM이 분리해서 보기 어렵다는 점입니다. 예를 들어 `등산`이 스포츠 맥락에서
+맞는지, 여행 맥락에서 맞는지, 가족 여가 맥락에서 맞는지가 하나의 숫자 안에
+섞입니다.
+
+### Domain-Specific 입력 방식
+
+domain-specific 실험은 single feature를 유지하면서, persona 텍스트를 domain별로
+따로 embedding합니다. hobby 쪽은 같은 후보 hobby 텍스트를 공유하고, persona 쪽만
+여러 domain vector로 나눕니다.
+
+```text
+shared hobby input =
+  hobby_name
+
+persona domain inputs =
+  [PROF] professional_text
+  [SPORT] sports_text
+  [ART] arts_text
+  [TRAV] travel_text
+  [FOOD] culinary_text
+  [FAM] family_text
+```
+
+각 domain 텍스트와 같은 hobby vector를 따로 cosine 비교해서 LightGBM feature로
+넣습니다.
+
+```text
+text_embedding_similarity      = cosine(E5(all-domain persona text), E5(hobby text))
 e5_professional_similarity
 e5_sports_similarity
 e5_arts_similarity
@@ -192,16 +249,34 @@ e5_food_similarity
 e5_family_similarity
 ```
 
+feature 계산을 풀어 쓰면 다음과 같습니다.
+
+```text
+hobby_vector = E5("등산")
+
+e5_professional_similarity = cosine(E5("[PROF] professional_text"), hobby_vector)
+e5_sports_similarity       = cosine(E5("[SPORT] sports_text"), hobby_vector)
+e5_arts_similarity         = cosine(E5("[ART] arts_text"), hobby_vector)
+e5_travel_similarity       = cosine(E5("[TRAV] travel_text"), hobby_vector)
+e5_food_similarity         = cosine(E5("[FOOD] culinary_text"), hobby_vector)
+e5_family_similarity       = cosine(E5("[FAM] family_text"), hobby_vector)
+```
+
+이렇게 하면 LightGBM은 같은 후보 취미라도 어느 맥락에서 강하게 매칭되는지 학습할
+수 있습니다.
+
+```text
+등산:
+  sports similarity = 높음
+  travel similarity = 높음
+  food similarity   = 낮음
+
+요리:
+  food similarity   = 높음
+  family similarity = 중간
+  sports similarity = 낮음
+```
+
 즉 LightGBM은 "전체적으로 비슷한가"뿐 아니라 "스포츠/예술/여행/음식/가족/직업
 맥락 중 어디에서 매칭됐는가"를 함께 학습합니다. 이 구성이 test에서 Snowflake
 single-feature보다도 높은 Recall@10과 NDCG@10을 보여 현재 기본값으로 승격했습니다.
-
-## 비채택 실험
-
-| 실험 | 판단 | 이유 |
-| --- | --- | --- |
-| KURE-v1 Stage1 semantic provider | 거절 | Stage1 후보 품질을 낮춰 Stage2가 맞출 수 있는 정답 후보 자체를 줄임 |
-| KURE dense MMR | 거절 | 현재 accuracy 중심 기본 모델에는 불리함 |
-
-현재 증거상 embedding은 Stage1 후보 생성보다 Stage2 ranking feature로 쓰는 것이
-맞습니다.
