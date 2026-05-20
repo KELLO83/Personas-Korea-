@@ -740,7 +740,84 @@
   - [x] 차트 empty/loading/error 렌더링 smoke
   - [ ] 모바일 폭에서 label/tooltip overlap 확인
   - [ ] Playwright screenshot으로 주요 chart nonblank 확인
-  - [ ] 각 대상 화면(F6/F8/F9/F20/F23)의 최소 완료 기준 체크리스트 통과
+- [ ] 각 대상 화면(F6/F8/F9/F20/F23)의 최소 완료 기준 체크리스트 통과
+
+---
+
+## Phase 27: 관계형 추천 경험 고도화 구축 계획 (F26-F28)
+
+> PRD §11.11 — 이 Phase는 모델 학습이 아니라 root FastAPI/Next.js 제품 기능이다. 취미 추천과 유사 페르소나 모델은 하위 실험 폴더의 decision artifact를 따르고, 여기서는 graph/rule fallback과 adapter contract를 우선 구현한다.
+
+### F26: Virtual Guild 소모임 추천
+
+- [ ] Backend API 설계 확정
+  - [ ] `GET /api/persona/{uuid}/guilds` contract 정의
+  - [ ] query params 정의: `top_k`, `member_limit`, `min_shared_hobbies`, `include_graph`
+  - [ ] 응답 schema 정의: guild summary, member list, leader, reasons, D3 `nodes`/`edges`
+- [ ] Backend 구현
+  - [ ] `community_id`, `SIMILAR_TO`, same district/province, shared hobby/skill 기반 guild 후보 쿼리 작성
+  - [ ] PageRank 또는 degree 기반 `is_leader` 선정
+  - [ ] `community_id` 없음 또는 후보 부족 시 지역 + 공유 취미 fallback 구현
+  - [ ] `score_source`, `model_version`, `fallback_used`, `graph_snapshot_id` metadata 포함
+- [ ] Frontend 구현
+  - [ ] 프로필 상세 또는 추천 대시보드에 “라이프스타일 크루” 섹션 추가
+  - [ ] guild 카드: 대표 지역/직업, 공유 취미, 멤버 수, leader badge 표시
+  - [ ] 상세 패널에 D3 force graph, node/edge legend, edge reason tooltip 추가
+  - [ ] member limit, 긴 한글 label, 모바일 폭에서 overlap 처리
+- [ ] Tests
+  - [ ] API 단위 테스트: 후보 있음/없음, `community_id` 없음 fallback, leader metadata
+  - [ ] Frontend smoke 또는 Playwright: 카드 렌더링, graph nonblank, empty/loading/error state
+
+### F27: Life Track 롤모델 경로 탐색
+
+- [ ] Backend API 설계 확정
+  - [ ] `GET /api/persona/{uuid}/life-track` contract 정의
+  - [ ] query params 정의: `target_age_min`, `target_age_max`, `top_k`, `include_text_reasons`
+  - [ ] 응답 schema 정의: source, cohort_definition, role_models, transitions, timeline, caveat
+- [ ] Backend 구현
+  - [ ] source persona 기준 older cohort 후보 추출 쿼리 작성
+  - [ ] 직업/스킬/취미/커리어 목표 transition summary 계산
+  - [ ] 후보 부족 시 same-age 유사 persona 비교 fallback 구현
+  - [ ] “미래 예측 아님” caveat를 API 응답에 포함
+- [ ] Frontend 구현
+  - [ ] 프로필 상세에 “롤모델 경로” 탭 추가
+  - [ ] age band timeline과 role model 카드 구성
+  - [ ] 공통점과 새로 나타나는 경로를 분리 표시
+  - [ ] “현재 데이터에서 관측된 유사 경로” 문구 적용
+- [ ] Tests
+  - [ ] API 단위 테스트: older cohort 있음/없음, transition evidence count
+  - [ ] Frontend smoke: timeline, role model card, caveat 렌더링
+
+### F28: Agent Interaction Playground
+
+- [ ] Backend API 설계 확정
+  - [ ] `POST /api/persona/interaction-preview` contract 정의
+  - [ ] request schema 정의: `source_uuid`, `target_uuid`, `scenario`, `force_refresh`
+  - [ ] 응답 schema 정의: conversation_id, messages, evidence_refs, harmony_review, cache metadata
+- [ ] Backend 구현
+  - [ ] 캐시 우선 반환 정책 구현
+  - [ ] 신규 생성은 background job 또는 명확한 pending state로 분리
+  - [ ] prompt_version, model_name, generated_at, cached, fallback_used metadata 포함
+  - [ ] LLM failure/timeout/safety rejection 시 추천 화면 전체가 실패하지 않는 fallback 구현
+- [ ] Frontend 구현
+  - [ ] 관리자/실험 대시보드에 대화 미리보기 playground 추가
+  - [ ] 채팅 UI: cached/loading/failed 상태 표시
+  - [ ] 메시지별 evidence 접기/펼치기 추가
+  - [ ] 일반 사용자 기본 화면에는 노출하지 않거나 명시적 opt-in으로 제한
+- [ ] Tests
+  - [ ] API 단위 테스트: cache hit, cache miss pending, LLM failure fallback
+  - [ ] Frontend smoke: cached conversation, failed state, evidence toggle
+
+### Phase 27 공통 게이트
+
+- [ ] root `PRD.md` §11.11과 구현 범위 정합성 점검
+- [ ] F26-F28 API schema가 Swagger UI에서 확인 가능
+- [ ] 모델 artifact가 없어도 graph/rule fallback으로 정상 동작
+- [ ] `score_source`, `model_version`, `fallback_used`, `graph_snapshot_id` 중 적용 가능한 metadata 포함
+- [ ] 일반 사용자 기본 화면에 experimental 모델 또는 uncached LLM 결과를 promoted 기능처럼 노출하지 않음
+- [ ] empty/loading/error UX 문구 한국어 기준으로 정의
+- [ ] Playwright 또는 동등한 smoke로 주요 화면 nonblank 확인
+- [ ] root `README.md` 업데이트 필요 여부 확인
 
 ---
 

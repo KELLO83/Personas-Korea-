@@ -38,6 +38,7 @@ def subgraph(
     depth: int = Query(default=1, ge=1, le=3),
     include_similar: bool = Query(default=False),
     max_nodes: int = Query(default=50, ge=1, le=200),
+    max_similar: int = Query(default=5, ge=0, le=20),
 ) -> SubgraphResponse:
     if depth > 3:
         raise BadRequestException("depth는 최대 3까지 지원합니다.")
@@ -56,6 +57,8 @@ def subgraph(
                     include_similar=include_similar,
                 )
             ]
+            if include_similar:
+                depth1_records = _cap_similar_relationships(depth1_records, max_similar)
 
             depth2_records: list[dict[str, object]] = []
             depth3_records: list[dict[str, object]] = []
@@ -220,3 +223,10 @@ def subgraph(
         nodes=node_list,
         edges=edges,
     )
+
+
+def _cap_similar_relationships(records: list[dict[str, object]], max_similar: int) -> list[dict[str, object]]:
+    non_similar = [record for record in records if record.get("rel_type") != "SIMILAR_TO"]
+    similar = [record for record in records if record.get("rel_type") == "SIMILAR_TO"]
+    similar.sort(key=lambda record: float(record.get("rel_score") or 0.0), reverse=True)
+    return [*non_similar, *similar[:max_similar]]

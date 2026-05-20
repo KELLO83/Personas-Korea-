@@ -70,7 +70,7 @@ export default function Home() {
 
   useEffect(() => {
     void loadProfile(() => personaApi.profile(selectedUuid));
-    void loadGraph(() => personaApi.graph(selectedUuid, { depth: 2, max_nodes: 40, include_similar: true }));
+    void loadGraph(() => personaApi.graph(selectedUuid, { depth: 2, max_nodes: 40, include_similar: true, max_similar: 5 }));
   }, [loadGraph, loadProfile, selectedUuid]);
 
   function updateFilter(key: keyof SearchFilters, value: string) {

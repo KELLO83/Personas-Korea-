@@ -235,6 +235,85 @@ Do not confuse this with the completed KURE dense MMR sweep.
   - [ ] persist `validation_metrics.status.json`, runtime, device, batch/chunk size, cache hit/miss, and peak GPU memory when available
   - [ ] update `experiment_decisions.json`, `experiment_run_summary.md`, `PRD.md`, `TASKS.md`, and `README.md` if a default decision changes
 
+## Phase 6: High-accuracy Hybrid Extension Skeleton
+
+> PRD Phase 6 — This is a validation-first follow-up skeleton. It must not replace the current E5-small-ko-v2 domain-specific Stage2 default unless the promotion gates pass against the fixed baseline.
+
+### Phase 6 Baseline Lock
+
+- [ ] Lock the current production/default baseline before any Phase 6 run:
+  - [ ] Stage1: `popularity + cooccurrence`
+  - [ ] Stage2: LightGBM `num_leaves=31`
+  - [ ] text feature: E5-small-ko-v2 single + domain-specific scalar cosine features
+  - [ ] split, candidate pool, masking policy, candidate text builder, feature columns
+- [ ] Record baseline artifact paths and metrics in a Phase 6 decision stub.
+- [ ] Define one changed variable per Phase 6 experiment.
+- [ ] Run validation first; run test only for a validation-selected winner.
+
+### Phase 6 Track 1 - Similar-Person CF Candidate Injection
+
+- [ ] Define a train-split-only similar-person neighbor source.
+- [ ] Ensure validation/test holdout hobbies cannot enter neighbor hobby aggregation.
+- [ ] Add quota/merge rules for CF-injected candidates without removing existing Stage1 candidates.
+- [ ] Persist provider list, quota, candidate counts, and candidate_recall@50.
+- [ ] Compare against the locked Stage1 candidate pool before Stage2 training.
+
+### Phase 6 Track 2 - Demographic/Lifestyle Cross Features
+
+- [ ] Define smoothed cross-feature families:
+  - [ ] age group x sex hobby fit
+  - [ ] occupation x province/district hobby fit
+  - [ ] demographic x lifestyle/domain text interaction
+- [ ] Apply rare-combination fallback or smoothing before training.
+- [ ] Add cross-feature columns as scalar LightGBM features only.
+- [ ] Persist feature importance and subgroup metric deltas.
+- [ ] Verify cross features do not encode holdout hobby labels.
+
+### Phase 6 Track 3 - Two-Tower Dynamic Scoring
+
+- [ ] Define persona tower input fields from leakage-safe masked persona/domain text.
+- [ ] Define hobby tower input fields from canonical hobby text only.
+- [ ] Implement or prototype InfoNCE/contrastive pretraining as an opt-in artifact.
+- [ ] Export only scalar similarity scores or rank/margin features into Stage2 LightGBM.
+- [ ] Do not feed raw dense vectors directly into the default LightGBM feature set.
+- [ ] Compare against E5-domain features with identical candidate pool and split.
+
+### Phase 6 Track 4 - User-level Topic Calibration
+
+- [ ] Define user topic distribution source from train-visible hobbies/domain text.
+- [ ] Define calibration objective and rerank penalty/bonus.
+- [ ] Evaluate accuracy, coverage, novelty, ILD, and category concentration.
+- [ ] Reject if Recall@10/NDCG@10 regression exceeds the default promotion tolerance.
+- [ ] Persist before/after top-k samples for manual review.
+
+### Phase 6 Pre-implementation 4대 필수 조항
+
+- [ ] Transductive graph split leakage lockout
+  - [ ] Build a global blacklist from train/validation/test positive edges for negative sampling.
+  - [ ] Add or verify `test_negative_sampling_lockout`.
+  - [ ] Persist blacklist/hash metadata in graph-model artifacts.
+- [ ] Cold user & cold hobby dual fallback
+  - [ ] Define fallback chain: graph model -> E5-domain LightGBM -> popularity/cooccurrence -> taxonomy/category fallback.
+  - [ ] Mark `fallback_used` and fallback stage in output metadata.
+  - [ ] Test cold-user and cold-hobby paths.
+- [ ] Person-wise ranking validation
+  - [ ] Use person/group-based validation for ranking experiments.
+  - [ ] Ensure all candidate rows for the same person stay in the same split/fold.
+  - [ ] Persist split and group metadata.
+- [ ] Resource isolation and OOM limits
+  - [ ] Cap CPU threads at the project policy limit, default 18.
+  - [ ] Cap GNN batch size at or below the PRD limit.
+  - [ ] Record device, batch size, runtime, peak memory when available.
+  - [ ] Add explicit cleanup for GPU/CPU-heavy loops where applicable.
+
+### Phase 6 Promotion Gate
+
+- [ ] Compare every Phase 6 candidate against the current E5-domain production default.
+- [ ] Require validation and winner-only test Recall@10/NDCG@10 improvement before default discussion.
+- [ ] Require no candidate_recall@50 regression for candidate-provider changes.
+- [ ] Require leakage audit pass and cold-start fallback pass.
+- [ ] Update `experiment_decisions.json`, `experiment_run_summary.md`, `PRD.md`, `TASKS.md`, and `README.md` if a default changes.
+
 ## Global Execution Policy
 
 - [x] All post-`Phase2.5` default promotion candidates use an accuracy-first hard gate.

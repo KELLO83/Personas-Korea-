@@ -95,7 +95,7 @@ export const personaApi = {
   profile: (uuid: string) => apiGet<PersonaProfileResponse>(`/api/persona/${encodeURIComponent(uuid)}`),
   similarityExplanation: (sourceUuid: string, targetUuid: string) =>
     apiGet<SimilarityExplanationResponse>(`/api/persona/${encodeURIComponent(sourceUuid)}/similar/${encodeURIComponent(targetUuid)}/explanation`),
-  graph: (uuid: string, params: { depth: number; max_nodes: number; include_similar: boolean }) =>
+  graph: (uuid: string, params: { depth: number; max_nodes: number; include_similar: boolean; max_similar?: number }) =>
     apiGet<SubgraphResponse>(`/api/graph/subgraph/${encodeURIComponent(uuid)}`, params),
   chat: (payload: { session_id: string; message: string; stream: boolean }) => apiPost<ChatResponse>("/api/chat", payload, { timeoutMs: CHAT_TIMEOUT_MS }),
   targetPersona: (params: Record<string, string | number | boolean | null | undefined>) => apiGet<TargetPersonaResponse>("/api/target-persona", params),

@@ -30,13 +30,13 @@ NVIDIA Nemotron-Personas-Korea의 100만 한국인 페르소나 데이터를 Neo
 | **Phase 1** | GraphRAG 인사이트, 유사 페르소나 매칭, 커뮤니티 탐지, 관계 경로 | ✅ 완료 | `docs/prd-archive/prd-v1.0-phase1.md` |
 | **Phase 2** | 검색/필터(F5), 통계 대시보드(F6), 프로필 상세(F7), 세그먼트 비교(F8), 서브그래프 시각화(F9) | ✅ 완료 | `docs/prd-archive/prd-v1.5-phase2.md` |
 | **Phase 3** | 네트워크 영향력(F10), 추천 엔진(F11), 대화형 챗봇(F12) | ✅ 핵심 구현 완료 | 본 문서 §3~5 |
-| **Phase 4** | 대규모 운영검증(F13), 확장/고도화(F14), 챗봇 LLM 합성(F15), Target Persona Generator(F16), Cross-domain Lifestyle Map(F17), Career Transition Map(F18), 추천 UX 고도화(F19~F23), RAG 관측성(F24), 분석 시각화(F25) | 📝 계획/선택 구현 | 본 문서 §11 |
+| **Phase 4** | 대규모 운영검증(F13), 확장/고도화(F14), 챗봇 LLM 합성(F15), Target Persona Generator(F16), Cross-domain Lifestyle Map(F17), Career Transition Map(F18), 추천 UX 고도화(F19~F23), RAG 관측성(F24), 분석 시각화(F25), 관계형 추천 경험(F26~F28) | 📝 계획/선택 구현 | 본 문서 §11 |
 
 ### 1.4 개인 프로젝트 예외 규칙
 
 - **적용 대상:** 본 저장소는 개인 실험용/연구용으로 운영, 즉 배포/대규모 서비스 운영은 기본 전제가 아닙니다.
 - **필수 유지:** Phase 1~3의 기본 기능(검색/필터/그래프 분석/추천/챗봇 기본)을 중심으로 기능 완전성만 관리합니다.
-- **선택 항목:** F13~F25는 **요구 기능(구현 선택사항)** 입니다. 필요시 구현하고, 불필요하면 생략해도 PRD 위반으로 간주하지 않습니다.
+- **선택 항목:** F13~F28은 **요구 기능(구현 선택사항)** 입니다. 필요시 구현하고, 불필요하면 생략해도 PRD 위반으로 간주하지 않습니다.
 - **실행 우선순위:** 운영 SLA, 장애주입, Go/No-Go, runbook, 장기 운영 상태 API 등은 현재 모드에서는 `계획 참고`로 분류합니다.
 
 ### 1.5 검수 이력 (Review History)
@@ -82,6 +82,9 @@ NVIDIA Nemotron-Personas-Korea의 100만 한국인 페르소나 데이터를 Neo
 | **F23** | **추천 품질 대시보드** | `GET /api/recommendation/quality` | **4** | 📝 | **coverage/diversity/hub rate/manual review metrics** |
 | **F24** | **RAG/챗봇 관측성** | traces / admin debug view | **4** | 📝 | **LangSmith/Phoenix 선택 연동, trace, prompt, retrieval evidence** |
 | **F25** | **분석 시각화 고도화** | frontend chart/graph library | **4** | 📝 | **ECharts dashboard, D3 custom graph view** |
+| **F26** | **Virtual Guild 소모임 추천** | `GET /api/persona/{uuid}/guilds` | **4** | 📝 | **Leiden community, shared hobbies, district, PageRank, D3 graph** |
+| **F27** | **Life Track 롤모델 경로 탐색** | `GET /api/persona/{uuid}/life-track` | **4** | 📝 | **older cohort matching, career/skill/hobby transition timeline** |
+| **F28** | **Agent Interaction Playground** | `POST /api/persona/interaction-preview` | **4** | 📝 | **cached LLM dialogue demo, evidence-bound prompts, harmony review** |
 
 ---
 
@@ -658,6 +661,9 @@ CREATE INDEX person_degree IF NOT EXISTS FOR (p:Person) ON (p.degree);
 | P3 | 비슷하지만 다른 페르소나 탐색 | 유사하지만 직업/지역/커뮤니티가 과도하게 반복되지 않는 discovery 추천 | F2 SIMILAR_TO, F19 reason scoring |
 | P3 | 추천 품질 대시보드 | coverage, diversity, hub target, weak-only 비율, manual review sample을 내부 화면에서 확인 | 추천 metric source, F11/F19 |
 | P3 | 분석 시각화 고도화 | 통계/품질/커뮤니티/그래프 화면을 ECharts와 D3 기반으로 개선 | F6/F9/F20/F23 |
+| P2 | Virtual Guild 소모임 추천 | 1:1 유사 추천을 넘어 community_id, 지역, 공유 취미 기반의 소모임 후보를 추천하고 관계망으로 보여줌 | F2/F3/F9/F20, PageRank |
+| P3 | Life Track 롤모델 경로 탐색 | 예측이 아니라 유사 older cohort의 직업/스킬/취미 패턴을 timeline으로 탐색 | F7 profile, F19 reasons, career/skill text |
+| P4 | Agent Interaction Playground | 실시간 제품 기본 기능이 아니라 캐시/관리자 중심의 페르소나 대화 샘플과 정성 평가 playground | F7 text fields, F15 LLM 합성, 안전/비용 gate |
 
 ### 11.5 구현 전 검수 게이트
 
@@ -1352,6 +1358,143 @@ Success criteria:
 - ECharts는 표준 대시보드 차트에 우선 적용하고, D3는 F9 관계망처럼 ECharts로 부족한 커스텀 그래프에만 사용한다.
 - 각 대상 화면은 기존 table/card fallback을 유지하거나 제거 여부를 명시적으로 결정한다.
 
+## 11.11 F26-F28: 관계형 추천 경험 고도화 계획
+
+> **범위 구분**: F26-F28은 모델 학습 실험이 아니라 root 백엔드/프론트엔드 제품 기능이다. 유사 페르소나 reranker와 취미 추천 모델의 승격 판단은 각각 `experiments/persona_similarity/`와 `GNN_Neural_Network/`에서 관리하고, 루트는 Neo4j graph/rule fallback과 모델 adapter contract만 정의한다.
+>
+> **명명 원칙**: Life Track은 종단 예측이 아니라 “유사 older cohort 기반 롤모델 경로 탐색”으로 표기한다. Agent Interaction은 기본 사용자 추천 점수가 아니라 캐시된 데모/관리자 평가 도구로 시작한다.
+
+### 11.11.1 우선순위
+
+| 우선순위 | 기능 | 이유 |
+|:---:|:---|:---|
+| P0 | F26 Virtual Guild 소모임 추천 | `community_id`, shared hobby/skill, district, PageRank를 바로 활용할 수 있고 그래프 플랫폼의 강점을 가장 잘 보여준다. |
+| P1 | F27 Life Track 롤모델 경로 탐색 | 10대~30대 분포와 직업/스킬/커리어 텍스트를 활용하되, 예측이 아니라 cohort 탐색으로 제한하면 설명 가능성이 높다. |
+| P2 | F28 Agent Interaction Playground | 데모 임팩트는 크지만 LLM 비용, 환각, 재현성 리스크가 있어 관리자/실험 화면과 캐시 기반으로 제한한다. |
+
+### 11.11.2 F26 Virtual Guild 소모임 추천
+
+목표:
+
+- 개인 대 개인 유사 추천을 넘어 “함께 묶일 만한 소모임 후보”를 제안한다.
+- 소모임은 `community_id`, 지역 연고, 공유 취미/스킬, 유사 페르소나 관계를 함께 사용해 만든다.
+- 사용자는 카드에서 소모임 요약을 보고, 상세에서는 D3 관계망으로 멤버와 중심 인물을 확인할 수 있어야 한다.
+
+Backend:
+
+- `GET /api/persona/{uuid}/guilds`
+- Query params:
+  - `top_k`: 기본 5, 최대 20
+  - `member_limit`: 기본 12, 최대 50
+  - `min_shared_hobbies`: 기본 1
+  - `include_graph`: boolean, 기본 `true`
+- 응답:
+  - `guild_id`, `title`, `summary`
+  - `match_score`, `score_source`: `fallback | experimental | promoted`
+  - `community_id`, `district`, `province`
+  - `shared_hobbies[]`, `shared_skills[]`, `top_occupations[]`
+  - `members[]`: `uuid`, `display_name`, `age`, `occupation`, `pagerank`, `is_leader`
+  - `graph`: `nodes[]`, `edges[]` with node/edge type, score, reason
+- 계산 원칙:
+  - 1차 후보는 같은 `community_id`와 `SIMILAR_TO` 이웃을 우선 사용한다.
+  - `same_district`, shared hobby/skill, strong reason count로 guild score를 보정한다.
+  - PageRank 또는 degree 중심성이 가장 높은 멤버를 `is_leader=true`로 표시한다.
+  - `community_id`가 없으면 지역 + 공유 취미 기반 fallback group을 만든다.
+
+Frontend:
+
+- 프로필 상세 또는 추천 대시보드에 “라이프스타일 크루” 섹션을 추가한다.
+- 카드에는 소모임명, 대표 지역/직업, 공유 취미, 멤버 수, leader badge를 표시한다.
+- 상세 모달/패널은 D3 force graph를 사용하고, node type legend, selected member panel, edge reason tooltip을 제공한다.
+- 과도한 glassmorphism/장식보다 정보 밀도와 한글 label 가독성을 우선한다.
+
+Success criteria:
+
+- 소스 persona에 대해 최소 1개 이상의 guild 후보 또는 명확한 empty state가 반환된다.
+- 각 guild는 최소 2개 이상의 근거 category를 가진다.
+- leader 표시는 PageRank/degree 계산 근거 metadata를 포함한다.
+- D3 graph는 `member_limit <= 50`에서 노드 겹침과 label overflow를 제어한다.
+
+### 11.11.3 F27 Life Track 롤모델 경로 탐색
+
+목표:
+
+- 현재 persona와 유사한 older cohort를 찾아 직업, 스킬, 취미, 커리어 목표의 가능한 경로를 보여준다.
+- “미래 예측”이나 “35년 후 확정 경로”가 아니라, 현재 데이터 안에서 관측되는 롤모델/전이 후보를 탐색한다.
+
+Backend:
+
+- `GET /api/persona/{uuid}/life-track`
+- Query params:
+  - `target_age_min`: 기본 `source_age + 5`
+  - `target_age_max`: 기본 39
+  - `top_k`: 기본 10, 최대 50
+  - `include_text_reasons`: boolean, 기본 `true`
+- 응답:
+  - `source`: persona summary
+  - `cohort_definition`: age range, filters, fallback_used
+  - `role_models[]`: target persona, similarity score, shared/different attributes
+  - `transitions`: `occupations[]`, `skills[]`, `hobbies[]`, `career_goals[]`
+  - `timeline[]`: age_band, representative occupations, skills, hobbies, evidence_count
+  - `caveat`: “cross-sectional cohort 탐색이며 개인 미래 예측이 아님”
+- 계산 원칙:
+  - 같은 source split이나 평가 label을 오염시키지 않는 read-only Neo4j query로 구성한다.
+  - 유사성은 `SIMILAR_TO`, 구조 feature, text reason metadata를 조합한다.
+  - older cohort가 부족하면 같은 연령대의 유사 페르소나 비교로 fallback한다.
+
+Frontend:
+
+- 프로필 상세에 “롤모델 경로” 탭을 추가한다.
+- timeline은 age band별 직업/스킬/취미 chip과 evidence count를 표시한다.
+- role model 카드는 “공통점”과 “새로 나타나는 경로”를 분리해서 보여준다.
+- 화면 내 문구는 예측이 아니라 “현재 데이터에서 관측된 유사 경로”로 제한한다.
+
+Success criteria:
+
+- young source persona에 대해 older cohort 후보와 transition summary가 반환된다.
+- cohort 부족 시 오류 대신 fallback과 caveat를 표시한다.
+- timeline의 각 항목은 evidence_count 또는 대표 persona 근거를 가진다.
+
+### 11.11.4 F28 Agent Interaction Playground
+
+목표:
+
+- 두 페르소나가 실제로 대화하면 어떤 상호작용이 생길지 평가/데모용으로 보여준다.
+- 추천 점수의 기본 근거로 쓰지 않고, 관리자/실험 화면에서 정성 검토 보조 도구로 사용한다.
+
+Backend:
+
+- `POST /api/persona/interaction-preview`
+- Request:
+  - `source_uuid`
+  - `target_uuid`
+  - `scenario`: `career | hobby | travel | family | freeform`
+  - `force_refresh`: boolean, 기본 `false`
+- 응답:
+  - `conversation_id`
+  - `messages[]`: speaker, text, evidence_refs
+  - `harmony_review`: score, rubric_scores, caveats
+  - `model_name`, `prompt_version`, `cached`, `generated_at`
+  - `fallback_used`
+- 처리 원칙:
+  - 기본 API path에서는 동기 장시간 LLM 호출을 피하고 cache hit 또는 background job을 우선한다.
+  - prompt는 persona 원문 전체를 무제한 주입하지 않고 필요한 도메인 텍스트와 evidence만 제한한다.
+  - harmony score는 모델 승격 metric이 아니라 정성 review 보조 지표로 표시한다.
+  - 비용/품질 gate가 닫히기 전에는 일반 사용자 기본 화면에 노출하지 않는다.
+
+Frontend:
+
+- 관리자/실험 대시보드에 “대화 미리보기” playground를 둔다.
+- 채팅 UI는 생성 중/loading, cached, failed 상태를 명확히 표시한다.
+- 각 메시지는 어떤 persona field/evidence에서 온 내용인지 접을 수 있는 근거를 제공한다.
+- 일반 사용자 화면에 노출할 경우에는 사전 생성된 sample 또는 명시적 opt-in만 허용한다.
+
+Success criteria:
+
+- 캐시된 대화는 즉시 반환되고, 신규 생성은 job 상태 또는 명확한 loading state를 제공한다.
+- 메시지는 source/target persona 근거를 최소 1개 이상 참조한다.
+- LLM failure, timeout, safety rejection 시 추천 화면 전체가 실패하지 않는다.
+
 ## 12. 아키텍처 결정 기록 (ADRs)
 
 본 PRD의 중요한 기술적 결정은 별도 문서로 관리됩니다:
@@ -1389,9 +1532,64 @@ docs/
 4. 추천 모델 실험 결정은 각 하위 실험 폴더에 기록하고, root 문서에는 API/UI/adapter 계약 변경만 반영
 5. Phase 완료 시 해당 Phase의 아카이브 파일은 **수정하지 않음** (읽기 전용)
 
+
 ---
 
-**작성일**: 2026-04-28  
-**버전**: v2.4-f16-f18-expansion  
-**상태**: Phase 3 핵심 구현 완료 / Phase 4 계획 검수 대기 / F16-F18 확장 계획 추가  
-**다음 단계**: F16-F18 구현 계획 검수 → Country/MilitaryStatus/bachelors_field 그래프 정리 검수 → F19-F23 추천 UX adapter/fallback 계약 검수
+## 14. Appendix: 훈련 모델 가중치 실시간 서빙 및 UI/UX 4대 필수 조항
+
+> **아키텍처 적용 규격**: 이 조항은 훈련이 완료된 모델 가중치(LightGBM `ranker_model.txt` 및 E5-small-ko-v2)를 프로덕션 환경(FastAPI 백엔드)에 안정적으로 서빙하고, 사용자 대면 웹 화면(Next.js 프론트엔드)에 고도로 정제된 시각 자료로 렌더링하기 위한 필수 기술 규격이다.
+
+### 14.1 싱글톤 모델 로더 규격 (Singleton Weight Loader)
+
+- **배경**: API 요청마다 디스크에서 모델 가중치 파일을 재로드하는 행위는 고부하 실시간 서비스에서 심각한 I/O 병목 및 레이턴시 저하를 유발한다.
+- **적용 요건**:
+  1. **초기화 시점 적재**: FastAPI 어플리케이션의 `lifespan` 이벤트 또는 `@app.on_event("startup")` 시점에 모델 가중치를 메모리(RAM 또는 GPU VRAM)에 1회 선적재한다.
+  2. **싱글톤 아키텍처**:
+     - `src/api/models/loader.py`에 싱글톤 인스턴스(예: `ModelRegistry` 또는 `WeightLoader`)를 설계한다.
+     - 가중치 적재 완료 전까지는 헬스체크 및 추천 라우터로의 트래픽 진입을 차단하는 Readiness Probe 상태를 반환하도록 조율한다.
+  3. **가중치 메모리 공유**: 로드된 가중치는 `src/api/router` 레벨에서 의존성 주입(FastAPI `Depends`) 또는 모듈 전역 싱글톤 레퍼런스를 통해 공유되며, 서빙 요청당 디스크 접근 횟수는 **0회**를 보장한다.
+
+### 14.2 Premium UI/UX 렌더링 규격 (Glassmorphism & Micro-animations)
+
+- **배경**: 추천 및 평가 웹페이지가 일반적인 투박한 테이블이나 텍스트 위주로 렌더링될 경우, 사용자가 모델 성능과 상관없이 시스템 품질을 낮게 평가하는 경향이 있다. Premium UI로 첫인상을 극대화한다.
+- **적용 요건**:
+  1. **Glassmorphic 카드 스타일링**:
+     - 투명도(`rgba(255, 255, 255, 0.05)` 또는 `rgba(0, 0, 0, 0.3)`)와 블러 처리(`backdrop-filter: blur(12px)`)가 가미된 카드 레이아웃을 사용한다.
+     - HSL 기반의 세련되고 조화로운 다크 모드 테마(예: Slate/Zinc 계열의 배경색과 보라/에메랄드 포인트 컬러)를 기본 배색으로 지정한다.
+  2. **Micro-animations 및 물리 상호작용**:
+     - 추천 카드 또는 인구통계 분포 그래프 로딩 시, 순차적이고 부드러운 페이드인 및 위로 솟구치는 슬라이드 효과(`translateY` 가속 적용)를 제공한다.
+     - 카드 호버 트랜지션은 `transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1)`을 강제하며, 1.02배 미세 스케일 업 및 부드러운 보라빛 내부 글로우(`box-shadow`) 효과를 부여한다.
+     - 빈 데이터 상태(Empty State)에는 정적인 일반 텍스트 대신, 귀여운 모션 그래픽이나 가벼운 바운스 애니메이션이 포함된 Lottie/SVG 일러스트를 배치하여 지루함을 덜어준다.
+
+### 14.3 실시간 추론 타임아웃 및 대체(Fallback) 조항 (400ms SLA)
+
+- **배경**: 인공신경망 임베딩 벡터 비교 연산이나 복잡한 앙상블 랭킹 알고리즘 수행 시, DB 부하 또는 동시 접속 급증으로 순간적인 연산 레이턴시 스파이크가 발생할 수 있다.
+- **적용 요건**:
+  1. **추론 SLA 제한**: 백엔드 추론 서비스의 최대 허용 시간(SLA)은 **400ms**로 강제한다.
+  2. **비동기 타임아웃 및 그레이스풀 디그라데이션**:
+     - `asyncio.wait_for(..., timeout=0.4)` 또는 `contextlib` 기반의 서킷 브레이커 패턴을 적용한다.
+     - 400ms 초과 시 스코어링 연산을 중단하고, 미리 캐싱되어 있는 '인구통계학적 최빈값(Demographic Mode/Prior)' 및 '최상위 인기 카테고리' 룰 기반 추천 리스트로 즉시 스위칭한다.
+  3. **품질 저하(Fallback) 마커 투명성**:
+     - 백엔드는 fallback 작동 시 응답 메타데이터에 `score_source: "fallback_demographic"` 및 `latency_fallback: true` 플래그를 심어 전달한다.
+     - 프론트엔드는 이 마커를 감지하더라도 UI를 에러로 처리하지 않고, 무중단으로 깔끔한 경고 메시지 없이 동일한 템플릿의 프리미엄 카드로 렌더링을 끝마친다. (내부 로깅 도구 및 trace에서만 이를 관측성 있게 로깅한다.)
+
+### 14.4 D3.js 동적 관계망 서브그래프 시각화 (Interactive Subgraph)
+
+- **배경**: 추천 가중치의 관계와 연관성을 직관적으로 파악하기 위해 단순 추천 리스트 텍스트 표시 외에, 연결 구조를 시각적으로 직접 탐색할 수 있는 인터랙티브 컴포넌트가 강력하게 권장된다.
+- **적용 요건**:
+  1. **Ego-network 1-degree Dynamic Force Layout**:
+     - 프론트엔드에서 특정 페르소나 카드를 클릭하거나 평가 웹페이지의 중심 노드를 변경하면, 해당 노드와 직접 추천 관계에 있는 노드(취미, 유사 페르소나 등)들을 구성하는 서브그래프 데이터(`nodes`와 `links`)를 D3.js Force-Directed Simulation으로 렌더링한다.
+  2. **물리 기반 상호작용 및 충돌 제어**:
+     - 시뮬레이션에는 노드 간 겹침을 방지하기 위한 `d3.forceCollide().radius(d => d.radius + 15)`를 엄격히 지정한다.
+     - 마우스 드래그를 통해 개별 노드를 임의로 이동시키며 물리적인 탄성감을 직접 체감할 수 있도록 `d3.drag()` 리스너를 바인딩한다.
+  3. **노드 타입별 가시성 및 의미론적 코딩**:
+     - 노드의 크기(`radius`)는 추천 신뢰도 점수 또는 중심성 지표(Degree/PageRank)에 비례하도록 매핑한다.
+     - 노드의 컬러는 엔티티 타입(Person: Deep Violet, Hobby: Emerald, Demographic Segment: Golden Amber)별로 명확하게 분류하여 시각적 직관성을 대폭 향상한다.
+     - 마우스 호버 시 연결된 에지(Edge)들이 네온 컬러로 발광(`stroke-width` 증가 및 `stroke-opacity` 조정)하며 연결 강도를 툴팁으로 실시간 표기하는 dynamic interaction을 구현한다.
+
+---
+
+**작성일**: 2026-05-20  
+**버전**: v2.5-f16-f28-serving-premium  
+**상태**: Phase 3 핵심 구현 완료 / Phase 4 및 실시간 모델 서빙 규격 수립 완료 / F16-F28 확장 및 UI 시각화 계획 추가  
+**다음 단계**: 훈련 모델 가중치 실시간 서빙 및 Premium UI/UX 4대 조항에 기반한 백엔드/프론트엔드 프로토타입 구현 → 400ms SLA 충족 여부 벤치마크 → D3.js 및 ECharts 결합 대시보드 품질 검수 → F26-F28 관계형 추천 경험 프로토타입 검증

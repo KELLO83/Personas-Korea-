@@ -5,7 +5,10 @@ RETURN p, r, n, type(r) AS rel_type, labels(n) AS node_labels,
        p.uuid AS center_uuid, p.display_name AS center_label,
        n.uuid AS n_uuid, n.name AS n_name, n.display_name AS n_display_name,
        n.age AS n_age, n.sex AS n_sex, n.persona AS n_persona,
-       n.key AS n_key, n.province AS n_province
+       n.key AS n_key, n.province AS n_province,
+       r.score AS rel_score
+ORDER BY CASE WHEN type(r) = 'SIMILAR_TO' THEN 1 ELSE 0 END,
+         CASE WHEN type(r) = 'SIMILAR_TO' THEN r.score ELSE 0 END DESC
 """
 
 SUBGRAPH_DEPTH2_QUERY = """

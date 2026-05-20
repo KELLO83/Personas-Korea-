@@ -1,88 +1,91 @@
-﻿# ?좎궗 ?섎Ⅴ?뚮굹 異붿쿇 ?ㅽ뿕 PRD
+# 유사 페르소나 추천 실험 PRD
 
-## 紐⑺몴
+## 목표
 
-??臾몄꽌??`Person -> Person` ?좎궗 ?섎Ⅴ?뚮굹 異붿쿇 ?ㅽ뿕???쒗뭹/紐⑤뜽 ?붽뎄?ы빆???뺤쓽?쒕떎.
+이 문서는 `Person -> Person` 유사 페르소나 추천 실험의 제품/모델 요구사항을 정의한다.
 
-?듭떖 紐⑺몴??怨듬????뚭퀬由ъ쬁 ?섏뿴???꾨땲?? ?꾩옱 Neo4j???곸옱??5留??섎Ⅴ?뚮굹 洹몃옒?꾩뿉???ㅼ젣濡???醫뗭? ?좎궗 ?섎Ⅴ?뚮굹 ?쒖쐞瑜?留뚮뱾 ???덈뒗吏 愿痢≫븯??寃껋씠??
+핵심 목표는 공부용 알고리즘 나열이 아니라, 현재 Neo4j에 적재된 5만 페르소나 그래프에서 실제로 더 좋은 유사 페르소나 순위를 만들 수 있는지 관측하는 것이다.
 
-???ㅽ뿕? `GNN_Neural_Network/`??`Person -> Hobby` 痍⑤? 異붿쿇 ?ㅽ뿕怨?遺꾨━?쒕떎.
+이 실험은 `GNN_Neural_Network/`의 `Person -> Hobby` 취미 추천 실험과 분리한다.
 
 ```text
 GNN_Neural_Network/
-  Person -> Hobby 異붿쿇
+  Person -> Hobby 추천
 
 experiments/persona_similarity/
-  Person -> Person ?좎궗 ?섎Ⅴ?뚮굹 異붿쿇
+  Person -> Person 유사 페르소나 추천
 ```
 
-## ?꾩옱 異붿쿇 援ъ“
+## 현재 추천 구조
 
-?꾩옱 ?뚮옯?쇱쓽 ?좎궗 ?섎Ⅴ?뚮굹??Neo4j GDS濡??앹꽦?쒕떎.
+현재 플랫폼의 유사 페르소나는 Neo4j GDS로 생성된다.
 
 ```text
-Neo4j ?댁쭏 洹몃옒??  -> FastRP node embedding
-  -> KNN?쇰줈 媛源뚯슫 Person ?먯깋
+Neo4j 이질 그래프
+  -> FastRP node embedding
+  -> KNN으로 가까운 Person 탐색
   -> (:Person)-[:SIMILAR_TO {score}]->(:Person)
 ```
 
-?ш린??`SIMILAR_TO.score`媛 ?꾩옱 `fastrp_score`?대떎.
+여기서 `SIMILAR_TO.score`가 현재 `fastrp_score`이다.
 
 ```text
-fastrp_score = 洹몃옒??援ъ“????Person embedding???쇰쭏??媛源뚯슫吏 ?섑??대뒗 ?꾨낫?앹꽦 ?먯닔
+fastrp_score = 그래프 구조상 두 Person embedding이 얼마나 가까운지 나타내는 후보생성 점수
 ```
 
-???먯닔???좎슜?섏?留? ??鍮꾩듂?쒖? feature蹂꾨줈 遺꾪빐?섏? ?딅뒗?? 洹몃옒???꾩옱 API??post-hoc 諛⑹떇?쇰줈 怨듯넻 ?띿꽦 ?ㅻ챸???곕줈 怨꾩궛?쒕떎.
+이 점수는 유용하지만, 왜 비슷한지 feature별로 분해되지 않는다. 그래서 현재 API는 post-hoc 방식으로 공통 속성 설명을 따로 계산한다.
 
-## 臾몄젣 ?뺤쓽
+## 문제 정의
 
-?꾩옱 FastRP/KNN 諛⑹떇? 洹몃옒?꾩긽 媛源뚯슫 ?щ엺??鍮좊Ⅴ寃?李얠쓣 ???덉?留??ㅼ쓬 臾몄젣媛 ?덈떎.
+현재 FastRP/KNN 방식은 그래프상 가까운 사람을 빠르게 찾을 수 있지만 다음 문제가 있다.
 
-- 吏?? ?깅퀎, ?쇱씤?곹깭, community 媛숈? ?볦? ?띿꽦留?媛숈븘??鍮꾩듂?섍쾶 ?섏삱 ???덈떎.
-- "??鍮꾩듂?쒓?"媛 ?ъ슜?먯뿉寃?異⑸텇???⑸뱷?섏? ?딆쓣 ???덈떎.
-- ?섏씠, ?숇젰, 援고븘, 二쇨굅 媛숈? 援ъ“???띿꽦蹂대떎 ?ㅼ젣濡쒕뒗 臾몄옣???쒖닠????以묒슂??寃쎌슦媛 留롫떎.
-- ?? ?깃꺽, ?닿렐 ???쒕룞, ?앺솢?⑦꽩, 媛移섍?, 而ㅻ━???쒕룄, 媛議깃?, ?ш? 諛⑹떇.
+- 지역, 성별, 혼인상태, community 같은 넓은 속성만 같아도 비슷하게 나올 수 있다.
+- "왜 비슷한가"가 사용자에게 충분히 납득되지 않을 수 있다.
+- 나이, 학력, 군필, 주거 같은 구조화 속성보다 실제로는 문장형 서술이 더 중요한 경우가 많다.
+- 예: 성격, 퇴근 후 활동, 생활패턴, 가치관, 커리어 태도, 가족관, 여가 방식.
 
-?곕씪??紐⑺몴???⑥닚??洹몃옒?꾩긽 媛源뚯슫 ?щ엺??李얜뒗 寃껋씠 ?꾨땲?? ?ㅼ쓬 議곌굔??留뚯”?섎뒗 ?쒖쐞瑜?留뚮뱶??寃껋씠??
+따라서 목표는 단순히 그래프상 가까운 사람을 찾는 것이 아니라, 다음 조건을 만족하는 순위를 만드는 것이다.
 
-- ?꾨낫??FastRP/KNN?쇰줈 異⑸텇???볤쾶 ?뺣낫?쒕떎.
-- 援ъ“?붾맂 怨듯넻?먭낵 臾몄옣 ?섎? ?좎궗?꾨? ?④퍡 蹂몃떎.
-- ?ㅻ챸 媛?ν븳 ?댁쑀瑜??쒓났?쒕떎.
-- ?덈Т ?쇰컲?곸씤 ?띿꽦留뚯쑝濡?異붿쿇?섏? ?딅뒗??
-- 紐⑤뜽/feature/鍮꾩슜??鍮꾧탳 媛?ν븳 artifact濡??④릿??
+- 후보는 FastRP/KNN으로 충분히 넓게 확보한다.
+- 구조화된 공통점과 문장 의미 유사도를 함께 본다.
+- 설명 가능한 이유를 제공한다.
+- 너무 일반적인 속성만으로 추천하지 않는다.
+- 모델/feature/비용을 비교 가능한 artifact로 남긴다.
 
-## ?곗씠???꾩떎
+## 데이터 현실
 
-?꾩옱 濡쒖뺄 Neo4j DB???먮낯 100留??섎Ⅴ?뚮굹 ?꾩껜媛 ?꾨땲??
+현재 로컬 Neo4j DB는 원본 100만 페르소나 전체가 아니다.
 
 ```text
-?먮낯 ?곗씠?? ??100留??섎Ⅴ?뚮굹
-?꾩옱 Neo4j DB: 10?/20?/30? 以묒떖 5留??섎Ⅴ?뚮굹 ?섑뵆
+원본 데이터: 약 100만 페르소나
+현재 Neo4j DB: 10대/20대/30대 중심 5만 페르소나 샘플
 ```
 
-?곕씪?????ㅽ뿕??寃곕줎? ?ㅼ쓬 踰붿쐞濡??쒗븳?쒕떎.
+따라서 이 실험의 결론은 다음 범위로 제한한다.
 
 ```text
-?꾩옱 5留??섎Ⅴ?뚮굹 洹몃옒???덉뿉???좎궗 ?섎Ⅴ?뚮굹 異붿쿇???대뼸寃?媛쒖꽑?????덈뒗媛?
+현재 5만 페르소나 그래프 안에서
+유사 페르소나 추천을 어떻게 개선할 수 있는가?
 ```
 
-?꾩껜 100留??섎Ⅴ?뚮굹 ?먮뒗 ?꾩껜 ?곕졊???????댁쁺 ?깅뒫??二쇱옣?섏? ?딅뒗??
+전체 100만 페르소나 또는 전체 연령대에 대한 운영 성능을 주장하지 않는다.
 
-## ?ㅽ뿕 ?⑥쐞
+## 실험 단위
 
-?숈뒿 ?곗씠?곗쓽 ??row?????щ엺 ?먯껜媛 ?꾨땲??`source -> target` ?꾨낫?띿씠??
+학습 데이터의 한 row는 한 사람 자체가 아니라 `source -> target` 후보쌍이다.
 
 ```text
 source_uuid -> target_uuid
 ```
 
-?섎?:
+의미:
 
 ```text
-source_uuid ?щ엺??蹂닿퀬 ?덉쓣 ??target_uuid ?щ엺???좎궗 ?섎Ⅴ?뚮굹濡??쇰쭏???믨쾶 蹂댁뿬以?寃껋씤媛?
+source_uuid 사람을 보고 있을 때
+target_uuid 사람을 유사 페르소나로 얼마나 높게 보여줄 것인가?
 ```
 
-??
+예:
 
 ```text
 source_uuid | target_uuid | label | fastrp_score | same_occupation | all_text_cosine
@@ -91,158 +94,189 @@ A           | C           | 0.31  | 0.66         | 0               | 0.41
 A           | D           | 0.18  | 0.51         | 0               | 0.22
 ```
 
-紐⑤뜽? `source_uuid`, `target_uuid`瑜??몄슦??寃껋씠 ?꾨땲?? ???щ엺 ?ъ씠??pair feature瑜?蹂닿퀬 媛숈? source ?덉뿉???꾨낫 target???쒖쐞瑜??숈뒿?쒕떎.
+모델은 `source_uuid`, `target_uuid`를 외우는 것이 아니라, 두 사람 사이의 pair feature를 보고 같은 source 안에서 후보 target의 순위를 학습한다.
 
-## 踰붿쐞
+## 범위
 
-### ?ы븿
+### 포함
 
-- Neo4j??`SIMILAR_TO` ?꾨낫??export.
-- `source-target` pair feature ?앹꽦.
-- 援ъ“??feature 湲곕컲 baseline.
-- 臾몄옣 embedding similarity feature ?ㅽ뿕.
-- LightGBM LambdaRank / rank_xendcg ?ㅽ뿕.
-- FastRP, deterministic score, LightGBM, hybrid, text feature ablation 鍮꾧탳.
-- metrics, manual review sample, model, metadata artifact ???
+- Neo4j의 `SIMILAR_TO` 후보쌍 export.
+- `source-target` pair feature 생성.
+- 구조화 feature 기반 baseline.
+- 문장 embedding similarity feature 실험.
+- LightGBM LambdaRank / rank_xendcg 실험.
+- FastRP, deterministic score, LightGBM, hybrid, text feature ablation 비교.
+- metrics, manual review sample, model, metadata artifact 저장.
 
-### ?쒖쇅
+### 제외
 
-- 紐⑤뱺 `Person x Person` 議고빀 ?숈뒿.
-- `uuid`???대쫫??紐⑤뜽 feature濡??ｋ뒗 諛⑹떇.
-- 臾몄옣 ?먮Ц??LightGBM??吏곸젒 ?ｋ뒗 諛⑹떇.
-- weak label留뚯쑝濡?production ?깅뒫??二쇱옣?섎뒗 寃?
-- ?좎궗 ?섎Ⅴ?뚮굹 ?ㅽ뿕??痍⑤? 異붿쿇 ?대뜑? ?욌뒗 寃?
+- 모든 `Person x Person` 조합 학습.
+- `uuid`나 이름을 모델 feature로 넣는 방식.
+- 문장 원문을 LightGBM에 직접 넣는 방식.
+- weak label만으로 production 성능을 주장하는 것.
+- 유사 페르소나 실험을 취미 추천 폴더와 섞는 것.
 
-## ?듭떖 紐⑤뜽 ?꾨왂
+## 핵심 모델 전략
 
-?좎궗 ?섎Ⅴ?뚮굹?먯꽌??臾몄옣 ?쒖닠??以묒슂??媛?μ꽦???믩떎.
+유사 페르소나에서는 문장 서술이 중요할 가능성이 높다.
 
-?ㅻ쭔 臾몄옣 ?꾨쿋?⑹쓣 ?꾨낫?앹꽦湲곕줈 諛붾줈 ?곕뒗 寃껋? ?꾪뿕?섎떎. 痍⑤? 異붿쿇 ?ㅽ뿕?먯꽌 KURE semantic Stage1 provider??candidate recall???ш쾶 ?⑥뼱?⑤졇??
+다만 문장 임베딩을 후보생성기로 바로 쓰는 것은 위험하다. 취미 추천 실험에서 KURE semantic Stage1 provider는 candidate recall을 크게 떨어뜨렸다.
 
-?곕씪?????꾨줈?앺듃?먯꽌???ㅼ쓬 ?꾨왂???ъ슜?쒕떎.
+따라서 이 프로젝트에서는 다음 전략을 사용한다.
 
 ```text
-FastRP/KNN = ?꾨낫?앹꽦湲?LightGBM ranking model = reranker
+FastRP/KNN = 후보생성기
+LightGBM ranking model = reranker
 KURE/text embedding = reranker feature
 ```
 
-利?KURE/臾몄옣 ?꾨쿋?⑹? ?щ엺 ?꾨낫瑜??덈줈 李얜뒗 二쇱껜媛 ?꾨땲?? ?대? ?뺣낫???꾨낫?띿쓣 ?????뺣젹?섍린 ?꾪븳 feature濡??ъ슜?쒕떎.
+즉 KURE/문장 임베딩은 사람 후보를 새로 찾는 주체가 아니라, 이미 확보한 후보쌍을 더 잘 정렬하기 위한 feature로 사용한다.
 
-## ?ㅽ뿕 ?곗꽑?쒖쐞
+## 실험 우선순위
 
-???꾨줈?앺듃???ㅽ뿕? 紐⑤뜽??留롮씠 ?섏뿴?섎뒗 寃껋씠 ?꾨땲?? ?꾩옱 ?곗씠?곌섦?먯꽌 ?ㅼ젣 媛쒖꽑 媛?μ꽦???믪? ?쒖꽌濡??ㅽ뻾?쒕떎.
+이 프로젝트의 실험은 모델을 많이 나열하는 것이 아니라, 현재 데이터꼴에서 실제 개선 가능성이 높은 순서로 실행한다.
 
-### ?꾩닔 ?ㅽ뿕
+### 필수 실험
 
-1李??섏궗寃곗젙??諛섎뱶???꾩슂???ㅽ뿕?대떎.
+1차 의사결정에 반드시 필요한 실험이다.
 
 ```text
-E0. FastRP/KNN ?꾨낫?앹꽦 baseline
-E1. 援ъ“??deterministic baseline
-E2. 援ъ“??LightGBM LambdaRank / rank_xendcg
-E3. 臾몄옣 embedding cosine feature ?앹꽦
+E0. FastRP/KNN 후보생성 baseline
+E1. 구조화 deterministic baseline
+E2. 구조화 LightGBM LambdaRank / rank_xendcg
+E3. 문장 embedding cosine feature 생성
 E4. Text-only ablation
-E5. 援ъ“??+ 臾몄옣 + FastRP ?듯빀 LightGBM
-E6. FastRP score? model score hybrid
+E5. 구조화 + 문장 + FastRP 통합 LightGBM
+E6. FastRP score와 model score hybrid
 E7. Diversity / novelty final reranking
 ```
 
-???④퀎?먯꽌 ?먮떒??吏덈Ц? ?ㅼ쓬怨?媛숇떎.
+이 단계에서 판단할 질문은 다음과 같다.
 
-- FastRP/KNN ?쒖꽌瑜?LightGBM reranker媛 ?ㅼ젣濡??닿린?붽??
-- 援ъ“??feature留뚯쑝濡?異⑸텇?쒓?, 臾몄옣 feature媛 ?섎? ?덈뒗 ?좏샇瑜?二쇰뒗媛?
-- 臾몄옣 feature媛 ?깅뒫???щ━?붽?, ?꾨땲硫??몄씠利덈쭔 ?섎━?붽??
-- 理쒖쥌 top-k媛 媛숈? 吏곸뾽/吏??而ㅻ??덊떚??怨쇰룄?섍쾶 紐곕━吏 ?딅뒗媛?
-- ?ㅻ챸 媛?ν븳 異붿쿇 ?댁쑀媛 baseline蹂대떎 醫뗭븘吏?붽??
+- FastRP/KNN 순서를 LightGBM reranker가 실제로 이기는가?
+- 구조화 feature만으로 충분한가, 문장 feature가 의미 있는 신호를 주는가?
+- 문장 feature가 성능을 올리는가, 아니면 노이즈만 늘리는가?
+- 최종 top-k가 같은 직업/지역/커뮤니티에 과도하게 몰리지 않는가?
+- 설명 가능한 추천 이유가 baseline보다 좋아지는가?
 
-### ?꾨낫?앹꽦 ?뺤옣 ?ㅽ뿕
+### 후보생성 확장 실험
 
-?꾩닔 ?ㅽ뿕 ?댄썑 candidate recall??遺議깊븯?ㅺ퀬 ?먮떒?섎㈃ ?ㅽ뻾?쒕떎.
+필수 실험 이후 candidate recall이 부족하다고 판단되면 실행한다.
 
 ```text
-E8. Personalized PageRank ?꾨낫?앹꽦 baseline
-E9. Node2Vec ?꾨낫?앹꽦 baseline
+E8. Personalized PageRank 후보생성 baseline
+E9. Node2Vec 후보생성 baseline
 ```
 
-??븷:
+역할:
 
-- FastRP/KNN???볦튂???꾨낫媛 ?덈뒗吏 鍮꾧탳?쒕떎.
-- LightGBM reranker???낅젰 ?꾨낫 pool???볧엳???⑸룄濡쒕쭔 ?ъ슜?쒕떎.
-- PPR/Node2Vec 寃곌낵??洹몃?濡?production?쇰줈 ?밴꺽?섏? ?딄퀬, 媛숈? split/metric/manual review濡?鍮꾧탳?쒕떎.
+- FastRP/KNN이 놓치는 후보가 있는지 비교한다.
+- LightGBM reranker의 입력 후보 pool을 넓히는 용도로만 사용한다.
+- PPR/Node2Vec 결과도 그대로 production으로 승격하지 않고, 같은 split/metric/manual review로 비교한다.
 
-### ?κ린 ?꾨낫
+### 대체 reranker 검증
 
-?꾩옱 5留??섑뵆怨?weak label留뚯쑝濡쒕뒗 ?곗꽑?쒖쐞媛 ??떎.
+LightGBM이 충분히 강하지 않거나 범주형 feature 처리 방식이 유리한지 확인할 때만 실행한다.
 
 ```text
+E10. CatBoost ranking
+```
+
+원칙:
+
+- 기본 reranker는 LightGBM이다.
+- CatBoost는 동일 feature, 동일 split, 동일 candidate pool에서만 비교한다.
+- 성능 차이가 작고 학습/운영 비용이 크면 LightGBM을 유지한다.
+
+### 장기 후보
+
+현재 5만 샘플과 weak label만으로는 우선순위가 낮다.
+
+```text
+HGT / RGCN relational graph transformer
 GraphSAGE / PinSage
 Two-Tower persona encoder
 Cross-encoder reranker
 ```
 
-?ㅽ뻾 議곌굔:
+실행 조건:
 
-- human labeled similar-person pair媛 ?앷릿??
-- ?ㅼ젣 ?대┃/?곸꽭蹂닿린/?좏깮 濡쒓렇媛 ?볦씤??
-- 100留??꾩껜 ?곗씠?곗뿉??FastRP/KNN refresh 鍮꾩슜??蹂묐ぉ???쒕떎.
-- ?좉퇋 persona?????inductive embedding???꾩슂?댁쭊??
+- human labeled similar-person pair가 생긴다.
+- 실제 클릭/상세보기/선택 로그가 쌓인다.
+- 100만 전체 데이터에서 FastRP/KNN refresh 비용이 병목이 된다.
+- 신규 persona에 대한 inductive embedding이 필요해진다.
 
-## ?ㅽ뿕 怨꾪쉷
+관계형 그래프 트랜스포머(HGT/RGCN)는 이 PRD에서 유사 페르소나 `Person -> Person`의 장기 Stage1 후보생성 대체 실험으로만 둔다. 현재 기본 전략은 FastRP/KNN 후보 pool을 고정하고 LightGBM/rank_xendcg reranker와 text feature를 검증하는 것이다.
 
-### E0. FastRP/KNN ?꾨낫?앹꽦 baseline
-
-紐⑹쟻:
-
-- ?꾩옱 ?좎궗 ?섎Ⅴ?뚮굹 異붿쿇??control group 怨좎젙.
-- reranker媛 ?ъ젙?ы븷 ?꾨낫 pool ?뺣낫.
-
-?ㅽ뿕:
-
-- `topK=5`: smoke 寃利앹슜.
-- `topK=50`: 1李??ㅼ젣 ?ㅽ뿕 湲곕낯媛?
-- `topK=100`: candidate recall/?덉쭏 鍮꾧탳??
-
-以묒슂:
+HGT/RGCN을 열 때의 고정 조건:
 
 ```text
-reranker??export???꾨낫 ?덉뿉?쒕쭔 ?쒖꽌瑜?諛붽? ???덈떎.
-topK=5濡?留뚮뱺 ?꾨낫?띿쑝濡쒕뒗 ?좎쓽誘명븳 reranker ?ㅽ뿕???대졄??
+same source split
+same topK candidate budget
+same reranker recipe
+same text feature policy
+same evaluation metrics
 ```
 
-?꾩옱 異붿쿇:
+승격 판단은 HGT embedding 자체의 직관이 아니라 FastRP/KNN 대비 `candidate_recall@50`, NDCG@5/10, explanation coverage, diversity, refresh cost가 동시에 통과하는지로 한다.
+
+## 실험 계획
+
+### E0. FastRP/KNN 후보생성 baseline
+
+목적:
+
+- 현재 유사 페르소나 추천의 control group 고정.
+- reranker가 재정렬할 후보 pool 확보.
+
+실험:
+
+- `topK=5`: smoke 검증용.
+- `topK=50`: 1차 실제 실험 기본값.
+- `topK=100`: candidate recall/품질 비교용.
+
+중요:
 
 ```text
-5留?Person ?꾩껜 + GDS topK=50
+reranker는 export된 후보 안에서만 순서를 바꿀 수 있다.
+topK=5로 만든 후보쌍으로는 유의미한 reranker 실험이 어렵다.
 ```
 
-### E1. 援ъ“??deterministic baseline
-
-紐⑹쟻:
-
-- ML ?놁씠 ?댄빐 媛?ν븳 baseline??留뚮뱺??
-- LightGBM??吏꾩쭨 ?꾩슂?쒖? ?먮떒?쒕떎.
-
-諛⑹떇:
+현재 추천:
 
 ```text
-吏곸뾽 ?쇱튂
-吏???쇱튂
-援먯쑁/?꾧났 ?쇱튂
-媛議?二쇨굅 ?쇱튂
-怨듭쑀 痍⑤? ??FastRP score
+5만 Person 전체 + GDS topK=50
 ```
 
-瑜?媛以묓빀?쒕떎.
+### E1. 구조화 deterministic baseline
 
-??baseline??LightGBM??紐??닿린硫? ?숈뒿 紐⑤뜽?????댁쑀媛 ?쏀븯??
+목적:
 
-### E2. 援ъ“??LightGBM LambdaRank
+- ML 없이 이해 가능한 baseline을 만든다.
+- LightGBM이 진짜 필요한지 판단한다.
 
-紐⑹쟻:
+방식:
 
-- 泥?踰덉㎏ 硫붿씤 ranking 紐⑤뜽.
+```text
+직업 일치
+지역 일치
+교육/전공 일치
+가족/주거 일치
+공유 취미 수
+FastRP score
+```
 
-?낅젰 feature:
+를 가중합한다.
+
+이 baseline을 LightGBM이 못 이기면, 학습 모델을 쓸 이유가 약하다.
+
+### E2. 구조화 LightGBM LambdaRank
+
+목적:
+
+- 첫 번째 메인 ranking 모델.
+
+입력 feature:
 
 ```text
 fastrp_score
@@ -263,25 +297,25 @@ shared_skill_count
 explanation_feature_count
 ```
 
-?숈뒿 諛⑹떇:
+학습 방식:
 
 ```text
 group = source_uuid
 objective = lambdarank
 ```
 
-鍮꾧탳:
+비교:
 
 - `lambdarank`
 - `rank_xendcg`
 
-### E3. 臾몄옣 embedding similarity feature
+### E3. 문장 embedding similarity feature
 
-紐⑹쟻:
+목적:
 
-- ?섏씠/?숇젰/援고븘/吏??낫???ㅼ젣 ?좎궗?깆뿉 媛源뚯슫 臾몄옣 ?섎?瑜?諛섏쁺?쒕떎.
+- 나이/학력/군필/지역보다 실제 유사성에 가까운 문장 의미를 반영한다.
 
-?ъ슜??媛?μ꽦???믪? 臾몄옣 而щ읆:
+사용할 가능성이 높은 문장 컬럼:
 
 ```text
 persona
@@ -297,9 +331,9 @@ skills_and_expertise
 hobbies_and_interests
 ```
 
-?먮Ц??紐⑤뜽??吏곸젒 ?ｌ? ?딅뒗?? 媛??щ엺??臾몄옣??embedding?쇰줈 諛붽씔 ??pairwise cosine similarity瑜?feature濡??ｋ뒗??
+원문을 모델에 직접 넣지 않는다. 각 사람의 문장을 embedding으로 바꾼 뒤 pairwise cosine similarity를 feature로 넣는다.
 
-?덉긽 feature:
+예상 feature:
 
 ```text
 all_text_cosine
@@ -312,70 +346,70 @@ family_text_cosine
 lifestyle_text_cosine
 ```
 
-以묒슂:
+중요:
 
-- 痍⑤?異붿쿇?먯꽌 KURE Stage1 ?꾨낫?앹꽦? ?ㅽ뙣?덈떎.
-- ?섏?留?KURE text feature???쇰? ?ㅽ뿕?먯꽌 no-text蹂대떎 醫뗭? ?좏샇媛 ?덉뿀??
-- ?좎궗?섎Ⅴ?뚮굹??痍⑤? item ?뺣떟 留욏엳湲곕낫???щ엺???앺솢/?깊뼢/媛移섍? ?좎궗?깆씠 以묒슂?섎?濡?text feature ?ㅽ뿕 媛移섍? ???щ떎.
+- 취미추천에서 KURE Stage1 후보생성은 실패했다.
+- 하지만 KURE text feature는 일부 실험에서 no-text보다 좋은 신호가 있었다.
+- 유사페르소나는 취미 item 정답 맞히기보다 사람의 생활/성향/가치관 유사성이 중요하므로 text feature 실험 가치가 더 크다.
 
 ### E4. Text-only ablation
 
-紐⑹쟻:
+목적:
 
-- 臾몄옣 ?섎?留뚯쑝濡쒕룄 ?좎궗???좏샇媛 ?덈뒗吏 ?뺤씤?쒕떎.
+- 문장 의미만으로도 유사성 신호가 있는지 확인한다.
 
-諛⑹떇:
+방식:
 
 ```text
-援ъ“??feature ?쒓굅
-text cosine feature留??ъ슜
+구조화 feature 제거
+text cosine feature만 사용
 ```
 
-?댁꽍:
+해석:
 
-- text-only媛 媛뺥븯硫?臾몄옣???쒖닠???듭떖 ?좏샇?쇰뒗 ?살씠??
-- text-only媛 ?쏀빐??structured+text媛 醫뗭븘吏硫?蹂댁“ feature濡?媛移섍? ?덈떎.
+- text-only가 강하면 문장형 서술이 핵심 신호라는 뜻이다.
+- text-only가 약해도 structured+text가 좋아지면 보조 feature로 가치가 있다.
 
-### E5. 援ъ“??+ 臾몄옣 + FastRP ?듯빀 紐⑤뜽
+### E5. 구조화 + 문장 + FastRP 통합 모델
 
-紐⑹쟻:
+목적:
 
-- 理쒖쥌 ?꾨낫 紐⑤뜽.
+- 최종 후보 모델.
 
-?낅젰:
+입력:
 
 ```text
 FastRP score
-援ъ“??pair feature
-臾몄옣 embedding cosine feature
+구조화 pair feature
+문장 embedding cosine feature
 ```
 
-紐⑤뜽:
+모델:
 
 ```text
-LightGBM LambdaRank ?먮뒗 rank_xendcg
+LightGBM LambdaRank 또는 rank_xendcg
 ```
 
-湲곕?:
+기대:
 
-- FastRP??洹몃옒??援ъ“瑜??〓뒗??
-- 援ъ“??feature??紐낆떆???ㅻ챸 洹쇨굅瑜?以??
-- 臾몄옣 feature???깊뼢/?앺솢?⑦꽩/媛移섍????〓뒗??
+- FastRP는 그래프 구조를 잡는다.
+- 구조화 feature는 명시적 설명 근거를 준다.
+- 문장 feature는 성향/생활패턴/가치관을 잡는다.
 
 ### E6. Hybrid score
 
-紐⑹쟻:
+목적:
 
-- LightGBM??weak label??怨쇱쟻?⑺븯??寃껋쓣 以꾩씤??
+- LightGBM이 weak label에 과적합하는 것을 줄인다.
 
-諛⑹떇:
+방식:
 
 ```text
 final_score = alpha * normalized_model_score
             + (1 - alpha) * normalized_fastrp_score
 ```
 
-?ㅽ뿕:
+실험:
 
 ```text
 alpha = 0.3, 0.5, 0.7, 0.9
@@ -383,13 +417,13 @@ alpha = 0.3, 0.5, 0.7, 0.9
 
 ### E7. Diversity / novelty final reranking
 
-紐⑹쟻:
+목적:
 
-- ?좎궗 ?섎Ⅴ?뚮굹 top-k媛 媛숈? 吏곸뾽, 媛숈? 吏?? 媛숈? 而ㅻ??덊떚, broad demographic match濡쒕쭔 ?섏텞?섎뒗 寃껋쓣 留됰뒗??
-- 媛숈? target persona媛 ?щ윭 source?먯꽌 怨쇰룄?섍쾶 諛섎났?섎뒗 hub ?꾩긽??愿李고븳??
-- ranking metric???ш쾶 ?껋? ?딅뒗 踰붿쐞?먯꽌 ?ㅻ챸媛?μ꽦怨??먯깋 ?ㅼ뼇?깆쓣 ?믪씤??
+- 유사 페르소나 top-k가 같은 직업, 같은 지역, 같은 커뮤니티, broad demographic match로만 수축되는 것을 막는다.
+- 같은 target persona가 여러 source에서 과도하게 반복되는 hub 현상을 관찰한다.
+- ranking metric을 크게 잃지 않는 범위에서 설명가능성과 탐색 다양성을 높인다.
 
-痍⑤?異붿쿇??category diversity瑜?洹몃?濡??곗????딅뒗?? ?좎궗?섎Ⅴ?뚮굹?먯꽌???ㅼ쓬 異뺤쑝濡?諛붽퓭 蹂몃떎.
+취미추천의 category diversity를 그대로 쓰지는 않는다. 유사페르소나에서는 다음 축으로 바꿔 본다.
 
 ```text
 occupation diversity
@@ -400,139 +434,162 @@ low-information match penalty
 hub target / repeated target concentration
 ```
 
-1李??ㅽ뿕:
+1차 실험:
 
 ```text
-base_score = fastrp_score ?먮뒗 model_score
-final_score = base ranking?먯꽌 吏곸뾽/吏??community 諛섎났??penalty濡?議곗젙??rerank score
+base_score = fastrp_score 또는 model_score
+final_score = base ranking에서 직업/지역/community 반복을 penalty로 조정한 rerank score
 ```
 
-湲곕낯 penalty ?꾨낫:
+기본 penalty 후보:
 
 ```text
-target_occupation 諛섎났
-target_province 諛섎났
-target_community_id 諛섎났
+target_occupation 반복
+target_province 반복
+target_community_id 반복
 low-information-only match
 ```
 
-?ㅽ뿕媛?
+실험값:
 
 ```text
 diversity_lambda = 0.05, 0.1, 0.2
 ```
 
-?먮떒:
+판단:
 
-- NDCG@5/10???ш쾶 ?⑥뼱吏硫?reject.
-- occupation/location/community diversity媛 媛쒖꽑?섏뼱???쒕떎.
-- demographic-only recommendation ratio媛 ??븘?몄빞 ?쒕떎.
-- manual review?먯꽌 ?듭? ?ㅼ뼇?붽? ?꾨땲???섎? ?덈뒗 ?좎궗?깆쑝濡?蹂댁뿬???쒕떎.
+- NDCG@5/10이 크게 떨어지면 reject.
+- occupation/location/community diversity가 개선되어야 한다.
+- demographic-only recommendation ratio가 낮아져야 한다.
+- manual review에서 억지 다양화가 아니라 의미 있는 유사성으로 보여야 한다.
 
-### E8. Personalized PageRank ?꾨낫?앹꽦 baseline
+### E8. Personalized PageRank 후보생성 baseline
 
-?꾩옱 FastRP/KNN ?꾨낫 pool??recall??遺議깊븯?ㅺ퀬 ?먮떒?????ㅽ뻾?쒕떎.
+현재 FastRP/KNN 후보 pool의 recall이 부족하다고 판단될 때 실행한다.
 
-紐⑹쟻:
+목적:
 
-- 洹몃옒?꾩뿉??source persona 二쇰???random-walk 愿?먯쑝濡??먯깋?쒕떎.
-- FastRP embedding 湲곕컲 ?꾨낫? ?ㅻⅨ ?꾨낫媛 ?섏삤?붿? ?뺤씤?쒕떎.
-- ?ㅻ챸 媛?ν븳 援ъ“??洹쇱젒 ?꾨낫瑜?異붽?濡??뺣낫?????덈뒗吏 蹂몃떎.
+- 그래프에서 source persona 주변을 random-walk 관점으로 탐색한다.
+- FastRP embedding 기반 후보와 다른 후보가 나오는지 확인한다.
+- 설명 가능한 구조적 근접 후보를 추가로 확보할 수 있는지 본다.
 
-諛⑹떇:
+방식:
 
 ```text
 source Person
   -> PPR / random walk with restart
-  -> topK target Person ?꾨낫
-  -> ?숈씪 pair feature builder
-  -> ?숈씪 reranker/evaluation pipeline
+  -> topK target Person 후보
+  -> 동일 pair feature builder
+  -> 동일 reranker/evaluation pipeline
 ```
 
-?먮떒:
+판단:
 
-- FastRP/KNN ?鍮??덈줈??strong-reason ?꾨낫媛 ?섏뼱?섎뒗媛?
-- candidate overlap???덈Т ?믪쑝硫??좎????댁쑀媛 ?쏀븯??
-- ?꾨낫?앹꽦 ?쒓컙??FastRP/KNN ?鍮?媛먮떦 媛?ν븳媛?
-- 理쒖쥌 ?깅뒫? PPR ?⑤룆???꾨땲??reranker ?낅젰 ?꾨낫 pool 媛쒖꽑?쇰줈 ?먮떒?쒕떎.
+- FastRP/KNN 대비 새로운 strong-reason 후보가 늘어나는가?
+- candidate overlap이 너무 높으면 유지할 이유가 약하다.
+- 후보생성 시간이 FastRP/KNN 대비 감당 가능한가?
+- 최종 성능은 PPR 단독이 아니라 reranker 입력 후보 pool 개선으로 판단한다.
 
-### E9. Node2Vec ?꾨낫?앹꽦 baseline
+### E9. Node2Vec 후보생성 baseline
 
-?꾩옱 FastRP embedding???댁쭏 洹몃옒??援ъ“瑜?異⑸텇???댁? 紐삵븳?ㅺ퀬 ?먮떒?????ㅽ뻾?쒕떎.
+현재 FastRP embedding이 이질 그래프 구조를 충분히 담지 못한다고 판단될 때 실행한다.
 
-紐⑹쟻:
+목적:
 
-- random-walk 湲곕컲 node embedding?쇰줈 Person ?꾨낫瑜??앹꽦?쒕떎.
-- FastRP/KNN怨??꾨낫 ?ㅼ뼇?? ranking ?깅뒫, ?ㅻ챸媛?μ꽦??鍮꾧탳?쒕떎.
+- random-walk 기반 node embedding으로 Person 후보를 생성한다.
+- FastRP/KNN과 후보 다양성, ranking 성능, 설명가능성을 비교한다.
 
-諛⑹떇:
+방식:
 
 ```text
 Neo4j graph export
   -> Node2Vec embedding
-  -> approximate nearest neighbor / topK Person ?꾨낫
-  -> ?숈씪 pair feature builder
-  -> ?숈씪 reranker/evaluation pipeline
+  -> approximate nearest neighbor / topK Person 후보
+  -> 동일 pair feature builder
+  -> 동일 reranker/evaluation pipeline
 ```
 
-?먮떒:
+판단:
 
-- FastRP蹂대떎 NDCG/strong-reason/manual review媛 醫뗭븘???쒕떎.
-- ?숈뒿/embedding refresh 鍮꾩슜??怨쇰룄?섎㈃ reject?쒕떎.
-- FastRP? 鍮꾩듂??寃곌낵?쇰㈃ ?댁쁺 ?⑥닚?깆쓣 ?꾪빐 FastRP瑜??좎??쒕떎.
+- FastRP보다 NDCG/strong-reason/manual review가 좋아야 한다.
+- 학습/embedding refresh 비용이 과도하면 reject한다.
+- FastRP와 비슷한 결과라면 운영 단순성을 위해 FastRP를 유지한다.
 
-### E11. GraphSAGE / PinSage / Two-Tower 怨꾩뿴
+### E10. CatBoost ranking
 
-?꾩옱???꾩닚?꾨떎.
+범주형 feature 처리 방식이 LightGBM보다 유리한지 확인하는 대체 reranker 실험이다.
 
-?댁쑀:
+현재 feature는 대부분 pairwise binary/numeric이므로 우선순위는 LightGBM보다 낮다.
 
-- ?꾩옱???щ엺-?щ엺 ?뺣떟 ?쇰꺼???녿떎.
-- 5留?洹쒕え?먯꽌??FastRP/KNN + reranker媛 ???꾩떎?곸씠??
-- GNN? weak label??蹂듭옟?섍쾶 ?몄슱 ?꾪뿕???덈떎.
-- Two-Tower??100留??꾩껜 ?댁쁺怨?ANN 寃?됱씠 ?꾩슂?댁쭏 ???섎?媛 而ㅼ쭊??
+원칙:
 
-?섏쨷???ㅼ쓬 議곌굔???앷린硫?怨좊젮?쒕떎.
+- 동일 candidate pair dataset을 사용한다.
+- 동일 feature set과 동일 group split을 사용한다.
+- `source_uuid` 단위 group ranking으로 비교한다.
+- XGBoost는 실험 대상에서 제외한다.
+
+판단:
+
+- LightGBM 대비 ranking metric, 설명가능성, manual review가 동시에 개선되어야 한다.
+- categorical handling 이점이 관측되지 않으면 유지하지 않는다.
+- 성능 차이가 작거나 학습/운영 비용이 크면 LightGBM을 유지한다.
+
+### E11. GraphSAGE / PinSage / Two-Tower 계열
+
+현재는 후순위다.
+
+이유:
+
+- 현재는 사람-사람 정답 라벨이 없다.
+- 5만 규모에서는 FastRP/KNN + reranker가 더 현실적이다.
+- GNN은 weak label을 복잡하게 외울 위험이 있다.
+- Two-Tower는 100만 전체 운영과 ANN 검색이 필요해질 때 의미가 커진다.
+
+나중에 다음 조건이 생기면 고려한다.
 
 - human labeled similar-person pairs.
-- ?ㅼ젣 ?ъ슜???대┃/?좏깮 濡쒓렇.
-- 100留??꾩껜?먯꽌 FastRP/KNN refresh 鍮꾩슜??蹂묐ぉ.
-- ?좉퇋 ?섎Ⅴ?뚮굹 inductive embedding???꾩슂.
+- 실제 사용자 클릭/선택 로그.
+- 100만 전체에서 FastRP/KNN refresh 비용이 병목.
+- 신규 페르소나 inductive embedding이 필요.
 
-## ?됯? 吏??
+## 평가 지표
+
 ### Ranking
 
 - `NDCG@5`
 - `NDCG@10`
-- FastRP baseline ?鍮?pairwise win-rate
+- FastRP baseline 대비 pairwise win-rate
 - top-K overlap
 
-### ?ㅻ챸媛?μ꽦
+### 설명가능성
 
 - explanation coverage@K
 - strong reason coverage@K
 - average reason count@K
 - low-information dominance@K
 
-媛뺥븳 ?ㅻ챸:
+강한 설명:
 
 ```text
-吏곸뾽
-?몃? 吏??援먯쑁/?꾧났
-怨듭쑀 痍⑤?
-怨듭쑀 ?ㅽ궗
-臾몄옣 ?섎? ?좎궗??```
-
-?쏀븳 ?ㅻ챸:
-
-```text
-?깅퀎留?媛숈쓬
-?쇱씤?곹깭留?媛숈쓬
-province留?媛숈쓬
-community留?媛숈쓬
+직업
+세부 지역
+교육/전공
+공유 취미
+공유 스킬
+문장 의미 유사도
 ```
 
-### ?ㅼ뼇???덉젙??
+약한 설명:
+
+```text
+성별만 같음
+혼인상태만 같음
+province만 같음
+community만 같음
+```
+
+### 다양성/안정성
+
 - unique target count
 - repeated target concentration
 - occupation diversity
@@ -540,8 +597,9 @@ community留?媛숈쓬
 - community diversity
 - demographic-only recommendation ratio
 - hub target rate
-- seed 怨좎젙 ???쒖쐞 ?덉젙??
-### ?⑥쑉
+- seed 고정 시 순위 안정성
+
+### 효율
 
 - GDS build time
 - candidate pair export time
@@ -551,26 +609,27 @@ community留?媛숈쓬
 - evaluation time
 - inference throughput
 - model size
-- GPU/CPU ?ъ슜??
-## Promotion 湲곗?
+- GPU/CPU 사용량
 
-?ㅽ뿕 紐⑤뜽??root ?뚮옯???듯빀 ?꾨낫媛 ?섎젮硫?理쒖냼 議곌굔? ?ㅼ쓬怨?媛숇떎.
+## Promotion 기준
 
-- FastRP baseline蹂대떎 ranking metric???섏걯吏 ?딆븘???쒕떎.
-- deterministic baseline蹂대떎 ?섎? ?덈뒗 媛쒖꽑???덉뼱???쒕떎.
-- ?ㅻ챸媛?μ꽦??醫뗭븘?몄빞 ?쒕떎.
-- broad demographic match濡쒕쭔 異붿쿇?섏? ?딆븘???쒕떎.
-- 臾몄옣 feature瑜??쇰떎硫?manual review?먯꽌 ?ㅼ젣 ?섎? ?좎궗?깆씠 ?뺤씤?섏뼱???쒕떎.
-- refresh/inference 鍮꾩슜??媛먮떦 媛?ν빐???쒕떎.
-- ?먮옒 FastRP order濡?rollback 媛?ν빐???쒕떎.
+실험 모델이 root 플랫폼 통합 후보가 되려면 최소 조건은 다음과 같다.
 
-?꾩옱 湲곕낯 production ?숈옉? ?좎??쒕떎.
+- FastRP baseline보다 ranking metric이 나쁘지 않아야 한다.
+- deterministic baseline보다 의미 있는 개선이 있어야 한다.
+- 설명가능성이 좋아져야 한다.
+- broad demographic match로만 추천하지 않아야 한다.
+- 문장 feature를 썼다면 manual review에서 실제 의미 유사성이 확인되어야 한다.
+- refresh/inference 비용이 감당 가능해야 한다.
+- 원래 FastRP order로 rollback 가능해야 한다.
+
+현재 기본 production 동작은 유지한다.
 
 ```text
 FastRP/KNN SIMILAR_TO + post-hoc explanation API
 ```
 
-## ?꾩옱 沅뚯옣 ?ㅽ뻾 ?쒖꽌
+## 현재 권장 실행 순서
 
 ```text
 1. scripts/build_gds.py --top-k 50
@@ -582,18 +641,19 @@ FastRP/KNN SIMILAR_TO + post-hoc explanation API
 7. evaluate_lambdarank.py
 8. train_rank_xendcg.py
 9. evaluate_rank_xendcg.py
-10. hybrid score 鍮꾧탳
-11. diversity/final rerank 鍮꾧탳
-12. text embedding feature ?ㅽ뿕 異붽?
-13. structured+text ?듯빀 紐⑤뜽 鍮꾧탳
-14. ?꾩슂 ??PPR ?꾨낫?앹꽦 baseline 鍮꾧탳
-15. ?꾩슂 ??Node2Vec ?꾨낫?앹꽦 baseline 鍮꾧탳
-17. manual review? decision artifact 媛깆떊
+10. hybrid score 비교
+11. diversity/final rerank 비교
+12. text embedding feature 실험 추가
+13. structured+text 통합 모델 비교
+14. 필요 시 PPR 후보생성 baseline 비교
+15. 필요 시 Node2Vec 후보생성 baseline 비교
+16. 필요 시 train_catboost_ranker.py / evaluate_catboost_ranker.py로 CatBoost ranking 대체 reranker 비교
+17. manual review와 decision artifact 갱신
 ```
 
-## 寃곕줎
+## 결론
 
-?꾩옱 湲곗???1李?紐⑤뜽? ?ㅼ쓬?대떎.
+현재 기준의 1차 모델은 다음이다.
 
 ```text
 FastRP/KNN candidate generation
@@ -601,7 +661,7 @@ FastRP/KNN candidate generation
   -> LightGBM LambdaRank reranker
 ```
 
-?섏?留??좎궗?섎Ⅴ?뚮굹 ?덉쭏??吏꾩쭨濡??뚯뼱?щ┫ 媛?μ꽦????2李??듭떖 ?ㅽ뿕? ?ㅼ쓬?대떎.
+하지만 유사페르소나 품질을 진짜로 끌어올릴 가능성이 큰 2차 핵심 실험은 다음이다.
 
 ```text
 FastRP/KNN candidate generation
@@ -610,17 +670,17 @@ FastRP/KNN candidate generation
   -> LightGBM LambdaRank/rank_xendcg reranker
 ```
 
-## 痍⑤?異붿쿇 ?ㅽ뿕?먯꽌 媛?몄삩 ?좎궗?섎Ⅴ?뚮굹 異붿쿇 ?먯튃
+## 취미추천 실험에서 가져온 유사페르소나 추천 원칙
 
-`GNN_Neural_Network/`??痍⑤?異붿쿇 ?ㅽ뿕?먯꽌 ?뺤씤???듭떖 援먰썕? ?좎궗?섎Ⅴ?뚮굹 異붿쿇?먮룄 洹몃?濡??곸슜?쒕떎.
+`GNN_Neural_Network/`의 취미추천 실험에서 확인한 핵심 교훈은 유사페르소나 추천에도 그대로 적용한다.
 
 ```text
-?꾨쿋??洹몃옒??湲곕컲 ?꾨낫?앹꽦 ?먯닔瑜?諛붾줈 理쒖쥌 異붿쿇?쇰줈 誘우? ?딅뒗??
-Stage1? ?볦? ?꾨낫 pool???덉젙?곸쑝濡?留뚮뱺??
-Stage2 reranker媛 援ъ“ feature, ?띿뒪??feature, ?ㅻ챸 feature瑜??④퍡 蹂닿퀬 理쒖쥌 ?쒖꽌瑜??뺥븳??
+임베딩/그래프 기반 후보생성 점수를 바로 최종 추천으로 믿지 않는다.
+Stage1은 넓은 후보 pool을 안정적으로 만든다.
+Stage2 reranker가 구조 feature, 텍스트 feature, 설명 feature를 함께 보고 최종 순서를 정한다.
 ```
 
-?곕씪???좎궗?섎Ⅴ?뚮굹 異붿쿇??湲곕낯 ?ㅽ뿕 援ъ“???ㅼ쓬?쇰줈 怨좎젙?쒕떎.
+따라서 유사페르소나 추천의 기본 실험 구조는 다음으로 고정한다.
 
 ```text
 Stage1 = FastRP/KNN topK >= 50 candidate generation
@@ -629,59 +689,98 @@ Text embedding = Stage2 pair feature
 Final rerank = diversity / explanation-aware rerank, only after accuracy baseline is known
 ```
 
-以묒슂??湲덉? ?ы빆:
+중요한 금지 사항:
 
-- KURE/Snowflake 媛숈? ?띿뒪???꾨쿋?⑹쓣 怨㏓컮濡?Stage1 ?꾨낫?앹꽦湲곕줈 ?밴꺽?섏? ?딅뒗??
-- Stage1 ?꾨낫 pool, split, label, LightGBM ?ㅼ젙, text builder瑜??숈떆??諛붽씀吏 ?딅뒗??
-- ???ㅽ뿕?먯꽌???섎굹??蹂?섎쭔 諛붽씔??
-- `source_uuid`, `target_uuid`, `display_name` 媛숈? ?앸퀎?먮뒗 feature濡??ъ슜?섏? ?딅뒗??
+- KURE/Snowflake 같은 텍스트 임베딩을 곧바로 Stage1 후보생성기로 승격하지 않는다.
+- Stage1 후보 pool, split, label, LightGBM 설정, text builder를 동시에 바꾸지 않는다.
+- 한 실험에서는 하나의 변수만 바꾼다.
+- `source_uuid`, `target_uuid`, `display_name` 같은 식별자는 feature로 사용하지 않는다.
 
-### ?좎궗?섎Ⅴ?뚮굹 異붿쿇 ?ㅽ뿕 ?곗꽑?쒖쐞
+## 루트 플랫폼 기능 연동 경계
 
-| ?곗꽑?쒖쐞 | Track | ?ㅽ뿕 | 紐⑹쟻 |
+`PRD.md`의 Virtual Guild, Life Track, Agent Interaction Playground는 이 실험 PRD의 모델 학습 범위가 아니라 root FastAPI/Next.js 제품 기능이다. 이 PRD는 해당 기능이 소비할 수 있는 유사 페르소나 score, reason, diversity, text-domain feature, model metadata를 정의하고 검증한다.
+
+제품 기능별 연결 방식:
+
+```text
+Virtual Guild:
+  SIMILAR_TO / reranker score + community_id + shared hobby/skill + PageRank
+  root API에서 소모임 후보와 D3 graph schema로 변환한다.
+
+Life Track:
+  source persona와 older cohort target persona 간 유사성/reason을 제공한다.
+  개인 미래 예측이 아니라 cross-sectional cohort 탐색 근거로만 사용한다.
+
+Agent Interaction Playground:
+  source-target pair, reason categories, selected persona text fields를 제공한다.
+  LLM 대화 생성과 harmony review는 root platform의 cached/admin 기능으로 제한한다.
+```
+
+유사 페르소나 모델이 제품 경로에 연결될 때 adapter는 최소 다음 metadata를 반환해야 한다.
+
+```text
+source_uuid
+target_uuid
+rank
+score
+score_source
+model_version
+reason_categories
+strong_reason_count
+weak_only
+text_feature_columns
+fallback_used
+```
+
+모델 artifact가 promotion 전이면 root API는 `experimental` 또는 `fallback` 상태로 표시해야 하며, 일반 사용자 기본 화면에 promoted 모델처럼 섞지 않는다.
+
+### 유사페르소나 추천 실험 우선순위
+
+| 우선순위 | Track | 실험 | 목적 |
 | ---: | --- | --- | --- |
-| 1 | Candidate Lock | FastRP/KNN `topK >= 50` ?꾨낫 pool ?ъ깮??| reranker媛 ?숈뒿??異⑸텇???꾨낫 ??쓣 ?뺣낫?쒕떎. |
-| 2 | Structured Baseline | 援ъ“ feature 湲곕컲 deterministic / LightGBM baseline | FastRP ?쒖꽌瑜?reranker媛 ?ㅼ젣濡?媛쒖꽑?섎뒗吏 ?뺤씤?쒕떎. |
-| 3 | Text Feature Baseline | KURE-v1 pair text cosine feature 異붽? | ?쒖닠??persona text媛 ?좎궗???먮떒??二쇰뒗 ?좏샇瑜?寃利앺븳?? |
-| 4 | Track A | Snowflake-ko embedding backbone swap | KURE-v1蹂대떎 媛뺥븳 ?쒓뎅???꾨쿋??諛깅낯???덈뒗吏 鍮꾧탳?쒕떎. |
-| 5 | Track D | persona text builder ablation | ?대뼡 persona text 援ъ꽦???좎궗??異붿쿇??媛???좏슚?쒖? 寃利앺븳?? |
-| 6 | Track B | domain-specific text cosine feature | 吏곸뾽/痍⑤?/媛議??앺솢諛⑹떇 ???대뼡 ?곸뿭???좎궗?꾨? ?ㅻ챸?섎뒗吏 遺꾨━?쒕떎. |
-| 7 | Final Rerank | diversity / explanation-aware rerank | ?덈Т 六뷀븳 媛숈? 吏곸뾽/吏??異붿쿇?쇰줈 ?섏텞?섎뒗吏 ?꾪솕?쒕떎. |
+| 1 | Candidate Lock | FastRP/KNN `topK >= 50` 후보 pool 재생성 | reranker가 학습할 충분한 후보 폭을 확보한다. |
+| 2 | Structured Baseline | 구조 feature 기반 deterministic / LightGBM baseline | FastRP 순서를 reranker가 실제로 개선하는지 확인한다. |
+| 3 | Text Feature Baseline | KURE-v1 pair text cosine feature 추가 | 서술형 persona text가 유사도 판단에 주는 신호를 검증한다. |
+| 4 | Track A | Snowflake-ko embedding backbone swap | KURE-v1보다 강한 한국어 임베딩 백본이 있는지 비교한다. |
+| 5 | Track D | persona text builder ablation | 어떤 persona text 구성이 유사도 추천에 가장 유효한지 검증한다. |
+| 6 | Track B | domain-specific text cosine feature | 직업/취미/가족/생활방식 등 어떤 영역이 유사도를 설명하는지 분리한다. |
+| 7 | Final Rerank | diversity / explanation-aware rerank | 너무 뻔한 같은 직업/지역 추천으로 수축되는지 완화한다. |
+| 8 | Optional Reranker | CatBoost ranking | LightGBM이 명확히 부족할 때만 동일 split/pool에서 비교한다. |
 
-???쒖꽌??decision artifact ?놁씠 ?꾩쓽濡?諛붽씀吏 ?딅뒗??
+이 순서는 decision artifact 없이 임의로 바꾸지 않는다.
 
 ### Track A: Embedding Backbone Swap
 
-Track A???띿뒪???꾨쿋??紐⑤뜽留?援먯껜?섎뒗 ?ㅽ뿕?대떎.
+Track A는 텍스트 임베딩 모델만 교체하는 실험이다.
 
-湲곗? 紐⑤뜽:
+기준 모델:
 
 ```text
 nlpai-lab/KURE-v1
 ```
 
-?꾨낫 紐⑤뜽:
+후보 모델:
 
 ```text
 dragonkue/snowflake-arctic-embed-l-v2.0-ko
 dragonkue/multilingual-e5-small-ko-v2
 ```
 
-怨좎젙?댁빞 ????ぉ:
+고정해야 할 항목:
 
 - FastRP/KNN candidate pool
-- `source_uuid` 湲곗? split
+- `source_uuid` 기준 split
 - weak label generation policy
 - LightGBM config
 - pair feature schema
 - persona text builder
 - leakage audit
 
-湲곕줉?댁빞 ????ぉ:
+기록해야 할 항목:
 
 - `model_name`, `model_revision`
 - embedding dimension
-- pooling behavior, ?????덈뒗 寃쎌슦
+- pooling behavior, 알 수 있는 경우
 - device, batch size, runtime
 - cache hit/miss
 - text preprocessing version
@@ -689,9 +788,9 @@ dragonkue/multilingual-e5-small-ko-v2
 
 ### Track D: Persona Text Builder Ablation
 
-Track D???꾨쿋??紐⑤뜽??怨좎젙?섍퀬 persona text 援ъ꽦留?諛붽씀???ㅽ뿕?대떎. 湲곕낯 諛깅낯? KURE-v1濡??붾떎.
+Track D는 임베딩 모델을 고정하고 persona text 구성만 바꾸는 실험이다. 기본 백본은 KURE-v1로 둔다.
 
-?ㅽ뿕 ?꾨낫:
+실험 후보:
 
 ```text
 persona_text_structured_only
@@ -701,13 +800,13 @@ persona_text_domain_tagged_blocks
 persona_text_summary_style
 ```
 
-紐⑹쟻? ?섏씠/吏??吏곸뾽 媛숈? 援ъ“ feature蹂대떎 ?깃꺽, ?닿렐 ???됰룞, ?앺솢諛⑹떇, 媛移섍? 媛숈? ?쒖닠???뺣낫媛 ?좎궗?섎Ⅴ?뚮굹 異붿쿇???쇰쭏???좏슚?쒖? ?뺤씤?섎뒗 寃껋씠??
+목적은 나이/지역/직업 같은 구조 feature보다 성격, 지향하는 행동, 생활방식, 가치관 같은 서술적 정보가 유사 페르소나 추천에 얼마나 유효한지 확인하는 것이다.
 
-Track D??Track A? ?숈떆???ㅽ뻾?섏? ?딅뒗?? ?꾨쿋??諛깅낯怨?text builder瑜??④퍡 諛붽씀硫??깅뒫 蹂???먯씤??遺꾪빐?????녿떎.
+Track D는 Track A와 동시에 수행하지 않는다. 임베딩 백본과 text builder를 함께 바꾸면 성능 변동 요인을 분해할 수 없다.
 
 ### Track B: Domain-Specific Text Cosine
 
-Track B???⑥씪 `all_text_cosine` ????곸뿭蹂?cosine feature瑜?留뚮뱺??
+Track B는 단일 `all_text_cosine` 대신 영역별 cosine feature를 만든다.
 
 ```text
 professional_text_cosine
@@ -719,16 +818,141 @@ lifestyle_text_cosine
 persona_text_cosine
 ```
 
-???ㅽ뿕? LightGBM??"??鍮꾩듂?쒖?"瑜??????숈뒿?섍퀬, API ?ㅻ챸 移대뱶?먮룄 ?곌껐 媛?ν븳 feature瑜?留뚮뱾湲??꾪븳 寃껋씠??
+이 실험은 LightGBM이 "더 비슷한지"를 깊이있게 학습하고, API 설명 카드에도 연결 가능한 feature를 만들기 위한 것이다.
 
 ### Promotion Gate
 
-?대뼡 reranker???ㅼ쓬 議곌굔???듦낵?섍린 ?꾩뿉??production 湲곕낯媛믪쑝濡??밴꺽?섏? ?딅뒗??
+어떤 reranker도 다음 조건을 통과하기 전에는 production 기본값으로 승격되지 않는다.
 
-- FastRP/KNN baseline怨?媛숈? candidate pool, 媛숈? split?먯꽌 鍮꾧탳?쒕떎.
-- validation-first, test??winner-only濡??ㅽ뻾?쒕떎.
-- NDCG@5/10??媛쒖꽑?섏뼱???쒕떎.
-- explanation coverage ?먮뒗 strong-reason rate媛 ?낇솕?섎㈃ ?섎룞 寃?좉? ?꾩슂?섎떎.
-- low-information recommendation rate媛 利앷??섎㈃ promotion 蹂대쪟?쒕떎.
-- 媛숈? 吏곸뾽/吏??而ㅻ??덊떚濡?怨쇰룄?섍쾶 紐곕━?붿? diversity metric??湲곕줉?쒕떎.
-- rollback 寃쎈줈????긽 raw `SIMILAR_TO` ordering?대떎.
+- FastRP/KNN baseline과 같은 candidate pool, 같은 split에서 비교한다.
+- validation-first, test는 winner-only로 실행한다.
+- NDCG@5/10이 개선되어야 한다.
+- explanation coverage 또는 strong-reason rate가 악화되면 수동 검토가 필요하다.
+- low-information recommendation rate가 증가하면 promotion 보류한다.
+- 같은 직업/지역 커뮤니티로 과도하게 몰리는지 diversity metric을 기록한다.
+- rollback 경로는 항상 raw `SIMILAR_TO` ordering이다.
+
+## Phase 8: High-accuracy Similar-Persona Extension and Quality Calibration Plan
+
+본 단계는 기존 FastRP/KNN 및 Baseline LightGBM 랭커가 가지는 한계를 극복하고, 의미론적(Semantic)·인구통계학적(Demographic)·행동양식적(Psychographic) 유사성을 통합 제어하기 위한 고정밀 유사 페르소나 추천 고도화 명세를 다룬다.
+
+### 1. 5대 핵심 고도화 아키텍처 명세
+
+#### [1] Cross-Encoder Reranker
+
+* **목적**: Bi-Encoder(Source-Target 독립 임베딩 간 코사인 유사도)의 구조적 한계인 교차 어텐션(Cross-Attention) 부재를 극복하여 텍스트 상호작용의 심층 특징을 학습한다.
+* **아키텍처**:
+  * Stage 1 (FastRP/KNN)에서 통과된 상위 $K \le 50$ 후보 페어에 대해 Reranking을 수행한다.
+  * 입력 구성: `[CLS] Source Persona Description [SEP] Target Persona Description [SEP]`
+  * 사전 학습된 한국어 인코더(dragonkue/snowflake-arctic-embed-l-v2.0-ko 또는 multilingual-e5 계열 등)의 전 레이어(All-layer) self-attention을 통과시켜 두 페르소나 텍스트의 결합 표현(Joint Representation)을 얻고, 이를 MLP 레이어를 거쳐 최종 랭킹 점수 $S_{CE}$를 연산한다.
+* **레이턴시 및 비용 제어**:
+  * 전체 $N \times N$ 연산은 현실적으로 불가능하므로, Stage 1 후보군을 $50$개 이하로 제한하여 실시간 서비스 오버헤드를 $50\text{ms}$ 이내로 통제한다.
+
+#### [2] MMoE (Multi-Gate Mixture-of-Experts) Multi-Task Learning
+
+* **목적**: "유사함"의 다차원 정의(인구통계학적 배경 일치 vs 성격 및 라이프스타일 지향점 일치)를 단일 랭킹 손실로 학습할 때 발생하는 상충(Task Conflict) 현상을 완화한다.
+* **구조**:
+  * 공통 입력 피처 공간 $X_{pair}$에 대해 $E$개의 공유 전문가(Shared Experts) 네트워크 $f_i(X)$를 둔다.
+  * 복수의 Task 헤드를 정의한다:
+    * **Task 1 (Demographic Match)**: 나이 차이, 성별, 지역, 직업 등의 인구통계 유사도 예측 ($y_1$)
+    * **Task 2 (Lifestyle/Psychographic Match)**: 가치관, 야망, 커리어 지향성, 여가 활동 등 텍스트 표현 내 의미론적 라이프스타일 일치도 예측 ($y_2$)
+  * 각 Task $k$는 고유의 게이팅 네트워크 $g^k(X)$를 가지며, 최종 출력은 다음과 같이 가중 합산된다:
+    $$y_k = \sum_{i=1}^{E} g^k_i(X) \cdot f_i(X)$$
+  * 최종 리랭킹 점수 $S_{MMoE}$는 Task별 가중합 또는 우선순위 게이트로 조합된다.
+
+#### [3] Contrastive Persona Embedding
+
+* **목적**: 유사도 판별의 기저가 되는 페르소나 표상(Representation) 자체를 고도화하기 위해 대비 학습(Contrastive Learning)을 적용한다.
+* **학습 방식 및 Loss**:
+  * Mini-batch 내에서 동일한 코어 속성(예: 동일 대분류 직군 및 관심사 카테고리)을 지닌 페르소나들을 Positive Pair($p_i, p_j$)로 설정하고, 나머지를 Negative Pair로 취급한다.
+  * **InfoNCE Loss**를 활용해 페르소나 임베딩 공간을 최적화한다:
+    $$\mathcal{L}_{InfoNCE} = -\log \frac{\exp(\text{sim}(z_i, z_j) / \tau)}{\sum_{k=1}^{B} \mathbb{1}_{[k \neq i]} \exp(\text{sim}(z_i, z_k) / \tau)}$$
+    (여기서 $z_i$는 페르소나 $i$의 Dense 임베딩, $\tau$는 temperature 하이퍼파라미터, $B$는 배치 크기)
+  * 이를 통해 텍스트 원문뿐만 아니라 메타 구조가 정합적으로 캘리브레이션된 고품질 Dense 공간을 확보한다.
+
+#### [4] LLM-as-a-judge 오프라인 평가
+
+* **목적**: 레이블이 존재하지 않는(Weak Label 중심의) 유사도 도메인에서 모델 개선 시 실제 인간이 체감하는 정성적 품질 변화를 통계적으로 자동 계측한다.
+* **프로토콜**:
+  * 평가 데이터셋에서 무작위로 추출된 200개의 Source Persona와, 각 모델(Baseline vs Candidate)이 추천한 Top-5 Target Persona 쌍을 추출한다.
+  * GPT-4o 또는 국산 고성능 LLM을 Judge로 기용하여 3대 축(구조 정합성, 가치관 유사성, 행동 시너지)을 1~5점 척도(Rubrics)로 채점한다.
+  * 정량 지표(NDCG)와 LLM Judge 평점 간의 피어슨 상관계수(Pearson Correlation Coefficient $r$)를 측정하여 오프라인 평가 정밀도를 지속 검증한다. 목표 상관계수 $r \ge 0.75$를 달성해야 한다.
+
+#### [5] Explainability-Guided Objective
+
+* **목적**: 단순히 유사도 스코어만 높은 추천이 아니라, 사용자 화면(UI)에 "강력하고 설득력 있는 추천 사유(Strong Reason)" 카드를 띄울 수 있는 후보군을 상위로 인양한다.
+* **수식 설계**:
+  * 개별 Target 후보가 가지고 있는 강한 매칭 특징 개수(예: 동일 전문 분야, 동일 핵심 취미 등)의 잠재력 $C_{exp}(s, t) \in [0, 1]$을 정의한다.
+  * 최종 리랭킹 점수 $S_{final}$은 순수 유사도 예측 점수 $S_{sim}$과 설명 가능성 보너스를 결합하여 연산한다:
+    $$S_{final}(s, t) = S_{sim}(s, t) + \beta \cdot C_{exp}(s, t)$$
+  * 하이퍼파라미터 $\beta$는 그리드 서치를 통해 오프라인 NDCG의 급격한 훼손 없이 설명 Coverage를 보장하도록 조정한다.
+
+---
+
+### 2. 프로덕션 승격 게이트 (Promotion Gates)
+
+신규 리랭커 모델이 실제 배포용 `SIMILAR_TO` 관계 파이프라인으로 승격되기 위해서는 다음의 하드 필터 게이트를 충족해야 한다.
+
+| 평가 차원 | 평가지표 | 승격 요구사항 (Promotion Threshold) | 비고 |
+| :--- | :--- | :--- | :--- |
+| **정확도** | `NDCG@10` | $\ge +0.005$ (기존 최선 Baseline 대비) | 검증 셋 기준 통계적 유의성 확보 |
+| **설명력** | `Explanation Coverage@5` | $\ge 95\%$ | 상위 5개 결과 중 최소 1개 이상 강한 근거 노출 비율 |
+| **다양성** | `Repeated Hub Rate@10` | $\le 10\%$ | 특정 마스터 페르소나가 과도하게 추천 허브로 중복 사용되는 비율 제어 |
+| **보안** | `Leakage Audit Gate` | `Leakage Ratio = 0.00%` | 식별자(`uuid`, `name`)의 피처 유출 전수 감사 통과 |
+
+```text
+[FastRP/KNN Candidate] -> [Cross-Encoder/MMoE Rerank] -> [Explainability-Guided Objective Filter] -> [Audit Gate] -> [Deploy]
+```
+
+---
+
+## 3. Appendix: Pre-implementation 4대 필수 조항
+
+본격적인 대규모 ML 실험 및 유사 페르소나 추천 모델 코드 구축 직전, 데이터의 신뢰성 확보 및 프레임워크 한계 극복을 위해 다음 4대 구현 필수 조항을 준수해야 한다.
+
+### [조항 1] 양방향 데이터 누수(Bidirectional Leakage) 방지 조항
+* **배경 및 위험성**: 페르소나 유사도 추천 특성상, 데이터셋 내에 페르소나 $A$와 $B$ 간의 양방향 관계가 존재한다. 만약 단순 무작위 분할을 적용할 경우, 학습 데이터에 $(A \to B)$가 포함되고 검증/테스트 데이터에 $(B \to A)$가 포함되어 모델이 관계 구조를 단순히 암기하여 성능이 왜곡(Data Leakage)되는 현상이 발생한다.
+* **구현 제약**:
+  * 모델에 입력되는 유사도 페어 데이터셋을 구축할 때, 학습(Train)군과 검증/테스트(Val/Test)군은 개별 **페르소나 UUID 기준**으로 완전히 단절되어야 한다.
+  * 즉, 특정 페르소나 $i$가 검증/테스트 셋의 `source_uuid` 또는 `target_uuid` 중 어느 하나라도 포함되어 있다면, 해당 페르소나 $i$와 연관된 모든 페어 데이터는 학습 데이터셋에서 전면 배제되어야 한다.
+  * 이를 검증하기 위한 자동화된 Leakage Audit Unit Test(`test_leakage_audit`)를 파이프라인 진입부에서 강제 수행한다.
+
+### [조항 2] 콜드 스타트(Cold-Start) Fallback 하이브리드 정책
+* **배경 및 위험성**: Neo4j Graph Data Science(GDS) 기반의 **FastRP 임베딩**은 전형적인 Transductive 모델이다. 즉, 그래프 데이터베이스 상에 존재하지 않는 신규 생성 페르소나(Cold-Start)가 인입될 경우, 노드 임베딩 벡터가 존재하지 않아 후보 생성(Candidate Generation)이 완전히 불가능해지는 시스템 마비가 초래된다.
+* **구현 제약**:
+  * FastRP 임베딩 또는 GDS 그래프 노드가 존재하지 않는 신규 페르소나에 대해서는 다음과 같은 2단계 결정론적 하이브리드 Fallback 로직을 탑재한다.
+  
+  ```mermaid
+  graph TD
+      A[유사 추천 요청 인입] --> B{GDS 노드 존재 여부 검사}
+      B -- Yes (Warm) --> C[FastRP KNN + Reranker 파이프라인]
+      B -- No (Cold-Start) --> D[Fallback 1: Bi-Encoder KURE 텍스트 임베딩 Cosine 유사도]
+      D --> E[Fallback 2: 인구통계학적 가중치 Rule-based 랭킹 합산]
+      E --> F[최종 유사 페르소나 Top-N 추천 출력]
+  ```
+  
+  * **Fallback Step 1**: KURE-v1 기반 Bi-Encoder 텍스트 임베딩 공간에서 계산된 Cosine Similarity 점수 산출
+  * **Fallback Step 2**: 나이, 직업 대분류, 지역 가중치를 결합한 결정론적(Deterministic) 룰베이스 매칭 스코어링 가중합 계산
+  * 해당 하이브리드 Fallback 모듈은 기존 Reranker 및 API 프론트와 완벽히 결합되어야 하며, 시스템 오류 로그 없이 200 OK 응답을 보장해야 한다.
+
+### [조항 3] GroupKFold 랭킹 검증(Ranking Validation) 제약
+* **배경 및 위험성**: 유사도 리랭커 모델(예: LambdaRank, Cross-Encoder) 평가 시, 여러 Target 페르소나가 동일한 Source 페르소나 쿼리 하에 랭킹 그룹으로 묶이게 된다. 쿼리가 Train/Val 간에 흩어져 있으면 그룹 구조가 훼손되고 NDCG@5/10 지표가 왜곡되어 테스트 셋 성능 예측이 불가하다.
+* **구현 제약**:
+  * 랭킹 검증 및 최적화를 위해 **`GroupKFold`** 분할 방식을 강제하며, 그룹 Key는 반드시 **`source_uuid`**로 지정한다.
+  * 동일한 `source_uuid`를 공유하는 모든 Target 페어들은 동일한 Fold 내에 함께 묶여 움직여야 하며, 절대 Train Fold와 Validation Fold에 분할 교차되어 할당될 수 없다.
+  * NDCG@5 및 NDCG@10은 개별 `source_uuid` 그룹 내에서 랭킹을 매긴 후 평균을 취하는 Group-wise NDCG 방식으로 산출한다.
+
+### [조항 4] 하이퍼파라미터 그리드 서치(Hyperparameter Grid Search) 바운더리
+* **배경 및 자원 제한**: 본 프로젝트의 ML 학습 인프라(Intel Core Ultra 7 CPU 18스레드, NVIDIA RTX 4060 8GB VRAM) 하에서 과도한 차원의 그리드 서치는 Out Of Memory(OOM)나 시스템 멈춤을 초래한다. 따라서 하드웨어 스펙에 부합하면서도 성능 개선을 최대화할 수 있는 핵심 탐색 공간을 제한하여 명시한다.
+* **구현 제약**:
+  * LightGBM / LambdaRank 모델의 그리드 서치 바운더리는 다음과 같이 엄격하게 통제한다.
+  
+  | 파라미터명 | 권장 탐색 바운더리 | 비고 |
+  | :--- | :--- | :--- |
+  | `num_leaves` | `[15, 31, 63]` | 과적합 방지 및 VRAM 절약을 위한 제약 |
+  | `max_depth` | `[4, 6, 8, -1]` | 트리 깊이 한계 설정 |
+  | `learning_rate` | `[0.01, 0.05, 0.1]` | 경사 하강 보폭 제어 |
+  | `n_estimators` | `[100, 200, 500]` | `early_stopping_rounds=30`과 병행 사용 필수 |
+  | `min_child_samples` | `[10, 20, 50]` | 단말 노드 최소 데이터 수 |
+
+  * 학습 시 Multi-threading 제약: `num_threads=18` 설정을 고수하여 OS 백그라운드 프로세스 및 Docker Neo4j 컨테이너 구동을 위한 CPU 여유분을 보장한다.

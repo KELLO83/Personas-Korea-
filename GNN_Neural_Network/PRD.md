@@ -47,6 +47,38 @@ Decision:
 - KURE-v1 semantic Stage1 provider remains **rejected**. On the current split it reduced validation candidate_recall@50 to `0.794971`, while the fixed Stage1 pool used by Stage2 KURE holds `0.827669`.
 - Embedding-model exploration is no longer globally low priority. It is now high priority for **Stage2 feature** ablations, but remains low priority for **Stage1 candidate generation** unless a new retrieval design protects candidate recall.
 
+### Platform Feature Handoff Boundary
+
+The root `PRD.md` owns frontend/backend product features such as recommendation cards, Virtual Guild, Life Track, and Agent Interaction Playground. This PRD owns only the `Person -> Hobby` experiment, model decision, metrics, artifact metadata, and adapter contract.
+
+For the “11-dimensional/multi-faceted attention bi-encoder” idea, the current project interpretation is:
+
+```text
+Do not introduce it as a new production main model by default.
+Treat it as the existing Stage2 domain-specific text similarity feature family:
+
+masked persona domain text + candidate hobby text
+  -> E5-small-ko-v2 domain cosine features
+  -> LightGBM Stage2 ranker
+```
+
+Any future learned attention gate or two-tower/bi-encoder must be opened as a separate validation-first ablation after the current E5-small-ko-v2 domain-feature default is used as the baseline.
+
+Root platform features may consume hobby recommendations only through an adapter that returns:
+
+```text
+candidate_hobby
+rank
+score
+score_source
+model_version
+reason_cards
+feature_columns
+fallback_used
+```
+
+The root UI must not infer model promotion from this file alone; promotion requires the experiment decision artifact and the gates below.
+
 ### Local 50K Data Reality
 
 Current local files:
@@ -2214,3 +2246,133 @@ artifacts/experiments/stage1_quota/similar_person_test/candidate_pool_policy.jso
 artifacts/experiments/stage1_quota/similar_person_test/provider_contribution.json
 artifacts/experiments/stage1_quota/similar_person_test/status.json
 ```
+
+## Phase 6: High-accuracy Hybrid Extension and Calibration Plan
+
+### 1. 개요 및 목적
+Phase 6의 목적은 현재 offline SOTA인 `E5-small-ko-v2 domain-specific Stage2` 모델 구조를 한 단계 더 고도화하여, 추천 정확도(Recall@5/10, NDCG@5/10)의 추가적인 극대화와 합성 데이터 특유의 획일성(Stereotyping) 완화를 위한 후처리 보정을 동시에 달성하는 하이브리드 아키텍처를 구축하는 것이다.
+
+### 2. 4대 고도화 기술 명세
+
+#### 2.1. 1단계 CF 연동 후보군 주입 (Collaborative/Neighborhood Diversification)
+* **개념**: 기존의 `popularity + cooccurrence`에 의존하는 Stage1 후보군을 다각화하기 위해, **유사 페르소나 추천 모듈(User-to-User CF)**의 결과를 1단계 후보 생성 경로(Stage1 Provider)로 연동한다.
+* **구현 방식**:
+  - `experiments/persona_similarity` 모듈을 연동하여, 입력 페르소나의 인접 이웃(Neighbor) $K$명을 선정한다.
+  - 해당 이웃들이 실제로 경험한 학습 데이터 내 취미 리스트(Train Hobbies)를 집계한다.
+  - 유사도 가중치 기반으로 취미 점수를 산출하고, 상위 $N$개의 후보를 Stage1 풀에 주입한다. (Quota: 5 slots)
+* **누수 방지 규칙**: 이웃 페르소나를 선정하고 취미를 집계하는 모든 파이프라인에서 검증/평가 데이터셋(Validation/Test Holdout)이 절대 주입되어서는 안 되며, 오직 `Train Split` 내부의 관계 데이터만을 활용해야 한다.
+
+#### 2.2. 인구통계-라이프스타일 교차 특징 (Cross Features) 설계
+* **개념**: 합성 데이터의 Stereotyping 패턴(예: 특정 연령대/직업군에 특정 취미가 강하게 결합되는 편향)을 세밀하게 포착하여 Stage2 LightGBM의 랭킹 변별력을 높인다.
+* **추가할 교차 피처(Cross Features)**:
+  - `Age_Group_Sex_Fit`: 연령대(`Age_Group`)와 성별(`Sex`)의 조합에 따른 취미 선호도 통계 피처.
+  - `Occupation_Region_Fit`: 직업 대분류(`Occupation`)와 지역 정보(`Province`/`District`)의 조합에 따른 최적 취미 매칭 유사도.
+  - `Demographic_Lifestyle_Interaction`: 인구통계적 피처들과 라이프스타일 텍스트 키워드들 간의 상호작용 지표.
+* **학습 정책**: 훈련 과정에서 오버피팅을 방지하기 위해 빈도수가 극히 낮은 교차 조합은 `rare_category_fallback` 또는 `smoothing` 처리(예: Laplace smoothing)를 수행한다.
+
+#### 2.3. Two-Tower Dynamic Scoring 아키텍처
+* **개념**: 사용자 프로필 정보와 취미의 의미론적(Semantic) 정보를 각각의 심층 신경망(Tower)을 통해 고차원 임베딩 공간에 매핑하고, 두 임베딩의 실시간 코사인 유사도를 Stage2의 동적 스코어링 피처로 활용한다.
+* **구현 세부사항**:
+  - **Persona-Tower (User Tower)**: 페르소나의 인구통계 변수(정형)와 마스킹된 라이프스타일 텍스트(비정형)를 다층 퍼셉트론(MLP) 및 임베딩 레이어로 결합하여 128차원의 Persona Representation을 출력.
+  - **Hobby-Tower (Item Tower)**: 취미의 Canonical Name, 카테고리, 그리고 관련 서술(Description)을 활용하여 동일한 128차원의 Hobby Representation을 출력.
+  - **Dynamic Score**: $Score = \text{Cosine}(\vec{U}, \vec{I})$를 실시간으로 연산하여 LightGBM에 추가 수치 피처로 입력한다.
+* **학습 방식**: PyTorch 기반으로 구현하며, Train 내의 Positive/Negative Edge 관계에 대해 InfoNCE Loss 또는 Contrastive Loss를 사용하여 가벼운 사전 학습(Pre-training)을 진행한다.
+
+#### 2.4. User-level Topic Calibration (후처리 보정)
+* **개념**: 추천 결과가 특정 대중적 카테고리에 편중되는 현상(Ranking Collapse)을 방지하기 위해, 사용자의 원래 관심 도메인 분포(Topic Distribution)에 근접하도록 최종 추천 리스트의 카테고리 분포를 조정한다.
+* **알고리즘**:
+  - 사용자 페르소나 텍스트에서 추출한 분야별(스포츠, 예술, 여행, 푸드 등) 관심도 비중 $\vec{p}$를 구한다.
+  - Stage2에서 랭킹된 상위 $K$개 후보의 카테고리 분포 $\vec{q}$를 추적한다.
+  - Kullback-Leibler Divergence(KLD) 등을 활용한 최적화 목적 함수(Objective Function)를 정의하여, 정확도 점수 손실을 최소화하면서 분포 일치도를 높이는 Calibrated Reranking 후처리를 수행한다.
+  - $Score_{calibrated}(u, i) = (1 - \lambda) \cdot Score_{ranker}(u, i) + \lambda \cdot \text{Gain}(i | R_{u})$ 형태의 그리디 선택 알고리즘을 사용한다.
+
+### 3. Track C & Track D 시너지 통합 평가 프로토콜 (Synergy Pipeline)
+
+현재 단독으로 진행되던 Track C(E5-domain rank/margin features)와 Track D(Candidate hobby text expansion)를 유기적으로 결합하여 상호 시너지를 내도록 통합 검증 파이프라인을 설계한다.
+
+```text
+               [Masked Persona Text]
+                         |
+                         v
+       [E5-small-ko-v2 Domain Embedding] 
+                         |
+      +------------------+------------------+
+      |                                     |
+      v                                     v
+[Track D: Expanded Hobby Text]     [Track C: Candidate Pool Rank/Margin]
+(Name + Category + Alias)          (Similarity Percentile, Rank, Gap)
+      |                                     |
+      +------------------+------------------+
+                         v
+        [Integrated Feature Construction]
+                         |
+                         v
+         [Stage 2 LightGBM Learned Ranker]
+                         |
+                         v
+         [Topic Calibration Post-processing]
+                         |
+                         v
+            [Final Multi-Metric Evaluation]
+```
+
+* **시너지 통합 검증 규칙**:
+  1. **데이터 품질 감사 게이트**: Track D의 취미 텍스트 확장 시, 반드시 `post_mask_leakage_audit()`을 호출하여 레이블 정보(정답 취미) 유출 여부를 엄격하게 재검증한다. 통과 기준은 `Leakage Ratio < 0.01%` 이다.
+  2. **교차 피처 빌더**: 확장된 취미 텍스트 임베딩과 Persona Domain 임베딩 간의 유사도를 바탕으로, Track C의 상대 랭킹 지표(`e5_similarity_percentile`, `e5_similarity_gap_to_top` 등)를 재생산한다.
+  3. **평가 지표 세트**:
+     - **주 지표(Hard Gate)**: Recall@10, NDCG@10 (기존 E5-domain Stage2 SOTA 대비 `Recall@10 >= +0.005`, `NDCG@10 >= +0.003` 향상)
+     - **보조 지표(Soft Gate)**: 카테고리 다양성(`Intra-List Diversity@10 >= +0.02` 상승 및 `Coverage@10 >= +0.025` 상승)
+  4. **Ablation Matrix**:
+     - `Baseline (E5-domain Stage2)`
+     - `Baseline + Track C (Rank/Margin)`
+     - `Baseline + Track D (Text Expansion)`
+     - `Baseline + Track C + Track D (Synergy)`
+     - `Baseline + Track C + Track D + Topic Calibration`
+
+### 4. 성공 기준 및 프로덕션 승격 게이트 (Promotion Gates)
+* **정확도 향상 한계선**: validation 및 test 분할 모두에서 **Recall@10 및 NDCG@10의 동시 개선**이 증명되어야 한다.
+* **안전 보증**: 어떠한 고도화 피처나 후처리 기법도 `mask_holdout_hobbies()`에 의한 정답 마스킹 규칙을 우회하여 피처 누수(Leakage)를 유발해서는 안 된다.
+* **자원 준수 정책**: CPU logical processor 18개 이하 점유 및 메모리 누수 방지를 위한 주기적 캐시 비우기(`gc.collect()`) 가이드라인을 강제한다.
+
+---
+
+## 5. Appendix: Pre-implementation 4대 필수 조항
+
+본격적인 대규모 GNN 및 LightGBM 기반 취미 추천 모델의 코드 구축 직전, 오프라인 실험의 무결성 확보와 엣지 케이스 장애 방지를 위해 다음 4대 구현 필수 조항을 명문화하며, 모든 구현체는 이를 의무 준수해야 한다.
+
+### [조항 1] Transductive Graph Split Data Leakage 방지 조항
+* **배경 및 위험성**: GNN(LightGCN 등) 협업 필터링 학습 시 BPR(Bayesian Personalized Ranking) Loss를 사용한다. 이때, 사용자별 Negative Edge(연결되지 않은 취미)를 무작위 샘플링하게 되는데, 만약 검증/테스트 데이터에 홀드아웃(Holdout)된 사용자의 실제 선호 취미(Positive Edge)를 학습 단계에서 Negative로 잘못 샘플링할 경우, 모델이 올바른 선호 관계를 왜곡하여 오프라인 평가 지표가 무너지는 Transductive Leakage가 발생한다.
+* **구현 제약**:
+  * Negative Sampler 구동 시, Train Positive Edge뿐만 아니라 **Validation 및 Test Split에 속한 Positive Edge 목록 전체**를 차단 리스트(Blacklist)로 즉시 통합 빌드한다.
+  * 샘플러는 매 epoch마다 샘플링을 수행할 때 해당 블랙리스트에 걸리는 취미 ID를 절대 Negative로 할당하지 못하도록 강제 마스킹 처리를 수행해야 한다.
+  * 이를 검증하기 위한 데이터 무결성 검사 유닛 테스트(`test_negative_sampling_lockout`)를 강제 수행한다.
+
+### [조항 2] Cold User & Cold Hobby Dual-Fallback 정책
+* **배경 및 위험성**: LightGCN 및 FastRP 등의 그래프 모델은 Transductive 성향이 강해 학습 시점에 노드가 부재했던 신규 사용자(Cold User) 혹은 노멀라이즈 범위를 벗어난 신규 취미(Cold Hobby)에 대해 임베딩 매핑이 불가능하여 시스템이 추천 응답을 거부하거나 크래시를 유발할 수 있다.
+* **구현 제약**:
+  * 신규 유입 및 데이터 부족 케이스에 대응하기 위해 다음과 같은 **Dual-Fallback 다단계 체인**을 구현에 탑재한다.
+  
+  ```mermaid
+  graph TD
+      A[취미 추천 요청] --> B{UUID 및 기존 취미 존재 검사}
+      B -- Warm User & Hobby --> C[LightGCN KNN + LightGBM Stage2 파이프라인]
+      B -- Cold User (취미 <= 1개) --> D[Fallback 1: 인구통계학적 인덱스 스코어 prior 랭킹]
+      B -- Cold Hobby (미등록 취미) --> E[Fallback 2: E5-small-ko-v2 의미론적 카테고리 백오프]
+      D --> F[최종 취미 Top-N 추천 출력]
+      E --> F
+  ```
+  
+  * **User Fallback**: 학습 데이터 내 취미 기록이 전무하거나 1개 이하인 Cold User의 경우, 나이대/성별/직업 기반의 `segment_popularity_score`를 계산하여 Top-N을 결정론적으로 생성한다.
+  * **Hobby Fallback**: 기존 어휘 사전(Vocabulary)에 없는 Cold Hobby 데이터 인입 시, E5-small-ko-v2 임베딩 공간에서 코사인 유사도가 가장 높은 Canonical Category 단어로 대체 매핑(Category Backoff)을 수행하여 그래프 전파 에러를 원천 예방한다.
+
+### [조항 3] Person-wise GroupKFold 랭킹 검증 제약
+* **배경 및 위험성**: Stage 2 LightGBM 랭커의 NDCG@10 및 Recall@10 평가 시, 여러 후보 취미가 개별 사용자의 쿼리 조건 하에 상대 순위를 매기게 된다. 이때 무작위 폴드 분할로 특정 사용자의 데이터가 Train과 Validation에 쪼개져 들어가면 쿼리 일관성이 붕개되고 검증 성능이 급격히 왜곡된다.
+* **구현 제약**:
+  * 모든 오프라인 성능 검증 및 하이퍼파라미터 튜닝 시 **`GroupKFold`** 분할을 의무적으로 사용하며, 그룹 Key는 **`person_uuid`**(또는 내부 ID인 `person_id`)로 제한한다.
+  * 특정 사용자와 관련된 모든 취미 인터랙션(Positive/Negative Pair)은 반드시 동일한 Fold 내에 할당되어야 하며, 절대 학습 셋과 검증 셋에 분할 교차되어 투입될 수 없다.
+
+### [조항 4] 자원 격리 및 OOM 방지 스펙 제한
+* **배경 및 자원 제한**: Windows PowerShell 환경 및 8GB VRAM(NVIDIA RTX 4060) 환경에서 GNN의 Sparse Adjacency Matrix Matmul 및 LightGBM 훈련을 병행할 시 자원 고갈로 인한 시스템 다운(OOM) 리스크가 존재한다.
+* **구현 제약**:
+  * PyTorch 기반 GNN 에폭 루프 및 추론 연산 시, 매 Epoch/Batch가 끝날 때마다 명시적 가비지 컬렉션(`import gc; gc.collect()`) 및 GPU 캐시 정리(`torch.cuda.empty_cache()`)를 의무 실행한다.
+  * GNN 배치 크기는 최대 `4096` 이하로 통제하며, LightGBM `num_threads` 설정은 프로젝트 기본 룰인 `18` 스레드 이하를 완벽히 준수하여 Docker Neo4j 구동 리소스 여유분을 강제 확보한다.
