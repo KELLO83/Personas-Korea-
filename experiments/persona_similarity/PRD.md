@@ -70,6 +70,34 @@ fastrp_score = 그래프 구조상 두 Person embedding이 얼마나 가까운�
 
 전체 100만 페르소나 또는 전체 연령대에 대한 운영 성능을 주장하지 않는다.
 
+## 평가 신뢰도와 split 정책
+
+현재 유사 페르소나 실험에는 human-labeled 정답 pair가 없다. 따라서
+`label`은 FastRP/KNN, 공통 구조 feature, 설명 feature 등에서 파생한
+weak label/proxy label이다. 이 지표는 모델 후보를 비교하기 위한
+오프라인 proxy이며, 사용자 체감 품질이나 production 성능을 단독으로
+증명하지 않는다.
+
+Split은 목적별로 두 등급을 구분한다.
+
+```text
+development split:
+  group = source_uuid
+  목적 = 빠른 feature/model 비교
+  제한 = 같은 target_uuid가 train/validation에 동시에 등장할 수 있음
+
+promotion-grade split:
+  group = persona_uuid disjoint
+  목적 = production 통합 후보 검증
+  제한 = validation/test의 source_uuid 또는 target_uuid에 포함된 persona는
+         train pair의 source_uuid/target_uuid 어느 쪽에도 등장할 수 없음
+```
+
+모든 실험 artifact는 사용한 split 등급을 기록해야 한다. 개발용
+`source_uuid` group split에서 이긴 모델은 바로 production 후보가 될 수
+없고, 반드시 promotion-grade person-disjoint split과 manual review를
+통과해야 한다.
+
 ## 실험 단위
 
 학습 데이터의 한 row는 한 사람 자체가 아니라 `source -> target` 후보쌍이다.
@@ -95,6 +123,11 @@ A           | D           | 0.18  | 0.51         | 0               | 0.22
 ```
 
 모델은 `source_uuid`, `target_uuid`를 외우는 것이 아니라, 두 사람 사이의 pair feature를 보고 같은 source 안에서 후보 target의 순위를 학습한다.
+
+`source_uuid`, `target_uuid`, `display_name`, 원문 identifier는 feature로
+사용하지 않는다. 또한 weak label 생성에 사용된 점수와 동일하거나 거의
+동일한 feature가 모델 성능을 지배하는 경우, 그 결과는 기존 FastRP order를
+재현한 것으로 해석하고 별도 manual review 없이는 개선으로 보지 않는다.
 
 ## 범위
 
@@ -617,9 +650,11 @@ community만 같음
 
 - FastRP baseline보다 ranking metric이 나쁘지 않아야 한다.
 - deterministic baseline보다 의미 있는 개선이 있어야 한다.
+- promotion-grade person-disjoint split에서 validation-first, winner-only test를 통과해야 한다.
 - 설명가능성이 좋아져야 한다.
 - broad demographic match로만 추천하지 않아야 한다.
 - 문장 feature를 썼다면 manual review에서 실제 의미 유사성이 확인되어야 한다.
+- weak-label NDCG 개선만으로 production 성능을 주장하지 않아야 한다.
 - refresh/inference 비용이 감당 가능해야 한다.
 - 원래 FastRP order로 rollback 가능해야 한다.
 
@@ -769,7 +804,7 @@ dragonkue/multilingual-e5-small-ko-v2
 고정해야 할 항목:
 
 - FastRP/KNN candidate pool
-- `source_uuid` 기준 split
+- split 등급과 split file. Promotion 후보는 person-disjoint split을 사용한다.
 - weak label generation policy
 - LightGBM config
 - pair feature schema
@@ -825,16 +860,22 @@ persona_text_cosine
 어떤 reranker도 다음 조건을 통과하기 전에는 production 기본값으로 승격되지 않는다.
 
 - FastRP/KNN baseline과 같은 candidate pool, 같은 split에서 비교한다.
+- production 승격 후보는 person-disjoint promotion-grade split에서 검증한다.
 - validation-first, test는 winner-only로 실행한다.
 - NDCG@5/10이 개선되어야 한다.
 - explanation coverage 또는 strong-reason rate가 악화되면 수동 검토가 필요하다.
 - low-information recommendation rate가 증가하면 promotion 보류한다.
+- weak-label metric 개선은 manual review와 함께 해석한다.
 - 같은 직업/지역 커뮤니티로 과도하게 몰리는지 diversity metric을 기록한다.
 - rollback 경로는 항상 raw `SIMILAR_TO` ordering이다.
 
 ## Phase 8: High-accuracy Similar-Persona Extension and Quality Calibration Plan
 
-본 단계는 기존 FastRP/KNN 및 Baseline LightGBM 랭커가 가지는 한계를 극복하고, 의미론적(Semantic)·인구통계학적(Demographic)·행동양식적(Psychographic) 유사성을 통합 제어하기 위한 고정밀 유사 페르소나 추천 고도화 명세를 다룬다.
+본 단계는 장기 후보 연구 목록이다. 현재 5만 샘플과 weak-label 중심
+데이터에서는 아래 모델을 기본 경로로 열지 않는다. FastRP/KNN 후보 pool,
+LightGBM/rank_xendcg reranker, text cosine feature, diversity/manual review
+게이트가 먼저 완료되고, candidate recall 또는 manual review에서 명확한
+한계가 확인될 때만 별도 validation-first ablation으로 연다.
 
 ### 1. 5대 핵심 고도화 아키텍처 명세
 
@@ -846,7 +887,8 @@ persona_text_cosine
   * 입력 구성: `[CLS] Source Persona Description [SEP] Target Persona Description [SEP]`
   * 사전 학습된 한국어 인코더(dragonkue/snowflake-arctic-embed-l-v2.0-ko 또는 multilingual-e5 계열 등)의 전 레이어(All-layer) self-attention을 통과시켜 두 페르소나 텍스트의 결합 표현(Joint Representation)을 얻고, 이를 MLP 레이어를 거쳐 최종 랭킹 점수 $S_{CE}$를 연산한다.
 * **레이턴시 및 비용 제어**:
-  * 전체 $N \times N$ 연산은 현실적으로 불가능하므로, Stage 1 후보군을 $50$개 이하로 제한하여 실시간 서비스 오버헤드를 $50\text{ms}$ 이내로 통제한다.
+  * 전체 $N \times N$ 연산은 현실적으로 불가능하므로, Stage 1 후보군을 $50$개 이하로 제한한다.
+  * `50ms` 이내 실시간 응답은 검증 전 목표치가 아니라 aspirational target으로만 기록한다. 실제 승격 전에는 로컬/서버 환경에서 latency, throughput, GPU/CPU memory를 측정해야 한다.
 
 #### [2] MMoE (Multi-Gate Mixture-of-Experts) Multi-Task Learning
 
@@ -875,8 +917,8 @@ persona_text_cosine
 * **목적**: 레이블이 존재하지 않는(Weak Label 중심의) 유사도 도메인에서 모델 개선 시 실제 인간이 체감하는 정성적 품질 변화를 통계적으로 자동 계측한다.
 * **프로토콜**:
   * 평가 데이터셋에서 무작위로 추출된 200개의 Source Persona와, 각 모델(Baseline vs Candidate)이 추천한 Top-5 Target Persona 쌍을 추출한다.
-  * GPT-4o 또는 국산 고성능 LLM을 Judge로 기용하여 3대 축(구조 정합성, 가치관 유사성, 행동 시너지)을 1~5점 척도(Rubrics)로 채점한다.
-  * 정량 지표(NDCG)와 LLM Judge 평점 간의 피어슨 상관계수(Pearson Correlation Coefficient $r$)를 측정하여 오프라인 평가 정밀도를 지속 검증한다. 목표 상관계수 $r \ge 0.75$를 달성해야 한다.
+  * LLM Judge를 사용할 경우 모델명, 프롬프트 버전, 샘플링 정책, 비용, 재현성 한계를 기록한다.
+  * LLM Judge 점수는 human/manual review를 대체하지 않는다. 정량 지표(NDCG)와 Judge 평점 간 상관은 참고 지표이며, `r >= 0.75`는 승격 하드 게이트가 아니라 장기 품질 목표다.
 
 #### [5] Explainability-Guided Objective
 
@@ -891,7 +933,7 @@ persona_text_cosine
 
 ### 2. 프로덕션 승격 게이트 (Promotion Gates)
 
-신규 리랭커 모델이 실제 배포용 `SIMILAR_TO` 관계 파이프라인으로 승격되기 위해서는 다음의 하드 필터 게이트를 충족해야 한다.
+신규 리랭커 모델이 실제 배포용 `SIMILAR_TO` 관계 파이프라인으로 승격되기 위해서는 다음의 하드 필터 게이트를 충족해야 한다. Phase 8 모델은 이 게이트를 통과하기 전까지 production default가 아니라 research candidate로만 유지한다.
 
 | 평가 차원 | 평가지표 | 승격 요구사항 (Promotion Threshold) | 비고 |
 | :--- | :--- | :--- | :--- |
@@ -913,8 +955,10 @@ persona_text_cosine
 ### [조항 1] 양방향 데이터 누수(Bidirectional Leakage) 방지 조항
 * **배경 및 위험성**: 페르소나 유사도 추천 특성상, 데이터셋 내에 페르소나 $A$와 $B$ 간의 양방향 관계가 존재한다. 만약 단순 무작위 분할을 적용할 경우, 학습 데이터에 $(A \to B)$가 포함되고 검증/테스트 데이터에 $(B \to A)$가 포함되어 모델이 관계 구조를 단순히 암기하여 성능이 왜곡(Data Leakage)되는 현상이 발생한다.
 * **구현 제약**:
-  * 모델에 입력되는 유사도 페어 데이터셋을 구축할 때, 학습(Train)군과 검증/테스트(Val/Test)군은 개별 **페르소나 UUID 기준**으로 완전히 단절되어야 한다.
+  * 개발용 빠른 비교는 `source_uuid` group split을 허용하지만, 이 결과는 promotion 근거가 아니다.
+  * promotion-grade 데이터셋을 구축할 때 학습(Train)군과 검증/테스트(Val/Test)군은 개별 **페르소나 UUID 기준**으로 완전히 단절되어야 한다.
   * 즉, 특정 페르소나 $i$가 검증/테스트 셋의 `source_uuid` 또는 `target_uuid` 중 어느 하나라도 포함되어 있다면, 해당 페르소나 $i$와 연관된 모든 페어 데이터는 학습 데이터셋에서 전면 배제되어야 한다.
+  * split metadata에는 `development_source_group` 또는 `promotion_person_disjoint`를 명시한다.
   * 이를 검증하기 위한 자동화된 Leakage Audit Unit Test(`test_leakage_audit`)를 파이프라인 진입부에서 강제 수행한다.
 
 ### [조항 2] 콜드 스타트(Cold-Start) Fallback 하이브리드 정책
@@ -938,8 +982,9 @@ persona_text_cosine
 ### [조항 3] GroupKFold 랭킹 검증(Ranking Validation) 제약
 * **배경 및 위험성**: 유사도 리랭커 모델(예: LambdaRank, Cross-Encoder) 평가 시, 여러 Target 페르소나가 동일한 Source 페르소나 쿼리 하에 랭킹 그룹으로 묶이게 된다. 쿼리가 Train/Val 간에 흩어져 있으면 그룹 구조가 훼손되고 NDCG@5/10 지표가 왜곡되어 테스트 셋 성능 예측이 불가하다.
 * **구현 제약**:
-  * 랭킹 검증 및 최적화를 위해 **`GroupKFold`** 분할 방식을 강제하며, 그룹 Key는 반드시 **`source_uuid`**로 지정한다.
+  * 개발용 랭킹 검증 및 최적화를 위해 **`GroupKFold`** 분할 방식을 사용할 수 있으며, 그룹 Key는 반드시 **`source_uuid`**로 지정한다.
   * 동일한 `source_uuid`를 공유하는 모든 Target 페어들은 동일한 Fold 내에 함께 묶여 움직여야 하며, 절대 Train Fold와 Validation Fold에 분할 교차되어 할당될 수 없다.
+  * production 승격 후보는 source-group split만으로 충분하지 않다. 최종 validation/test는 조항 1의 person-disjoint split으로 반복한다.
   * NDCG@5 및 NDCG@10은 개별 `source_uuid` 그룹 내에서 랭킹을 매긴 후 평균을 취하는 Group-wise NDCG 방식으로 산출한다.
 
 ### [조항 4] 하이퍼파라미터 그리드 서치(Hyperparameter Grid Search) 바운더리

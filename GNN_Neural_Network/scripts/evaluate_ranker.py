@@ -48,6 +48,7 @@ from GNN_Neural_Network.gnn_recommender.embedding_cache import (
     PersonEmbeddingCache,
 )  # noqa: E402
 from GNN_Neural_Network.gnn_recommender.metrics import summarize_ranking_metrics  # noqa: E402
+from GNN_Neural_Network.gnn_recommender.phase6 import build_stage2_cross_features  # noqa: E402
 from GNN_Neural_Network.gnn_recommender.diversity import (
     compute_hobby_embeddings,
     dpp_rerank,
@@ -56,6 +57,7 @@ from GNN_Neural_Network.gnn_recommender.diversity import (
 from GNN_Neural_Network.gnn_recommender.ranker import (
     LightGBMRanker,
     RANKER_DOMAIN_TEXT_FEATURE_COLUMNS,
+    RANKER_PHASE6_CROSS_FEATURE_COLUMNS,
     RANKER_TEXT_RANK_MARGIN_FEATURE_COLUMNS,
     build_text_rank_margin_lookup,
     load_or_build_candidate_pool,
@@ -264,6 +266,8 @@ def _build_fast_rerank_features(
     if text_rank_margin_features:
         for column in RANKER_TEXT_RANK_MARGIN_FEATURE_COLUMNS:
             features[column] = _safe_float(text_rank_margin_features.get(column, 0.0))
+    if any(column in _feature_worker_model_feature_columns for column in RANKER_PHASE6_CROSS_FEATURE_COLUMNS):
+        features.update(build_stage2_cross_features(features))
     return features
 
 

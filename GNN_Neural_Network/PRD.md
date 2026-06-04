@@ -4,6 +4,91 @@
 
 This section is the current source of truth for running experiments against the local `GNN_Neural_Network/data` files. It overrides older wording that assumes the local edge CSV already contains stable canonical hobby items.
 
+## Phase 6 Result And Model Decision Update (2026-05-20)
+
+This section supersedes older "current SOTA/default" wording for the latest
+completed `Person -> Hobby` experiment results. Older Phase 5 sections remain
+as historical baselines and ablation context.
+
+### Latest Best Tested Recipe
+
+```text
+run_id = phase6_domain_text_hard1_aliases_full_validation
+Stage1 = popularity + cooccurrence
+Stage2 = LightGBM(num_leaves=31)
+negative_sampling = neg_ratio=4, hard_ratio=1.0
+persona_text = leakage-safe masked/domain-tagged text
+candidate_text_builder = name_plus_aliases
+embedding_features = text_embedding_similarity + E5/KURE domain-specific scalar similarities
+KURE semantic Stage1 provider = false
+topic_calibration = optional post-ranker lambda=0.02, not part of the core model
+```
+
+The model combines the old validation-recall SOTA sampling strength
+(`hard_ratio=1.0`) with the newer domain text Stage2 feature family and expanded
+candidate hobby text. It does **not** use the Phase 6 cross-feature columns as a
+meaningful signal; their feature importances stayed at `0.0`.
+
+### Metrics
+
+| Model / Variant | Split | Recall@10 | NDCG@10 | ILD@10 | Novelty@10 | Decision |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| old validation recall leader `phase2_5_neg_ratio_4_hard_1_0` | validation | 0.742404 | 0.458620 | 0.986815 | 4.600143 | validation recall leader |
+| `phase6_domain_text_hard1_aliases_full_validation` | validation | 0.732523 | 0.480773 | 0.969728 | 4.960548 | best Phase 6 validation NDCG |
+| `phase6_domain_text_hard1_aliases_full_validation` + topic calibration `lambda=0.02` | validation | 0.732707 | 0.480842 | 0.969934 | n/a | optional post-ranker |
+| old test recall leader found in artifacts `phase2_5_num_leaves_31` | test | 0.709684 | 0.447713 | n/a | n/a | previous test reference |
+| old hard-negative SOTA `phase2_5_neg_ratio_4_hard_1_0` | test | 0.708973 | 0.446676 | n/a | n/a | previous hard-negative reference |
+| `phase6_domain_text_hard1_aliases_full_validation` | test | 0.710786 | 0.464645 | 0.969734 | 4.960439 | promoted test artifact |
+| `phase6_domain_text_hard1_aliases_full_validation` + topic calibration `lambda=0.02` | test | 0.711338 | 0.464943 | 0.969949 | n/a | optional post-ranker |
+
+Interpretation:
+
+- Validation recall@10 is **not** a new absolute validation SOTA. The old
+  `phase2_5_neg_ratio_4_hard_1_0` validation recall remains higher by `0.009881`.
+- Validation and test NDCG@10 are materially higher for the Phase 6 alias/domain
+  text recipe, so the model ranks hits closer to the top.
+- Test artifact scan shows the Phase 6 alias/domain text recipe has the best
+  observed test Recall@10 and NDCG@10 among stored `test_metrics.json` files.
+- Because test results must not be used to retroactively select models, the
+  decision is: **promote as the current best tested Phase 6 candidate, while
+  explicitly preserving the validation-recall caveat.**
+
+### Rejected Or Non-Promoted Phase 6 Paths
+
+- `phase6_cross_features_m2000`: no metric change versus baseline; all new cross
+  features had `0.0` importance.
+- `phase6_domain_text_cross_full_validation`: improved NDCG but lower recall than
+  the hard-negative alias recipe.
+- `phase6_domain_text_hard1_full_validation`: improved over the cross run, but
+  underperformed `candidate_text_builder=name_plus_aliases`.
+- `phase6_kure_stage1_domain_text_hard1_aliases_full_validation`: not promoted.
+  It increased catalog coverage and novelty, but `oracle_recall@10` fell from
+  `0.827669` to `0.794326`, and final validation Recall@10 fell from `0.732523`
+  to `0.725338`.
+
+### Artifact Source Of Truth
+
+Use the experiment summary and metrics files below as the source of truth:
+
+```text
+GNN_Neural_Network/artifacts/experiments/phase6_hobby_validation_summary.md
+GNN_Neural_Network/artifacts/experiments/phase6_domain_text_hard1_aliases_full_validation/validation_metrics.json
+GNN_Neural_Network/artifacts/experiments/phase6_domain_text_hard1_aliases_full_validation/test_metrics.json
+GNN_Neural_Network/artifacts/experiments/phase6_domain_text_hard1_aliases_full_validation/topic_calibrated_validation_lambda_0.02.json
+GNN_Neural_Network/artifacts/experiments/phase6_domain_text_hard1_aliases_full_validation/topic_calibrated_test_lambda_0.02.json
+```
+
+### Deployable Default Caveat
+
+`phase6_domain_text_hard1_aliases_full_validation` is the best tested stored
+artifact, but its `candidate_text_builder=name_plus_aliases` path still has
+production-governance risk around alias provenance, leakage, and
+taxonomy/canonicalization bias. Do not wire the alias-based recipe into the
+production API until that source-field policy is explicitly approved. If alias
+text is rejected, rerun the same hard-negative/domain-text recipe with
+`candidate_text_builder=name_only` and treat that result as the deployable
+default candidate.
+
 ## Current SOTA And Default Embedding Decision Update (2026-05-17)
 
 Current offline accuracy SOTA and production default for the current local
@@ -514,7 +599,7 @@ Follow-up may continue, but it must be implementation/governance first: model/re
 - 기존 `.venv` Python 환경 사용
 - PyTorch 기반 LightGCN PoC
 - LightGCN을 최종 추천기가 아니라 Stage 1 후보 생성기 중 하나로 사용
-- popularity, co-occurrence, G1에서 export한 `SIMILAR_TO` 기반 similar-person hobby 후보 생성
+- popularity, co-occurrence, train-gated similar-person quota 후보 생성
 - persona/demographic/lifestyle feature 기반 Stage 2 reranking
 - 후보 생성 실패 또는 후보 부족 시 fallback provider 사용
 - Neo4j에서 `Person-Hobby` edge export
@@ -656,7 +741,7 @@ raw_hobby_name -> canonical_hobby -> hobby_id
 
 1. **LightGCN provider**: gated Person-Hobby graph에서 collaborative 후보 생성
 2. **co-occurrence provider**: 같은 person에게 함께 나타나는 취미 기반 후보 생성
-3. **offline similar-person provider**: G1에서 export한 `SIMILAR_TO`/FastRP 기반 similar-person hobby 후보 생성
+3. **offline similar-person provider**: train split만 사용하는 similar-person hobby 후보 생성
 4. **segment/global popularity provider**: 후보 부족, unknown UUID, checkpoint 없음 상황의 fallback
 
 G2+ offline 단계에서는 live Neo4j나 FastAPI를 호출하지 않는다. 따라서 `similar-person provider`는 다음 둘 중 하나로만 사용한다.
@@ -665,6 +750,15 @@ G2+ offline 단계에서는 live Neo4j나 FastAPI를 호출하지 않는다. 따
 - **online comparison mode**: 기존 `RecommendationService`/`GET /api/recommend/{uuid}` 결과와 비교만 수행하며, offline metric에는 포함하지 않는다.
 
 `similar_person_hobbies.csv`가 train-gated graph에서 생성됐다는 근거가 없으면 offline evaluation mode로 사용할 수 없다. 전체 그래프 기준 `SIMILAR_TO`/FastRP는 validation/test hobby 정보를 이미 반영했을 가능성이 있으므로, 이 경우 similar-person 후보는 online comparison 또는 qualitative review에만 사용한다.
+
+As of the completed 2026-05-17 Stage1 quota experiment, the offline
+`similar_person` provider does **not** consume the learned
+`experiments/persona_similarity` model. The implemented provider is
+`structured_context_inverted_index_v1`: it matches train persons by structured
+context fields and contributes candidates to the Stage1 pool only. It must not
+be described as a promoted persona-similarity model integration. A future
+learned `experiments/persona_similarity` provider requires a separate provider
+name, train-gated export, validation-first artifact, and promotion decision.
 
 Stage 1 안전장치:
 
@@ -2003,6 +2097,19 @@ of new candidates from context-aware sources.
 
 Priority: first Stage1 improvement experiment.
 
+Current implementation status:
+
+- Completed run: `similar_person_validation` and winner-only
+  `similar_person_test`.
+- Implemented method: `structured_context_inverted_index_v1` in
+  `GNN_Neural_Network/scripts/evaluate_ranker.py`.
+- This is a structured context heuristic, not a learned
+  `experiments/persona_similarity` model integration.
+- It affects Stage1 candidate-pool composition only. `similar_person_score`
+  remains excluded from the LightGBM Stage2 feature columns.
+- Decision: metric-positive optional experiment, **not promoted** as the Stage1
+  default.
+
 Rationale:
 
 - `DATASET_EXPLAIN.md` identifies similar-person hobby lookup as a valid Stage1
@@ -2016,19 +2123,23 @@ Rationale:
 Provider definition:
 
 ```text
-target person context/text
-  -> find similar train persons
-  -> collect those persons' train hobbies
-  -> remove target known hobbies
-  -> rank by neighbor similarity weighted hobby frequency
+target person structured context
+  -> match train persons through structured-context inverted indexes
+  -> collect those train persons' train hobbies
+  -> remove target train-known hobbies
+  -> rank by weighted matched-field frequency
   -> contribute at most 5 candidates
 ```
 
-Similarity sources, in preferred order:
+Completed source:
+
+- Structured match fields: `age_group`, `sex`, `occupation`, `province`,
+  `district`, `family_type`, `housing_type`, and `education_level`.
+
+Future sources, if reopened, must be separate validation-first variants:
 
 1. E5-small-ko-v2 masked persona/domain text embedding nearest neighbors.
-2. Structured fallback score from `age_group`, `sex`, `occupation`, `province`,
-   `district`, `family_type`, `housing_type`, and `education_level`.
+2. Learned `experiments/persona_similarity` model export.
 3. Hybrid score: embedding similarity plus structured exact-match bonuses.
 
 Required leakage rule:
@@ -2255,12 +2366,15 @@ Phase 6의 목적은 현재 offline SOTA인 `E5-small-ko-v2 domain-specific Stag
 ### 2. 4대 고도화 기술 명세
 
 #### 2.1. 1단계 CF 연동 후보군 주입 (Collaborative/Neighborhood Diversification)
-* **개념**: 기존의 `popularity + cooccurrence`에 의존하는 Stage1 후보군을 다각화하기 위해, **유사 페르소나 추천 모듈(User-to-User CF)**의 결과를 1단계 후보 생성 경로(Stage1 Provider)로 연동한다.
+* **개념**: 기존의 `popularity + cooccurrence`에 의존하는 Stage1 후보군을 다각화하기 위해, train-gated similar-person quota provider를 1단계 후보 생성 경로(Stage1 Provider)로 제한적으로 주입한다. 완료된 실험은 learned User-to-User CF 모델이 아니라 structured context heuristic이다.
 * **구현 방식**:
-  - `experiments/persona_similarity` 모듈을 연동하여, 입력 페르소나의 인접 이웃(Neighbor) $K$명을 선정한다.
-  - 해당 이웃들이 실제로 경험한 학습 데이터 내 취미 리스트(Train Hobbies)를 집계한다.
-  - 유사도 가중치 기반으로 취미 점수를 산출하고, 상위 $N$개의 후보를 Stage1 풀에 주입한다. (Quota: 5 slots)
+  - 완료된 `similar_person_validation`/`similar_person_test`는 `structured_context_inverted_index_v1`을 사용한다.
+  - 입력 페르소나의 `age_group`, `sex`, `occupation`, `province`, `district`, `family_type`, `housing_type`, `education_level`과 일치하는 train person bucket을 찾는다.
+  - 해당 train person들이 가진 train hobbies를 집계하고 target의 train-known hobbies를 제거한다.
+  - weighted matched-field frequency 기반으로 상위 후보를 Stage1 풀에 주입한다. (Quota: 5 slots)
+  - `experiments/persona_similarity` learned model 연동은 아직 완료된 기본 경로가 아니며, 별도 provider 이름/validation artifact/promotion decision이 필요한 후속 실험으로만 취급한다.
 * **누수 방지 규칙**: 이웃 페르소나를 선정하고 취미를 집계하는 모든 파이프라인에서 검증/평가 데이터셋(Validation/Test Holdout)이 절대 주입되어서는 안 되며, 오직 `Train Split` 내부의 관계 데이터만을 활용해야 한다.
+* **결정**: similar-person quota는 validation/test에서 metric-positive였지만 개선 폭이 작으므로 Stage1 default로 승격하지 않는다. 현재 Stage1 default는 `popularity + cooccurrence`를 유지한다.
 
 #### 2.2. 인구통계-라이프스타일 교차 특징 (Cross Features) 설계
 * **개념**: 합성 데이터의 Stereotyping 패턴(예: 특정 연령대/직업군에 특정 취미가 강하게 결합되는 편향)을 세밀하게 포착하여 Stage2 LightGBM의 랭킹 변별력을 높인다.

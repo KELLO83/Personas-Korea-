@@ -1810,5 +1810,63 @@
       "decision": "rejected_validation",
       "reason": "Candidate recall improved, but final Stage2 Recall@10/NDCG@10 regressed versus the E5-domain default."
     }
+  },
+  "phase6_hobby_domain_text_hard1_aliases_2026_05_20": {
+    "status": "best_tested_phase6_candidate_with_validation_recall_caveat",
+    "default_enabled": false,
+    "run_id": "phase6_domain_text_hard1_aliases_full_validation",
+    "stage1": [
+      "popularity",
+      "cooccurrence"
+    ],
+    "stage2": "LightGBM(num_leaves=31) + domain text scalar similarities",
+    "embedding_model": "nlpai-lab/KURE-v1 via current KURE/E5-compatible text embedding path",
+    "negative_sampling": {
+      "neg_ratio": 4,
+      "hard_ratio": 1.0
+    },
+    "candidate_text_builder": "name_plus_aliases",
+    "feature_policy": {
+      "include_source_features": false,
+      "include_text_embedding_feature": true,
+      "include_domain_text_embedding_features": true,
+      "include_phase6_cross_features": false,
+      "kure_semantic_stage1_provider": false
+    },
+    "validation_metrics_path": "artifacts/experiments/phase6_domain_text_hard1_aliases_full_validation/validation_metrics.json",
+    "test_metrics_path": "artifacts/experiments/phase6_domain_text_hard1_aliases_full_validation/test_metrics.json",
+    "topic_calibrated_validation_metrics_path": "artifacts/experiments/phase6_domain_text_hard1_aliases_full_validation/topic_calibrated_validation_lambda_0.02.json",
+    "topic_calibrated_test_metrics_path": "artifacts/experiments/phase6_domain_text_hard1_aliases_full_validation/topic_calibrated_test_lambda_0.02.json",
+    "validation_metrics": {
+      "v2_recall@10": 0.7325227963525835,
+      "v2_ndcg@10": 0.48077290344995277,
+      "intra_list_diversity@10": 0.9697276718554296,
+      "novelty@10": 4.960548247097068,
+      "candidate_recall@50": 0.8276687851155936
+    },
+    "test_metrics": {
+      "v2_recall@10": 0.7107856682324768,
+      "v2_ndcg@10": 0.46464529948638844,
+      "intra_list_diversity@10": 0.9697338122871018,
+      "novelty@10": 4.960438814395309,
+      "candidate_recall@50": 0.8272082527401676
+    },
+    "topic_calibrated_lambda_0_02": {
+      "validation_recall@10": 0.732707009302754,
+      "validation_ndcg@10": 0.48084223934763737,
+      "test_recall@10": 0.711338307082988,
+      "test_ndcg@10": 0.4649434033786755,
+      "decision": "optional_post_ranker_only"
+    },
+    "comparison_notes": {
+      "old_validation_recall_leader": "phase2_5_neg_ratio_4_hard_1_0 remains higher on validation Recall@10: 0.742404 vs 0.732523.",
+      "stored_test_artifact_scan": "This run is the strongest stored test artifact found for both Recall@10 and NDCG@10 at update time.",
+      "governance_caveat": "Do not wire name_plus_aliases into production until alias source-field provenance and canonicalization bias risk are approved."
+    },
+    "rejected_phase6_variants": {
+      "cross_features_only": "No metric gain; cross feature importances stayed 0.0.",
+      "kure_semantic_stage1": "Rejected for this recipe; validation oracle_recall@10 fell to 0.794326 and final Recall@10 fell to 0.725338."
+    },
+    "decision": "Keep as current best tested Phase 6 candidate. Do not claim validation Recall@10 absolute SOTA. Production default requires governance approval for alias candidate text."
   }
 }

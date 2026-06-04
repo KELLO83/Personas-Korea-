@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "createdAt": "2026-06-04T06:50:22.512Z",
+  "updatedAt": "2026-06-04T07:01:29.099Z",
+  "briefPath": ".omo/ulw-loop/brief.md",
+  "goalsPath": ".omo/ulw-loop/goals.json",
+  "ledgerPath": ".omo/ulw-loop/ledger.jsonl",
+  "codexGoalMode": "aggregate",
+  "goals": [
+    {
+      "id": "G001-person-hobby-person-person-ml",
+      "title": "기존 실험을 초기화하거나 무시하지 않고 이어받아, Person->Hobby와 Person->Person ML 실험에 필요한...",
+      "objective": "기존 실험을 초기화하거나 무시하지 않고 이어받아, Person->Hobby와 Person->Person ML 실험에 필요한 코드/문서/실험계획을 전부 정리한다. 산출물은 두 실험 트랙별 코드 인벤토리, 문서 인벤토리, 기존 결과 요약, 다음 실험계획, LLM Wiki 링크 구조, 그리고 실행/검증 명령이어야 한다. 소스코드는 필요하다고 확인된 경우에만 최소 수정하고, 기본은 문서와 계획 artifact 정리다.",
+      "status": "blocked",
+      "successCriteria": [
+        {
+          "id": "C001",
+          "scenario": "tmux channel: create a transcript that lists the final organized experiment docs and verifies both track inventories exist. Exact invocation: tmux new-session -d -s ulw-qa-c001; tmux send-keys -t ulw-qa-c001 'rg -n \"Code Inventory|Document Inventory|Next Experiment Plan|Already Completed Results\" docs/llm_wiki/person_hobby docs/llm_wiki/persona_similarity .omo/plans/recommender-continuation-experiment-plan.md' Enter; tmux capture-pane -pS -200 -E - -t ulw-qa-c001 > .omo/ulw-loop/evidence/G001-C001-doc-coverage.txt; tmux kill-session -t ulw-qa-c001. PASS iff transcript contains all four section names for both ML tracks.",
+          "userModel": "happy",
+          "expectedEvidence": ".omo/ulw-loop/evidence/G001-C001-doc-coverage.txt contains Code Inventory, Document Inventory, Next Experiment Plan, Already Completed Results for both Person->Hobby and Person->Person tracks; cleanup receipt confirms tmux session killed.",
+          "capturedEvidence": ".omo/ulw-loop/evidence/G001-C001-doc-coverage.txt has 17 lines covering Code Inventory, Document Inventory, Next Experiment Plan, Already Completed Results for both docs/llm_wiki/person_hobby and docs/llm_wiki/persona_similarity plus the continuation plan. cleanup: tmux unavailable in Git Bash; no long-running session or process was spawned.",
+          "status": "pass",
+          "capturedAt": "2026-06-04T06:59:37.862Z",
+          "notes": "Equivalent Git Bash rg transcript used because command -v tmux returned empty."
+        },
+        {
+          "id": "C002",
+          "scenario": "tmux channel: run a boundary check proving the two ML tracks are separated and no result summary tells agents to restart from scratch. Exact invocation: tmux new-session -d -s ulw-qa-c002; tmux send-keys -t ulw-qa-c002 'rg -n \"Person -> Hobby|Person -> Person|Do not put|Do not merge|continue|not restart|not start from scratch\" docs/llm_wiki/person_hobby docs/llm_wiki/persona_similarity .omo/plans/recommender-continuation-experiment-plan.md' Enter; tmux capture-pane -pS -200 -E - -t ulw-qa-c002 > .omo/ulw-loop/evidence/G001-C002-boundary.txt; tmux kill-session -t ulw-qa-c002. PASS iff transcript contains explicit boundary language for both tracks and continuation/not-restart language.",
+          "userModel": "edge",
+          "expectedEvidence": ".omo/ulw-loop/evidence/G001-C002-boundary.txt contains explicit boundary language for both tracks and continuation/not-restart language; cleanup receipt confirms tmux session killed.",
+          "capturedEvidence": ".omo/ulw-loop/evidence/G001-C002-boundary.txt has 44 lines covering Person -> Hobby, Person -> Person, Do not put, Do not merge, continue, and not restart language across both track folders and the continuation plan. cleanup: tmux unavailable in Git Bash; no long-running session or process was spawned.",
+          "status": "pass",
+          "capturedAt": "2026-06-04T06:59:38.738Z",
+          "notes": "Equivalent Git Bash rg transcript used because command -v tmux returned empty."
+        },
+        {
+          "id": "C003",
+          "scenario": "tmux channel: run a regression check proving existing wiki result summaries and the prior alternative-method plan remain linked after adding continuation organization. Exact invocation: tmux new-session -d -s ulw-qa-c003; tmux send-keys -t ulw-qa-c003 'test -f docs/llm_wiki/person_hobby/results_summary.md && test -f docs/llm_wiki/persona_similarity/results_summary.md && test -f .omo/plans/recommender-alternative-methods-investigation.md && rg -n \"results_summary|recommender-continuation-experiment-plan|E5-domain|structured LambdaRank\" docs/llm_wiki .omo/plans' Enter; tmux capture-pane -pS -250 -E - -t ulw-qa-c003 > .omo/ulw-loop/evidence/G001-C003-regression.txt; tmux kill-session -t ulw-qa-c003. PASS iff transcript shows existing result summaries, previous plan, and new continuation plan are all present and linked.",
+          "userModel": "regression",
+          "expectedEvidence": ".omo/ulw-loop/evidence/G001-C003-regression.txt shows existing result summaries, previous plan, and new continuation plan are all present and linked; cleanup receipt confirms tmux session killed.",
+          "capturedEvidence": ".omo/ulw-loop/evidence/G001-C003-regression.txt has 72 lines proving both results_summary.md files and the prior recommender-alternative-methods-investigation.md exist, and that recommender-continuation-experiment-plan, E5-domain, and structured LambdaRank remain linked. cleanup: tmux unavailable in Git Bash; no long-running session or process was spawned.",
+          "status": "pass",
+          "capturedAt": "2026-06-04T06:59:39.515Z",
+          "notes": "Equivalent Git Bash test/rg transcript used because command -v tmux returned empty."
+        }
+      ],
+      "attempt": 1,
+      "createdAt": "2026-06-04T06:50:22.512Z",
+      "updatedAt": "2026-06-04T07:01:29.099Z",
+      "startedAt": "2026-06-04T06:53:02.988Z",
+      "blockedReason": "All requested docs/plans/evidence were completed and all three ULW criteria passed, but terminal complete checkpoint is blocked because this Codex thread already has a completed legacy get_goal objective from the earlier planning task. The ulw-loop CLI requires a non-terminal blocker in this state."
+    }
+  ],
+  "codexObjective": "Complete the durable ulw-loop plan in .omo/ulw-loop/goals.json, including later accepted/appended stories, under the original brief constraints; use .omo/ulw-loop/ledger.jsonl as the audit trail."
+}

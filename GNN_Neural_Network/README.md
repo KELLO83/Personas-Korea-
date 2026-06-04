@@ -14,9 +14,35 @@ Embedding model = dragonkue/multilingual-e5-small-ko-v2
 Feature policy = text_embedding_similarity + E5 domain-specific similarities
 ```
 
+### E5-small-ko-v2 모델 구조 요약
+
+코드와 로컬 Hugging Face 캐시 기준으로 현재 사용하는
+`dragonkue/multilingual-e5-small-ko-v2`는 SentenceTransformer 래퍼 안에
+`BertModel`을 넣은 BERT encoder 계열 모델입니다. `config.json`의 핵심 값은
+`model_type=bert`, `architectures=["BertModel"]`, `hidden_size=384`,
+`num_hidden_layers=12`, `num_attention_heads=12`, `intermediate_size=1536`,
+`max_position_embeddings=512`이고, tokenizer는 `XLMRobertaTokenizer`입니다.
+
+```text
+텍스트 입력
+  -> XLMRobertaTokenizer
+  -> BertModel encoder
+       - token/position/type embedding
+       - Transformer encoder block x 12
+       - hidden size 384, attention heads 12, FFN intermediate 1536
+  -> last_hidden_state
+  -> attention_mask 기반 mean pooling
+  -> 384차원 sentence embedding
+  -> L2 normalize
+  -> cosine similarity feature
+```
+
+즉 "RoBERTa류 생성 모델"이 아니라, retrieval embedding용으로 fine-tuning된
+BERT encoder + mean pooling + normalize 구조입니다.
+
 ## Test 성능 비교
 
-![Model performance comparison](docs/model_performance.svg)
+![Model performance comparison](docs/image.png)
 
 | Model | Test Recall@10 | Test NDCG@10 | Decision |
 | --- | ---: | ---: | --- |
@@ -149,43 +175,6 @@ e5_family_similarity
 
 즉 Stage1은 "정답이 있을 법한 후보를 넓게 모으는 단계"이고, Stage2는 "person
 context, train 통계, embedding similarity를 같이 보고 후보 순서를 다시 정하는 단계"입니다.
-
-## E5-small-ko-v2 모델 구조
-
-`dragonkue/multilingual-e5-small-ko-v2`는
-[`intfloat/multilingual-e5-small`](https://huggingface.co/intfloat/multilingual-e5-small)
-기반의 SentenceTransformer 계열 embedding 모델입니다. Hugging Face 모델 카드 기준으로
-Korean retrieval task 성능을 높이기 위해 한국어 query-passage pair로 fine-tuning된
-경량 Korean retriever입니다.
-
-| 항목 | 내용 |
-| --- | --- |
-| 모델 계열 | SentenceTransformer / BERT encoder 계열 |
-| base model | `intfloat/multilingual-e5-small` |
-| parameter size | 약 118M |
-| max sequence length | 512 tokens |
-| output dimension | 384-d dense vector |
-| similarity | cosine similarity |
-| pooling | mean pooling over token embeddings |
-| final step | L2 normalize |
-| model soup | `dragonkue/multilingual-e5-small-ko` 60% + `intfloat/multilingual-e5-small` 40% |
-
-레이어 흐름은 다음과 같습니다.
-
-```text
-입력 텍스트
-  -> tokenizer
-  -> BERT Transformer encoder
-  -> last_hidden_state
-  -> attention_mask 기반 mean pooling
-  -> 384차원 sentence embedding
-  -> L2 normalize
-  -> cosine similarity / dot product scoring
-```
-
-이 프로젝트에서는 E5-small-ko-v2를 생성 모델처럼 쓰지 않고, persona 텍스트와 hobby
-텍스트를 같은 384차원 벡터 공간에 올린 뒤 cosine similarity feature를 만드는 데만
-사용합니다.
 
 ## 핵심 실험 스펙 비교
 

@@ -73,6 +73,12 @@ RANKER_TEXT_RANK_MARGIN_FEATURE_COLUMNS: list[str] = [
     "e5_similarity_gap_to_mean",
 ]
 
+RANKER_PHASE6_CROSS_FEATURE_COLUMNS: list[str] = [
+    "age_group_region_cross_fit",
+    "occupation_region_cross_fit",
+    "demographic_text_cross_fit",
+]
+
 RANKER_SOURCE_FEATURE_COLUMNS: list[str] = [
     "source_is_popularity",
     "source_is_cooccurrence",
@@ -121,6 +127,7 @@ def get_ranker_feature_columns(
     include_text_embedding_feature: bool = False,
     include_domain_text_embedding_features: bool = False,
     include_text_rank_margin_features: bool = False,
+    include_phase6_cross_features: bool = False,
 ) -> list[str]:
     columns = list(RANKER_BASE_FEATURE_COLUMNS)
     if include_source_features:
@@ -131,6 +138,8 @@ def get_ranker_feature_columns(
         columns.extend(RANKER_DOMAIN_TEXT_FEATURE_COLUMNS)
     if include_text_rank_margin_features:
         columns.extend(RANKER_TEXT_RANK_MARGIN_FEATURE_COLUMNS)
+    if include_phase6_cross_features:
+        columns.extend(RANKER_PHASE6_CROSS_FEATURE_COLUMNS)
     return columns
 
 
@@ -332,6 +341,7 @@ def build_ranker_dataset(
     include_text_embedding_feature: bool = False,
     include_domain_text_embedding_features: bool = False,
     include_text_rank_margin_features: bool = False,
+    include_phase6_cross_features: bool = False,
     text_similarity_fn: Callable[[int, HobbyCandidate], float] | None = None,
     text_similarity_lookup: dict[int, dict[int, float]] | None = None,
     domain_similarity_lookup: dict[int, dict[int, dict[str, float]]] | None = None,
@@ -354,6 +364,7 @@ def build_ranker_dataset(
         include_text_embedding_feature=include_text_embedding_feature,
         include_domain_text_embedding_features=include_domain_text_embedding_features,
         include_text_rank_margin_features=include_text_rank_margin_features,
+        include_phase6_cross_features=include_phase6_cross_features,
     )
 
     worker_count = parallel_workers if parallel_workers is not None else thread_workers

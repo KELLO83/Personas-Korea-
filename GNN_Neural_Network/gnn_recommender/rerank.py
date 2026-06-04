@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 import math
 
 from .data import PersonContext
+from .phase6 import build_stage2_cross_features
 from .recommend import Candidate
 
 _MAX_TRAIN_POPULARITY_CACHE_KEY = "__max_train_popularity"
@@ -179,6 +180,8 @@ def build_rerank_features(
         "source_count": source_is_popularity + source_is_cooccurrence,
         "text_embedding_similarity": text_embedding_similarity,
     }
+    features.update(build_stage2_cross_features(features))
+    return features
 
 
 def _require_train_only_profile(hobby_profile: dict[str, object]) -> None:

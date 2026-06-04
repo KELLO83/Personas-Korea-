@@ -2,6 +2,80 @@
 
 This file tracks executable tasks for `GNN_Neural_Network/` experiments. For requirements and design decisions, use `PRD.md`. For historical v2 reranker checklist details, use `CHECKLIST_GNN_Reranker_v2.md`.
 
+## Phase 6 Closure Status (2026-05-20)
+
+Current best Phase 6 candidate:
+
+```text
+run_id = phase6_domain_text_hard1_aliases_full_validation
+Stage1 = popularity + cooccurrence
+Stage2 = LightGBM(num_leaves=31)
+negative_sampling = neg_ratio=4, hard_ratio=1.0
+candidate_text_builder = name_plus_aliases
+include_text_embedding_feature = true
+include_domain_text_embedding_features = true
+KURE semantic Stage1 provider = false
+topic_calibration = optional lambda=0.02 post-ranker
+```
+
+### Completed Phase 6 Runs
+
+- [x] Implement Phase 6 experiment scaffolding and manifest validation.
+  - [x] `gnn_recommender/phase6.py`
+  - [x] `scripts/build_phase6_experiment_manifest.py`
+  - [x] `tests/test_phase6.py`
+- [x] Implement Stage2 cross features as opt-in LightGBM columns.
+  - [x] `age_group_region_cross_fit`
+  - [x] `occupation_region_cross_fit`
+  - [x] `demographic_text_cross_fit`
+  - [x] `--include-phase6-cross-features`
+  - [x] Result: rejected as standalone signal; full and pilot importances stayed `0.0`.
+- [x] Implement topic-calibrated cached-ranker evaluator.
+  - [x] `scripts/evaluate_topic_calibrated_ranker.py`
+  - [x] `lambda=0.02` validation/test runs completed for the best alias model.
+  - [x] Result: optional post-ranker only; slight metric gain, not a core model replacement.
+- [x] Run no-text baseline controls.
+  - [x] `phase6_baseline_m500`
+  - [x] `phase6_baseline_m2000`
+- [x] Run domain text feature pilots.
+  - [x] `phase6_domain_text_cross_m500`
+  - [x] `phase6_domain_text_cross_full_validation`
+  - [x] Result: large NDCG improvement, recall below validation recall leader.
+- [x] Combine domain text with old hard-negative sampling strength.
+  - [x] `phase6_domain_text_hard1_full_validation`
+  - [x] Result: improved over `phase6_domain_text_cross_full_validation`.
+- [x] Combine domain text, hard negatives, and alias candidate text.
+  - [x] `phase6_domain_text_hard1_aliases_full_validation`
+  - [x] validation Recall@10 `0.732523`, NDCG@10 `0.480773`
+  - [x] test Recall@10 `0.710786`, NDCG@10 `0.464645`
+  - [x] topic-calibrated test Recall@10 `0.711338`, NDCG@10 `0.464943`
+  - [x] Result: current best tested Phase 6 candidate; keep validation-recall caveat.
+- [x] Test KURE semantic Stage1 with the best alias/domain-text recipe.
+  - [x] `phase6_kure_stage1_domain_text_hard1_aliases_full_validation`
+  - [x] Result: rejected for this recipe. Validation oracle_recall@10 fell to `0.794326`, and final Recall@10 fell to `0.725338`.
+
+### Phase 6 Decision Checklist
+
+- [x] Keep Stage1 default as `popularity + cooccurrence`.
+- [x] Do not promote KURE semantic Stage1 for the current recipe.
+- [x] Keep `candidate_k=50`; do not use the KURE semantic full-provider pool as default.
+- [x] Keep domain text scalar similarity features; they are the main effective Phase 6 signal.
+- [x] Do not claim validation Recall@10 absolute SOTA.
+- [x] Record that the Phase 6 alias/domain-text model is the strongest stored test artifact for both Recall@10 and NDCG@10 in the scanned artifacts.
+- [x] Record experiment results in `artifacts/experiments/phase6_hobby_validation_summary.md`.
+- [x] Update `PRD.md` with the 2026-05-20 Phase 6 result and caveats.
+- [x] Update `TASKS.md` with completed/rejected/follow-up Phase 6 status.
+
+### Remaining Follow-Up Tasks
+
+- [ ] Decide whether `candidate_text_builder=name_plus_aliases` is acceptable for production governance.
+  - Alias text improved metrics, but older Track D notes flagged metadata provenance and taxonomy/canonicalization bias risk.
+  - Do not wire this into production API until the source-field policy is approved.
+- [ ] If production governance rejects aliases, rerun the best hard-negative/domain-text recipe with `name_only` and treat it as the deployable candidate.
+- [ ] Add a machine-readable Phase 6 decision record if the project keeps using `experiment_decisions.json` as the canonical default registry.
+- [ ] Optionally run cold-start/segment audits for the best alias/domain-text candidate before API integration.
+- [ ] Update README or deployment notes only after a production default decision is made.
+
 ## Current Data And KURE Preconditions (2026-05-05)
 
 This section is the executable blocker list before any `include_text_embedding_feature=true` KURE-v1 feature experiment. Use `KURE-v1` as the canonical model name; older `KRUE` wording in historical artifacts means KURE-v1.

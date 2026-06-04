@@ -40,6 +40,7 @@ from GNN_Neural_Network.gnn_recommender.embedding_cache import HobbyEmbeddingCac
 from GNN_Neural_Network.gnn_recommender.ranker import (
     LightGBMRanker,
     RANKER_DOMAIN_TEXT_FEATURE_COLUMNS,
+    RANKER_PHASE6_CROSS_FEATURE_COLUMNS,
     RANKER_TEXT_RANK_MARGIN_FEATURE_COLUMNS,
     build_ranker_dataset,
     build_text_rank_margin_lookup,
@@ -75,6 +76,11 @@ def parse_args() -> argparse.Namespace:
         "--include-text-rank-margin-features",
         action="store_true",
         help="Enable within-candidate-pool E5 similarity rank, percentile, and gap features.",
+    )
+    parser.add_argument(
+        "--include-phase6-cross-features",
+        action="store_true",
+        help="Enable Phase 6 demographic/lifestyle cross features without changing Stage1.",
     )
     parser.add_argument(
         "--candidate-text-builder",
@@ -591,6 +597,7 @@ def main() -> None:
         include_text_embedding_feature=args.include_text_embedding_feature,
         include_domain_text_embedding_features=args.include_domain_text_embedding_features,
         include_text_rank_margin_features=args.include_text_rank_margin_features,
+        include_phase6_cross_features=args.include_phase6_cross_features,
         text_similarity_fn=None,
         text_similarity_lookup=text_similarity_lookup,
         domain_similarity_lookup=domain_similarity_lookup,
@@ -612,6 +619,7 @@ def main() -> None:
         include_text_embedding_feature=args.include_text_embedding_feature,
         include_domain_text_embedding_features=args.include_domain_text_embedding_features,
         include_text_rank_margin_features=args.include_text_rank_margin_features,
+        include_phase6_cross_features=args.include_phase6_cross_features,
         text_similarity_fn=None,
         text_similarity_lookup=text_similarity_lookup,
         domain_similarity_lookup=domain_similarity_lookup,
@@ -697,6 +705,9 @@ def main() -> None:
             ),
             "include_text_rank_margin_features": any(
                 column in train_ds.feature_columns for column in RANKER_TEXT_RANK_MARGIN_FEATURE_COLUMNS
+            ),
+            "include_phase6_cross_features": any(
+                column in train_ds.feature_columns for column in RANKER_PHASE6_CROSS_FEATURE_COLUMNS
             ),
             "candidate_text_builder": args.candidate_text_builder,
         },

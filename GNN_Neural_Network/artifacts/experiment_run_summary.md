@@ -7,6 +7,62 @@ E5-small-ko-v2 domain-specific Stage2 validation and winner-only test. The
 current accuracy SOTA and production default is E5-small-ko-v2 domain-specific
 Stage2.
 
+## 2026-05-20 Phase 6 domain-text hard-negative alias follow-up
+
+Latest Phase 6 best candidate:
+
+```text
+run_id = phase6_domain_text_hard1_aliases_full_validation
+Stage 1 = popularity + cooccurrence
+Stage 2 = LightGBM(num_leaves=31)
+negative_sampling = neg_ratio=4, hard_ratio=1.0
+candidate_text_builder = name_plus_aliases
+include_text_embedding_feature = true
+include_domain_text_embedding_features = true
+KURE semantic Stage1 provider = false
+topic calibration = optional lambda=0.02 post-ranker
+```
+
+Run paths:
+
+- Train/model: `artifacts/experiments/phase6_domain_text_hard1_aliases_full_validation/ranker_model.txt`
+- Validation metrics: `artifacts/experiments/phase6_domain_text_hard1_aliases_full_validation/validation_metrics.json`
+- Test metrics: `artifacts/experiments/phase6_domain_text_hard1_aliases_full_validation/test_metrics.json`
+- Topic-calibrated validation: `artifacts/experiments/phase6_domain_text_hard1_aliases_full_validation/topic_calibrated_validation_lambda_0.02.json`
+- Topic-calibrated test: `artifacts/experiments/phase6_domain_text_hard1_aliases_full_validation/topic_calibrated_test_lambda_0.02.json`
+- Summary: `artifacts/experiments/phase6_hobby_validation_summary.md`
+
+| Split / Variant | Recall@10 | NDCG@10 | ILD@10 | Decision |
+| --- | ---: | ---: | ---: | --- |
+| validation | 0.732523 | 0.480773 | 0.969728 | eligible_for_test |
+| validation + topic calibration `lambda=0.02` | 0.732707 | 0.480842 | 0.969934 | optional post-ranker |
+| test | 0.710786 | 0.464645 | 0.969734 | promoted test artifact |
+| test + topic calibration `lambda=0.02` | 0.711338 | 0.464943 | 0.969949 | optional post-ranker |
+
+Important caveat:
+
+- This run does **not** beat the old validation Recall@10 leader
+  `phase2_5_neg_ratio_4_hard_1_0` (`0.742404` vs `0.732523`).
+- It does improve validation NDCG@10 substantially over that old leader
+  (`0.458620` -> `0.480773`).
+- It is the strongest stored test artifact found at this update time for both
+  Recall@10 and NDCG@10, but test results must not be used to retroactively
+  select models without the validation caveat.
+
+Rejected follow-ups:
+
+- Phase 6 cross features alone: no metric gain; cross feature importances stayed
+  `0.0`.
+- KURE semantic Stage1 with the best alias/domain-text recipe: rejected because
+  validation oracle_recall@10 dropped to `0.794326` and final Recall@10 dropped
+  to `0.725338`.
+
+Production governance note:
+
+- `candidate_text_builder=name_plus_aliases` is metric-positive, but production
+  wiring still requires alias source-field provenance and canonicalization bias
+  approval.
+
 ## Current default path
 
 ```text

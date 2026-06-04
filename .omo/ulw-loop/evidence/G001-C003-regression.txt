@@ -1,0 +1,72 @@
+.omo/plans\recommender-continuation-experiment-plan.md:18:The completed results are summarized in `docs/llm_wiki/person_hobby/results_summary.md`.
+.omo/plans\recommender-continuation-experiment-plan.md:28:Do not restart from Phase 2.5 alone. The latest artifact summary records E5-domain Stage2 as current default and Phase 6 alias/domain-text as strongest stored test artifact with validation/provenance caveats.
+.omo/plans\recommender-continuation-experiment-plan.md:32:The completed results are summarized in `docs/llm_wiki/persona_similarity/results_summary.md`.
+.omo/plans\recommender-continuation-experiment-plan.md:39:-> structured LambdaRank
+.omo/plans\recommender-continuation-experiment-plan.md:98:docs/llm_wiki/person_hobby/results_summary.md
+.omo/plans\recommender-continuation-experiment-plan.md:116:docs/llm_wiki/persona_similarity/results_summary.md
+.omo/plans\recommender-continuation-experiment-plan.md:125:Next work continues from E5-domain and Phase 6 artifacts.
+.omo/plans\recommender-continuation-experiment-plan.md:129:1. Lock the comparison baseline in a short decision note: E5-domain default vs Phase 6 optional post-ranker.
+.omo/plans\recommender-continuation-experiment-plan.md:139:Next work continues from structured LambdaRank, E5 text, and manual-review artifacts.
+.omo/plans\recommender-continuation-experiment-plan.md:143:1. Build or inspect manual review samples for structured LambdaRank, E5 text-only, structured+text, and diversity rerank outputs.
+.omo/plans\recommender-continuation-experiment-plan.md:156:rg -n "Code Inventory|Document Inventory|Next Experiment Plan|Already Completed Results" docs/llm_wiki/person_hobby docs/llm_wiki/persona_similarity .omo/plans/recommender-continuation-experiment-plan.md
+.omo/plans\recommender-continuation-experiment-plan.md:162:rg -n "Person -> Hobby|Person -> Person|Do not put|Do not merge|continue|not restart|not start from scratch" docs/llm_wiki/person_hobby docs/llm_wiki/persona_similarity .omo/plans/recommender-continuation-experiment-plan.md
+.omo/plans\recommender-continuation-experiment-plan.md:168:Test-Path docs/llm_wiki/person_hobby/results_summary.md
+.omo/plans\recommender-continuation-experiment-plan.md:169:Test-Path docs/llm_wiki/persona_similarity/results_summary.md
+.omo/plans\recommender-continuation-experiment-plan.md:171:rg -n "results_summary|recommender-continuation-experiment-plan|E5-domain|structured LambdaRank" docs/llm_wiki .omo/plans
+docs/llm_wiki\INDEX.md:33:- Continuation experiment plan: `.omo/plans/recommender-continuation-experiment-plan.md`
+docs/llm_wiki\INDEX.md:84:| 2026-06-04 | Hobby existing results | `person_hobby/results_summary.md` |
+docs/llm_wiki\INDEX.md:87:| 2026-06-04 | Similar-persona existing results | `persona_similarity/results_summary.md` |
+docs/llm_wiki\INDEX.md:89:| 2026-06-04 | Continuation experiment plan | `.omo/plans/recommender-continuation-experiment-plan.md` |
+docs/llm_wiki\LOG.md:12:  - Similar-persona structured LambdaRank is strong offline but blocked from promotion by weak-label/manual-review constraints.
+docs/llm_wiki\LOG.md:19:  - `docs/llm_wiki/person_hobby/results_summary.md`
+docs/llm_wiki\LOG.md:20:  - `docs/llm_wiki/persona_similarity/results_summary.md`
+docs/llm_wiki\LOG.md:22:- Recorded the hobby result-source caveat: `GNN_Neural_Network/EXPERIMENTS.md` is a Phase 2.5-era summary, while `GNN_Neural_Network/artifacts/experiment_run_summary.md` contains later E5-domain and Phase 6 results.
+docs/llm_wiki\LOG.md:28:- Added `.omo/plans/recommender-continuation-experiment-plan.md` so future work continues from existing results instead of restarting either recommender experiment.
+.omo/plans\recommender-alternative-methods-investigation.md:159:  - [ ] Inventory states similar-persona production behavior as FastRP/KNN `SIMILAR_TO` and offline structured LambdaRank as not promoted due manual review.
+.omo/plans\recommender-alternative-methods-investigation.md:166:    Steps: rg -n "popularity \\+ cooccurrence|candidate recall|FastRP/KNN|manual review|structured LambdaRank" .omo/evidence/recommender-methods/current-baseline-inventory.md
+docs/llm_wiki\persona_similarity\code_inventory.md:21:| `experiments/persona_similarity/scripts/train_lambdarank.py` | Train structured LambdaRank | Current best weak-label reranker |
+docs/llm_wiki\persona_similarity\code_inventory.md:56:Read `results_summary.md` before proposing any new model. Do not restart from raw FastRP as if structured LambdaRank, E5 text, text-builder, and diversity rerank experiments do not exist.
+docs/llm_wiki\persona_similarity\code_inventory.md:63:2. label failure modes for structured LambdaRank and text-driven examples,
+docs/llm_wiki\concepts\current_recommender_findings.md:14:There are two local result layers. `GNN_Neural_Network/EXPERIMENTS.md` records the Phase 2.5-era baseline. `GNN_Neural_Network/artifacts/experiment_run_summary.md` records later E5-domain and Phase 6 results. Use `docs/llm_wiki/person_hobby/results_summary.md` for the consolidated view.
+docs/llm_wiki\concepts\current_recommender_findings.md:83:- E5 text-only reranking shows useful signal versus raw FastRP, but structured+text does not beat structured LambdaRank under the current weak-label metric.
+docs/llm_wiki\person_hobby\code_inventory.md:55:Read `results_summary.md` before proposing any new run. Do not restart from Phase 2.5 as if later E5-domain and Phase 6 results do not exist.
+docs/llm_wiki\person_hobby\code_inventory.md:62:2. run slice/error analysis over the current E5-domain and Phase 6 candidates,
+docs/llm_wiki\persona_similarity\current_findings.md:33:- E5 text-only LambdaRank shows real semantic signal versus raw FastRP, but structured+text does not beat structured LambdaRank under current weak-label NDCG.
+docs/llm_wiki\persona_similarity\current_findings.md:40:1. Review text-driven and structured LambdaRank recommendation samples.
+docs/llm_wiki\person_hobby\document_inventory.md:24:| `GNN_Neural_Network/artifacts/experiment_run_summary.md` | Latest E5-domain and Phase 6 result summary |
+docs/llm_wiki\person_hobby\document_inventory.md:37:| `docs/llm_wiki/person_hobby/results_summary.md` | Consolidated completed results |
+docs/llm_wiki\person_hobby\document_inventory.md:53:Phase 2.5 -> E5-domain Stage2 -> Phase 6 alias/domain-text follow-up -> next continuation experiment
+docs/llm_wiki\person_hobby\README.md:29:- Existing results: `results_summary.md`
+docs/llm_wiki\person_hobby\current_findings.md:8:- `GNN_Neural_Network/artifacts/experiment_run_summary.md` records later E5-domain and Phase 6 follow-ups from 2026-05-17 to 2026-05-20.
+docs/llm_wiki\person_hobby\current_findings.md:10:Use `results_summary.md` as the LLM Wiki consolidation of both layers.
+docs/llm_wiki\person_hobby\current_findings.md:60:- Later E5-domain Stage2 runs changed the active baseline in `artifacts/experiment_run_summary.md`.
+docs/llm_wiki\persona_similarity\document_inventory.md:33:| `docs/llm_wiki/persona_similarity/results_summary.md` | Consolidated completed results |
+docs/llm_wiki\persona_similarity\document_inventory.md:42:Do not ignore the completed FastRP, deterministic, structured LambdaRank, rank_xendcg, E5 text, text-builder, hybrid, and diversity rerank metrics. The current blocker is manual review and semantic trust, not lack of an automatic weak-label score.
+docs/llm_wiki\persona_similarity\document_inventory.md:49:FastRP baseline -> deterministic baseline -> structured LambdaRank -> E5 text-only / structured+text -> diversity/text-builder ablations -> manual review and failure taxonomy -> next continuation experiment
+docs/llm_wiki\experiment_notes\2026-06-04-existing-results-consolidation.md:18:  - `docs/llm_wiki/person_hobby/results_summary.md`
+docs/llm_wiki\experiment_notes\2026-06-04-existing-results-consolidation.md:19:  - `docs/llm_wiki/persona_similarity/results_summary.md`
+docs/llm_wiki\experiment_notes\2026-06-04-existing-results-consolidation.md:32:For hobby recommendation, the result history moved beyond the old Phase 2.5 no-text baseline into E5-domain Stage2 and Phase 6 alias/domain-text experiments. The next work should respect the latest artifact summary while keeping governance caveats around candidate aliases and text provenance.
+docs/llm_wiki\experiment_notes\2026-06-04-existing-results-consolidation.md:34:For similar-persona recommendation, the automatic metrics are already very high for structured LambdaRank, so the next blocker is manual review and semantic trust rather than another automatic weak-label metric run.
+docs/llm_wiki\experiment_notes\2026-06-04-existing-results-consolidation.md:42:Use `person_hobby/results_summary.md` and `persona_similarity/results_summary.md` as the first wiki pages to read before proposing new recommendation experiments.
+docs/llm_wiki\experiment_notes\2026-06-04-existing-results-consolidation.md:46:- `Person -> Hobby`: continue from E5-domain Stage2 and Phase 6 artifacts; do not start from the older Phase 2.5 summary alone.
+docs/llm_wiki\experiment_notes\2026-06-04-existing-results-consolidation.md:47:- `Person -> Person`: continue from structured LambdaRank, E5 text, diversity, and manual-review artifacts; do not start from raw FastRP alone.
+docs/llm_wiki\experiment_notes\2026-06-04-existing-results-consolidation.md:49:- The executable follow-up plan is `.omo/plans/recommender-continuation-experiment-plan.md`.
+docs/llm_wiki\person_hobby\results_summary.md:10:| `GNN_Neural_Network/artifacts/experiment_run_summary.md` | 2026-05-17 plus 2026-05-20 follow-up | Later E5-domain and Phase 6 result record |
+docs/llm_wiki\person_hobby\results_summary.md:100:Decision: keep the E5-domain default unchanged because Recall improved slightly but NDCG regressed slightly on test.
+docs/llm_wiki\persona_similarity\README.md:29:- Existing results: `results_summary.md`
+docs/llm_wiki\concepts\recommender_method_shortlist.md:18:| 2 | Text-driven reranking with E5 baseline review | manual-review gated | Text-only has useful signal, but structured+text is not better than structured LambdaRank. |
+docs/llm_wiki\persona_similarity\experiment_plan.md:12:manual review of structured LambdaRank and text-driven examples
+docs/llm_wiki\persona_similarity\experiment_plan.md:29:structured LambdaRank
+docs/llm_wiki\persona_similarity\results_summary.md:30:| structured LambdaRank | 0.993136 | 0.993145 | 0.916560 | 0.083120 | best current weak-label reranker |
+docs/llm_wiki\persona_similarity\results_summary.md:59:- Structured+text LambdaRank is slightly below structured LambdaRank.
+docs/llm_wiki\persona_similarity\results_summary.md:67:| structured LambdaRank | 0.05 | 0.992938 | 0.992896 | 0.082520 | 0.573480 | 0.573440 | 0.835080 | not promoted |
+docs/llm_wiki\persona_similarity\results_summary.md:68:| structured LambdaRank | 0.1 | 0.992617 | 0.992480 | 0.080640 | 0.579600 | 0.582800 | 0.841200 | not promoted |
+docs/llm_wiki\persona_similarity\results_summary.md:69:| structured LambdaRank | 0.2 | 0.991906 | 0.991646 | 0.075680 | 0.590120 | 0.601400 | 0.852840 | optional tradeoff |
+docs/llm_wiki\persona_similarity\results_summary.md:74:Decision: diversity rerank improves diversity and low-information metrics, but NDCG drops versus direct structured LambdaRank.
+docs/llm_wiki\persona_similarity\results_summary.md:85:Decision: keep domain-specific E5 cosine as the preferred text feature shape for future text experiments, but do not promote it because structured LambdaRank remains the stronger weak-label reranker.
+docs/llm_wiki\persona_similarity\results_summary.md:118:1. structured LambdaRank,
+docs/llm_wiki\source_cards\recommender_methods\diversity_reranking.md:20:Similar-persona diversity reranking improved diversity and low-information metrics but lowered NDCG versus structured LambdaRank, so it remains an optional offline tradeoff.
+docs/llm_wiki\source_cards\recommender_methods\factorization_machines.md:20:For similar-persona ranking, FM-style interaction models are also plausible over pair features, but the current structured LambdaRank is already extremely strong on weak-label NDCG. Manual review remains the stronger blocker.
+docs/llm_wiki\source_cards\recommender_methods\factorization_machines.md:35:- Defer: Similar-persona FM until manual-review analysis shows structured LambdaRank failure modes.
+docs/llm_wiki\source_cards\recommender_methods\text_embedding_retrieval.md:14:Text embedding retrieval uses persona/domain text embeddings and cosine features to find or rerank semantically similar candidates. In this project, E5 domain-specific text cosine features already showed useful signal for similar-persona ranking, but did not beat structured LambdaRank under weak-label metrics.
+docs/llm_wiki\source_cards\recommender_methods\text_embedding_retrieval.md:18:For similar-persona recommendation, this is a meaningful offline track because text-only LambdaRank beats raw FastRP by a wide margin. However, structured+text does not beat structured LambdaRank and manual review is not approved.

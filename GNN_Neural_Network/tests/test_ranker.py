@@ -16,6 +16,7 @@ from GNN_Neural_Network.gnn_recommender.ranker import (
     RANKER_FEATURE_COLUMNS,
     RANKER_FEATURE_COLUMNS_WITH_SOURCE,
     RANKER_FEATURE_COLUMNS_WITH_TEXT_AND_DOMAIN,
+    RANKER_PHASE6_CROSS_FEATURE_COLUMNS,
     RANKER_TEXT_RANK_MARGIN_FEATURE_COLUMNS,
     LightGBMRanker,
     RankerDataset,
@@ -25,6 +26,7 @@ from GNN_Neural_Network.gnn_recommender.ranker import (
     load_or_build_candidate_pool,
     get_candidate_pool_cache_key,
     get_ranker_categorical_features,
+    get_ranker_feature_columns,
     sample_negatives,
 )
 from GNN_Neural_Network.gnn_recommender.baseline import build_cooccurrence_counts, build_popularity_counts
@@ -58,6 +60,13 @@ class TestRankerFeatureSchema:
         assert "is_cold_start" in categorical
         assert "source_is_popularity" in categorical
         assert "source_is_cooccurrence" in categorical
+
+    def test_phase6_cross_features_are_opt_in(self) -> None:
+        columns = get_ranker_feature_columns(include_phase6_cross_features=True)
+
+        for column in RANKER_PHASE6_CROSS_FEATURE_COLUMNS:
+            assert column in columns
+            assert column not in RANKER_FEATURE_COLUMNS
 
 
 class TestSampleNegatives:
