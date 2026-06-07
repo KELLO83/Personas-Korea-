@@ -937,3 +937,30 @@
   - [x] 검색/필터, 대시보드, 프로필 상세, 세그먼트 비교, 그래프 시각화는 Next.js 운영 프론트 기준으로 추적
 - [ ] Phase 2 엔드투엔드 테스트 (Next.js 검색 → 프로필 클릭 → 그래프 탐색 전체 흐름)
 - [ ] 성능 테스트 (검색/필터 응답 < 2초, 대시보드 부하 테스트)
+
+## Phase 28: 데이터셋 기반 관계형 추천/운영 품질 대시보드 구현
+
+> PRD §15 — 100만 persona 데이터셋과 현재 Neo4j 그래프만으로 동작하는 graph/rule fallback 제품 기능
+
+- [x] PRD 수립
+  - [x] Virtual Guild, similar-diverse, community profile, life-track, segment insight, recommendation quality dashboard API/UI 계획 작성
+- [x] 백엔드 API
+  - [x] `GET /api/persona/{uuid}/guilds`
+  - [x] `GET /api/persona/{uuid}/similar-diverse`
+  - [x] `GET /api/communities/{community_id}`
+  - [x] `GET /api/persona/{uuid}/life-track`
+  - [x] `POST /api/compare/segments` deterministic summary 확장
+  - [x] `GET /api/recommendation/quality`
+- [x] 프론트엔드
+  - [x] `관계형 추천` 탭 추가
+  - [x] Virtual Guild 패널
+  - [x] 비슷하지만 다른 페르소나 패널
+  - [x] Community Profile 패널
+  - [x] Life Track 패널
+  - [x] Segment Insight 자동 요약 패널
+  - [x] `운영 상태` 탭에 추천 품질 개발자 대시보드 추가
+- [ ] 검증
+  - [x] Python compile
+  - [x] backend route smoke test
+  - [x] frontend lint/build
+  - [x] Playwright 화면 확인

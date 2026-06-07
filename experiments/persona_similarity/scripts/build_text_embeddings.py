@@ -17,6 +17,7 @@ import polars as pl
 
 from GNN_Neural_Network.gnn_recommender.text_embedding import (
     DEFAULT_TORCH_COMPILE_MODE,
+    EmbeddingBackendConfig,
     compile_sentence_transformer,
     log_embedding_backend_policy,
     resolve_torch_dtype,
@@ -123,13 +124,15 @@ def main() -> None:
         model_kwargs["torch_dtype"] = resolved_dtype
     backend_policy = log_embedding_backend_policy(
         LOGGER,
-        model_name=str(text_config["model_name"]),
-        device=device,
-        attention_implementation=attention_implementation,
-        torch_dtype=torch_dtype_name,
-        torch_compile=torch_compile,
-        torch_compile_mode=torch_compile_mode,
-        prefix="Persona-similarity text embedding",
+        EmbeddingBackendConfig(
+            model_name=str(text_config["model_name"]),
+            device=device,
+            attention_implementation=attention_implementation,
+            torch_dtype=torch_dtype_name,
+            torch_compile=torch_compile,
+            torch_compile_mode=torch_compile_mode,
+        ),
+        "Persona-similarity text embedding",
     )
     model = SentenceTransformer(str(text_config["model_name"]), device=device, model_kwargs=model_kwargs or None)
     if torch_compile:

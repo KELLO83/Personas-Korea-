@@ -5,6 +5,7 @@ import numpy as np
 import torch
 
 from GNN_Neural_Network.gnn_recommender.text_embedding import (
+    EmbeddingBackendConfig,
     compile_sentence_transformer,
     log_embedding_backend_policy,
     resolve_torch_dtype,
@@ -136,13 +137,15 @@ class KureEmbedder:
                 model_kwargs["torch_dtype"] = resolved_dtype
             log_embedding_backend_policy(
                 logger,
-                model_name=self.model_name,
-                device=self.device,
-                attention_implementation=self.attention_implementation,
-                torch_dtype=self.torch_dtype,
-                torch_compile=self.torch_compile,
-                torch_compile_mode=self.torch_compile_mode,
-                prefix="KURE embedder",
+                EmbeddingBackendConfig(
+                    model_name=self.model_name,
+                    device=self.device,
+                    attention_implementation=self.attention_implementation,
+                    torch_dtype=self.torch_dtype,
+                    torch_compile=self.torch_compile,
+                    torch_compile_mode=self.torch_compile_mode,
+                ),
+                "KURE embedder",
             )
             model = SentenceTransformer(
                 self.model_name,

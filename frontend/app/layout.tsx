@@ -8,8 +8,13 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="ko">
+    <html lang="ko" suppressHydrationWarning>
       <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{var t=localStorage.getItem("persona-console-theme");document.documentElement.dataset.theme=t==="light"?"light":"dark";document.documentElement.style.colorScheme=t==="light"?"light":"dark"}catch(e){}`,
+          }}
+        />
         <link
           rel="stylesheet"
           as="style"

@@ -251,6 +251,7 @@ class DimensionComparison(BaseModel):
     common: list[str] = Field(default_factory=list)
     only_a: list[str] = Field(default_factory=list)
     only_b: list[str] = Field(default_factory=list)
+    insight_sentences: list[str] = Field(default_factory=list)
 
 
 class SegmentSummary(BaseModel):
@@ -269,7 +270,120 @@ class SegmentCompareResponse(BaseModel):
     segment_a: SegmentSummary
     segment_b: SegmentSummary
     comparisons: dict[str, DimensionComparison] = Field(default_factory=dict)
+    deterministic_summary: str = ""
     ai_analysis: str = ""
+
+
+class GuildMember(BaseModel):
+    uuid: str
+    display_name: str | None = None
+    age: int | None = None
+    occupation: str | None = None
+    province: str | None = None
+    district: str | None = None
+    pagerank: float | None = None
+    degree: float | None = None
+    is_leader: bool = False
+    score: float = 0.0
+
+
+class PersonaGuild(BaseModel):
+    guild_id: str
+    title: str
+    score: float
+    reason: str
+    shared_hobbies: list[str] = Field(default_factory=list)
+    shared_skills: list[str] = Field(default_factory=list)
+    top_occupations: list[str] = Field(default_factory=list)
+    members: list[GuildMember] = Field(default_factory=list)
+
+
+class PersonaGuildResponse(BaseModel):
+    source_uuid: str
+    source_community_id: int | None = None
+    scoring_policy: str
+    guilds: list[PersonaGuild] = Field(default_factory=list)
+
+
+class SimilarDiversePersona(BaseModel):
+    uuid: str
+    display_name: str | None = None
+    age: int | None = None
+    sex: str | None = None
+    occupation: str | None = None
+    province: str | None = None
+    district: str | None = None
+    similarity: float = 0.0
+    diversity_score: float = 0.0
+    final_score: float = 0.0
+    contrast_reasons: list[str] = Field(default_factory=list)
+    shared_hobbies: list[str] = Field(default_factory=list)
+    shared_skills: list[str] = Field(default_factory=list)
+
+
+class SimilarDiverseResponse(BaseModel):
+    source_uuid: str
+    diversity_axis: str
+    scoring_policy: str
+    results: list[SimilarDiversePersona] = Field(default_factory=list)
+
+
+class CommunityProfilePersona(BaseModel):
+    uuid: str
+    display_name: str | None = None
+    age: int | None = None
+    sex: str | None = None
+    occupation: str | None = None
+    province: str | None = None
+    district: str | None = None
+    pagerank: float | None = None
+
+
+class CommunityProfileResponse(BaseModel):
+    community_id: int
+    size: int = 0
+    label: str = ""
+    top_provinces: list[RankedItem] = Field(default_factory=list)
+    top_districts: list[RankedItem] = Field(default_factory=list)
+    top_occupations: list[RankedItem] = Field(default_factory=list)
+    top_education: list[RankedItem] = Field(default_factory=list)
+    top_hobbies: list[RankedItem] = Field(default_factory=list)
+    top_skills: list[RankedItem] = Field(default_factory=list)
+    age_distribution: list[DistributionItem] = Field(default_factory=list)
+    sex_distribution: list[DistributionItem] = Field(default_factory=list)
+    representative_personas: list[CommunityProfilePersona] = Field(default_factory=list)
+    summary: str = ""
+
+
+class LifeTrackRoleModel(BaseModel):
+    uuid: str
+    display_name: str | None = None
+    age: int | None = None
+    age_group: str | None = None
+    occupation: str | None = None
+    province: str | None = None
+    similarity: float = 0.0
+    shared_hobbies: list[str] = Field(default_factory=list)
+    shared_skills: list[str] = Field(default_factory=list)
+    different_attributes: list[str] = Field(default_factory=list)
+
+
+class LifeTrackTimelineItem(BaseModel):
+    age_band: str
+    evidence_count: int
+    representative_occupations: list[str] = Field(default_factory=list)
+    representative_skills: list[str] = Field(default_factory=list)
+    representative_hobbies: list[str] = Field(default_factory=list)
+
+
+class LifeTrackResponse(BaseModel):
+    source_uuid: str
+    source_age: int | None = None
+    cohort_definition: dict[str, Any] = Field(default_factory=dict)
+    role_models: list[LifeTrackRoleModel] = Field(default_factory=list)
+    timeline: list[LifeTrackTimelineItem] = Field(default_factory=list)
+    transitions: dict[str, list[RankedItem]] = Field(default_factory=dict)
+    interpretation_policy: str
 
 
 class InfluenceTopItem(BaseModel):
@@ -341,6 +455,30 @@ class RecommendationStatusResponse(BaseModel):
     hobby_recommender: RecommendationModelInfo
     persona_similarity_recommender: RecommendationModelInfo
     product_policy: str
+
+
+class RecommendationQualityMetric(BaseModel):
+    name: str
+    value: float
+    unit: str = "ratio"
+    status: str = "ok"
+    description: str = ""
+
+
+class RecommendationQualityTarget(BaseModel):
+    target: str
+    score_source: str = "fallback"
+    sample_size: int = 0
+    catalog_size: int = 0
+    metrics: list[RecommendationQualityMetric] = Field(default_factory=list)
+    top_targets: list[RankedItem] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    generated_at: str
+
+
+class RecommendationQualityResponse(BaseModel):
+    targets: list[RecommendationQualityTarget] = Field(default_factory=list)
+    dashboard_policy: str
 
 
 class TargetPersonaSample(BaseModel):
@@ -478,3 +616,49 @@ class RagTraceRecord(BaseModel):
 class RagTraceListResponse(BaseModel):
     tracing_enabled: bool
     traces: list[RagTraceRecord] = Field(default_factory=list)
+
+
+class OperationsHealthCheck(BaseModel):
+    name: str
+    status: str
+    latency_ms: float = 0.0
+    detail: str = ""
+
+
+class OperationsHealthResponse(BaseModel):
+    status: str
+    generated_at: str
+    api: OperationsHealthCheck
+    neo4j: OperationsHealthCheck
+    total_personas: int = 0
+    total_relationships: int = 0
+
+
+class OperationsReadinessMetric(BaseModel):
+    name: str
+    ready: bool
+    value: float
+    total: float
+    ratio: float
+    status: str
+    detail: str = ""
+
+
+class OperationsReadinessResponse(BaseModel):
+    status: str
+    generated_at: str
+    metrics: list[OperationsReadinessMetric] = Field(default_factory=list)
+
+
+class OperationsWarning(BaseModel):
+    code: str
+    severity: str
+    title: str
+    detail: str
+    action: str
+
+
+class OperationsWarningsResponse(BaseModel):
+    status: str
+    generated_at: str
+    warnings: list[OperationsWarning] = Field(default_factory=list)

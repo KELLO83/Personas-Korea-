@@ -2,19 +2,29 @@ import type {
   ApiErrorBody,
   ChatResponse,
   CareerTransitionResponse,
+  CommunityProfileResponse,
   GraphQualityResponse,
   LifestyleMapResponse,
+  LifeTrackResponse,
+  OperationsHealthResponse,
+  OperationsReadinessResponse,
+  OperationsWarningsResponse,
   PersonaProfileResponse,
+  PersonaGuildResponse,
   RagTraceListResponse,
+  RecommendationQualityResponse,
   RecommendationStatusResponse,
   SearchResponse,
+  SegmentCompareRequest,
+  SegmentCompareResponse,
+  SimilarDiverseResponse,
   SimilarityExplanationResponse,
   StatsResponse,
   SubgraphResponse,
   TargetPersonaResponse,
 } from "./api-types";
 
-const DEFAULT_API_BASE_URL = "http://localhost:8000";
+const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
 const DEFAULT_POST_TIMEOUT_MS = 60_000;
 const CHAT_TIMEOUT_MS = 90_000;
 
@@ -64,7 +74,7 @@ export async function apiGet<T>(path: string, params?: Record<string, string | n
   return (await response.json()) as T;
 }
 
-export async function apiPost<T>(path: string, payload: Record<string, unknown>, options: ApiPostOptions = {}): Promise<T> {
+export async function apiPost<T>(path: string, payload: unknown, options: ApiPostOptions = {}): Promise<T> {
   const controller = new AbortController();
   const timeoutMs = options.timeoutMs ?? DEFAULT_POST_TIMEOUT_MS;
   const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
@@ -95,6 +105,13 @@ export const personaApi = {
   profile: (uuid: string) => apiGet<PersonaProfileResponse>(`/api/persona/${encodeURIComponent(uuid)}`),
   similarityExplanation: (sourceUuid: string, targetUuid: string) =>
     apiGet<SimilarityExplanationResponse>(`/api/persona/${encodeURIComponent(sourceUuid)}/similar/${encodeURIComponent(targetUuid)}/explanation`),
+  guilds: (uuid: string) => apiGet<PersonaGuildResponse>(`/api/persona/${encodeURIComponent(uuid)}/guilds`),
+  similarDiverse: (uuid: string, params: { diversity_axis?: string; top_k?: number } = {}) =>
+    apiGet<SimilarDiverseResponse>(`/api/persona/${encodeURIComponent(uuid)}/similar-diverse`, params),
+  lifeTrack: (uuid: string, params: { target_age_min?: number; target_age_max?: number; top_k?: number } = {}) =>
+    apiGet<LifeTrackResponse>(`/api/persona/${encodeURIComponent(uuid)}/life-track`, params),
+  communityProfile: (communityId: number) => apiGet<CommunityProfileResponse>(`/api/communities/${encodeURIComponent(String(communityId))}`),
+  compareSegments: (payload: SegmentCompareRequest) => apiPost<SegmentCompareResponse>("/api/compare/segments", payload),
   graph: (uuid: string, params: { depth: number; max_nodes: number; include_similar: boolean; max_similar?: number }) =>
     apiGet<SubgraphResponse>(`/api/graph/subgraph/${encodeURIComponent(uuid)}`, params),
   chat: (payload: { session_id: string; message: string; stream: boolean }) => apiPost<ChatResponse>("/api/chat", payload, { timeoutMs: CHAT_TIMEOUT_MS }),
@@ -103,5 +120,9 @@ export const personaApi = {
   careerTransition: (params: Record<string, string | number | boolean | null | undefined>) => apiGet<CareerTransitionResponse>("/api/career-transition-map", params),
   graphQuality: () => apiGet<GraphQualityResponse>("/api/graph-quality"),
   recommendationStatus: () => apiGet<RecommendationStatusResponse>("/api/recommendation/status"),
+  recommendationQuality: () => apiGet<RecommendationQualityResponse>("/api/recommendation/quality"),
+  operationsHealth: () => apiGet<OperationsHealthResponse>("/api/operations/health"),
+  operationsReadiness: () => apiGet<OperationsReadinessResponse>("/api/operations/readiness"),
+  operationsWarnings: () => apiGet<OperationsWarningsResponse>("/api/operations/warnings"),
   ragTraces: (params: { limit?: number } = {}) => apiGet<RagTraceListResponse>("/api/admin/rag/traces", params),
 };

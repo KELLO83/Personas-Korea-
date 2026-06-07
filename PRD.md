@@ -1589,7 +1589,60 @@ docs/
 
 ---
 
-**작성일**: 2026-05-20  
-**버전**: v2.5-f16-f28-serving-premium  
-**상태**: Phase 3 핵심 구현 완료 / Phase 4 및 실시간 모델 서빙 규격 수립 완료 / F16-F28 확장 및 UI 시각화 계획 추가  
+## 15. F26-F31 데이터셋 기반 확장 기능 구현 계획
+
+> **범위**: 본 섹션은 현재 Nemotron-Personas-Korea 로컬 그래프와 26개 원천 컬럼만으로 동작하는 제품 기능이다. 훈련 모델 승격 전에는 Neo4j `SIMILAR_TO`, community, 지역, 취미/스킬/직업 관계를 사용하는 graph/rule fallback을 기본 score source로 둔다.
+
+### 15.1 Virtual Guild 소모임 추천
+
+- **API**: `GET /api/persona/{uuid}/guilds`
+- **입력**: source persona UUID
+- **출력**: `source_community_id`, `scoring_policy`, `guilds[]`
+- **점수 기준**: `SIMILAR_TO` 점수, same community, same district/province, shared hobby/skill, PageRank/degree
+- **UI**: `관계형 추천` 탭의 `Virtual Guild` 패널
+- **완료 기준**: source persona에 대해 최소 1개 guild 또는 명확한 empty state를 반환하고, leader/member/reason이 노출된다.
+
+### 15.2 비슷하지만 다른 페르소나 탐색
+
+- **API**: `GET /api/persona/{uuid}/similar-diverse?diversity_axis=mixed|occupation|location|community|demographic`
+- **출력**: 유사도, 다양성 점수, 최종 점수, contrast reason, 공유 취미/스킬
+- **점수 기준**: `final = similarity * 0.58 + diversity * 0.30 + shared hobby/skill support`
+- **UI**: `관계형 추천` 탭의 `비슷하지만 다른 페르소나` 패널
+- **완료 기준**: axis 변경 시 다른 contrast reason이 표시되고, target persona 선택이 가능하다.
+
+### 15.3 Community Profile Explorer
+
+- **API**: `GET /api/communities/{community_id}`
+- **출력**: size, label, top province/district/occupation/education/hobby/skill, age/sex distribution, representative personas
+- **UI**: 선택 persona의 community를 자동 조회해 `관계형 추천` 탭에 표시
+- **완료 기준**: community summary와 대표 persona가 함께 표시되고, profile 전환이 가능하다.
+
+### 15.4 Life Track 롤모델 경로 탐색
+
+- **API**: `GET /api/persona/{uuid}/life-track`
+- **입력 파라미터**: `target_age_min`, `target_age_max`, `top_k`
+- **정책**: 미래 예측이 아니라 유사 older cohort에서 관찰된 직업/스킬/취미 패턴 탐색으로 표시한다.
+- **UI**: `관계형 추천` 탭의 `Life Track` 패널
+- **완료 기준**: role model, timeline, transition top items가 근거 수와 함께 표시된다.
+
+### 15.5 Segment Insight 자동 요약
+
+- **API**: 기존 `POST /api/compare/segments` 응답에 `deterministic_summary`, `insight_sentences` 추가
+- **정책**: LLM 없이도 8%p 이상 차이를 deterministic sentence로 생성한다.
+- **UI**: `관계형 추천` 탭의 `세그먼트 자동 요약` 패널
+- **완료 기준**: 두 segment count와 hobby/occupation/education 차이 요약이 반환된다.
+
+### 15.6 추천 품질 운영 대시보드
+
+- **API**: `GET /api/recommendation/quality`
+- **대상**: `hobby`, `persona_similarity`
+- **지표**: coverage, diversity, hub_target_rate, weak_only_rate, explanation_coverage, query_latency_ms
+- **UI**: `운영 상태` 탭의 개발자용 품질 대시보드
+- **완료 기준**: fallback score source 기준으로 sample size, catalog size, top targets, warning, metric detail을 표시한다.
+
+---
+
+**작성일**: 2026-05-20
+**버전**: v2.5-f16-f28-serving-premium
+**상태**: Phase 3 핵심 구현 완료 / Phase 4 및 실시간 모델 서빙 규격 수립 완료 / F16-F28 확장 및 UI 시각화 계획 추가
 **다음 단계**: 훈련 모델 가중치 실시간 서빙 및 Premium UI/UX 4대 조항에 기반한 백엔드/프론트엔드 프로토타입 구현 → 400ms SLA 충족 여부 벤치마크 → D3.js 및 ECharts 결합 대시보드 품질 검수 → F26-F28 관계형 추천 경험 프로토타입 검증

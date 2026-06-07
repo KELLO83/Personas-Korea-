@@ -166,6 +166,182 @@ export interface RecommendationStatusResponse {
   product_policy: string;
 }
 
+export interface RecommendationQualityMetric {
+  name: string;
+  value: number;
+  unit: string;
+  status: string;
+  description: string;
+}
+
+export interface RecommendationQualityTarget {
+  target: string;
+  score_source: string;
+  sample_size: number;
+  catalog_size: number;
+  metrics: RecommendationQualityMetric[];
+  top_targets: RankedItem[];
+  warnings: string[];
+  generated_at: string;
+}
+
+export interface RecommendationQualityResponse {
+  targets: RecommendationQualityTarget[];
+  dashboard_policy: string;
+}
+
+export interface GuildMember {
+  uuid: string;
+  display_name: string | null;
+  age: number | null;
+  occupation: string | null;
+  province: string | null;
+  district: string | null;
+  pagerank: number | null;
+  degree: number | null;
+  is_leader: boolean;
+  score: number;
+}
+
+export interface PersonaGuild {
+  guild_id: string;
+  title: string;
+  score: number;
+  reason: string;
+  shared_hobbies: string[];
+  shared_skills: string[];
+  top_occupations: string[];
+  members: GuildMember[];
+}
+
+export interface PersonaGuildResponse {
+  source_uuid: string;
+  source_community_id: number | null;
+  scoring_policy: string;
+  guilds: PersonaGuild[];
+}
+
+export interface SimilarDiversePersona {
+  uuid: string;
+  display_name: string | null;
+  age: number | null;
+  sex: string | null;
+  occupation: string | null;
+  province: string | null;
+  district: string | null;
+  similarity: number;
+  diversity_score: number;
+  final_score: number;
+  contrast_reasons: string[];
+  shared_hobbies: string[];
+  shared_skills: string[];
+}
+
+export interface SimilarDiverseResponse {
+  source_uuid: string;
+  diversity_axis: string;
+  scoring_policy: string;
+  results: SimilarDiversePersona[];
+}
+
+export interface CommunityProfilePersona {
+  uuid: string;
+  display_name: string | null;
+  age: number | null;
+  sex: string | null;
+  occupation: string | null;
+  province: string | null;
+  district: string | null;
+  pagerank: number | null;
+}
+
+export interface CommunityProfileResponse {
+  community_id: number;
+  size: number;
+  label: string;
+  top_provinces: RankedItem[];
+  top_districts: RankedItem[];
+  top_occupations: RankedItem[];
+  top_education: RankedItem[];
+  top_hobbies: RankedItem[];
+  top_skills: RankedItem[];
+  age_distribution: DistributionItem[];
+  sex_distribution: DistributionItem[];
+  representative_personas: CommunityProfilePersona[];
+  summary: string;
+}
+
+export interface LifeTrackRoleModel {
+  uuid: string;
+  display_name: string | null;
+  age: number | null;
+  age_group: string | null;
+  occupation: string | null;
+  province: string | null;
+  similarity: number;
+  shared_hobbies: string[];
+  shared_skills: string[];
+  different_attributes: string[];
+}
+
+export interface LifeTrackTimelineItem {
+  age_band: string;
+  evidence_count: number;
+  representative_occupations: string[];
+  representative_skills: string[];
+  representative_hobbies: string[];
+}
+
+export interface LifeTrackResponse {
+  source_uuid: string;
+  source_age: number | null;
+  cohort_definition: ApiRecord;
+  role_models: LifeTrackRoleModel[];
+  timeline: LifeTrackTimelineItem[];
+  transitions: Record<string, RankedItem[]>;
+  interpretation_policy: string;
+}
+
+export interface SegmentFilter {
+  province?: string;
+  district?: string;
+  age_group?: string;
+  sex?: string;
+  education_level?: string;
+  hobby?: string;
+  skill?: string;
+}
+
+export interface SegmentCompareRequest {
+  segment_a: { label: string; filters: SegmentFilter };
+  segment_b: { label: string; filters: SegmentFilter };
+  dimensions: string[];
+  top_k: number;
+}
+
+export interface CompareDistributionItem {
+  name: string;
+  count: number;
+  ratio: number;
+}
+
+export interface DimensionComparison {
+  segment_a: CompareDistributionItem[];
+  segment_b: CompareDistributionItem[];
+  common: string[];
+  only_a: string[];
+  only_b: string[];
+  insight_sentences: string[];
+}
+
+export interface SegmentCompareResponse {
+  segment_a: { label: string; count: number };
+  segment_b: { label: string; count: number };
+  comparisons: Record<string, DimensionComparison>;
+  deterministic_summary: string;
+  ai_analysis: string;
+}
+
 export interface RagTraceSpan {
   name: string;
   status: string;
@@ -295,6 +471,52 @@ export interface GraphQualityCheck {
 export interface GraphQualityResponse {
   checks: GraphQualityCheck[];
   migration_plan: GraphMigrationStep[];
+}
+
+export interface OperationsHealthCheck {
+  name: string;
+  status: string;
+  latency_ms: number;
+  detail: string;
+}
+
+export interface OperationsHealthResponse {
+  status: string;
+  generated_at: string;
+  api: OperationsHealthCheck;
+  neo4j: OperationsHealthCheck;
+  total_personas: number;
+  total_relationships: number;
+}
+
+export interface OperationsReadinessMetric {
+  name: string;
+  ready: boolean;
+  value: number;
+  total: number;
+  ratio: number;
+  status: string;
+  detail: string;
+}
+
+export interface OperationsReadinessResponse {
+  status: string;
+  generated_at: string;
+  metrics: OperationsReadinessMetric[];
+}
+
+export interface OperationsWarning {
+  code: string;
+  severity: string;
+  title: string;
+  detail: string;
+  action: string;
+}
+
+export interface OperationsWarningsResponse {
+  status: string;
+  generated_at: string;
+  warnings: OperationsWarning[];
 }
 
 export interface ApiErrorBody {

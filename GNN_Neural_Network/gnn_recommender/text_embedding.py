@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import logging
 import os
 import re
-import logging
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +17,26 @@ DEFAULT_TORCH_COMPILE = False
 DEFAULT_TORCH_COMPILE_MODE = "reduce-overhead"
 _KURE_MODEL_CACHE: dict[str, Any] = {}
 LOGGER = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class EmbeddingBackendConfig:
+    model_name: str
+    device: str
+    attention_implementation: str = DEFAULT_ATTENTION_IMPLEMENTATION
+    torch_dtype: str = DEFAULT_TORCH_DTYPE
+    torch_compile: bool = DEFAULT_TORCH_COMPILE
+    torch_compile_mode: str = DEFAULT_TORCH_COMPILE_MODE
+
+    def cache_parts(self) -> tuple[str, ...]:
+        return (
+            self.model_name,
+            self.device or "default",
+            self.attention_implementation,
+            self.torch_dtype,
+            str(bool(self.torch_compile)),
+            self.torch_compile_mode,
+        )
 
 
 class HobbyEmbeddingCache:
@@ -164,17 +185,15 @@ def _load_kure_model(
     torch_compile: bool = DEFAULT_TORCH_COMPILE,
     torch_compile_mode: str = DEFAULT_TORCH_COMPILE_MODE,
 ) -> Any:
-    cache_key = "|".join(
-        (
-            model_name,
-            model_revision,
-            device or "default",
-            attention_implementation,
-            torch_dtype,
-            str(bool(torch_compile)),
-            torch_compile_mode,
-        )
+    backend_config = EmbeddingBackendConfig(
+        model_name=model_name,
+        device=device or "default",
+        attention_implementation=attention_implementation,
+        torch_dtype=torch_dtype,
+        torch_compile=torch_compile,
+        torch_compile_mode=torch_compile_mode,
     )
+    cache_key = "|".join((model_revision, *backend_config.cache_parts()))
     cached = _KURE_MODEL_CACHE.get(cache_key)
     if cached is not None:
         return cached
@@ -189,27 +208,22 @@ def _load_kure_model(
         kwargs["device"] = device
     if model_revision:
         kwargs["revision"] = model_revision
-    resolved_dtype = resolve_torch_dtype(torch_dtype, device)
+    resolved_dtype = resolve_torch_dtype(backend_config.torch_dtype, backend_config.device)
     model_kwargs: dict[str, Any] = {}
-    if attention_implementation:
-        model_kwargs["attn_implementation"] = attention_implementation
+    if backend_config.attention_implementation:
+        model_kwargs["attn_implementation"] = backend_config.attention_implementation
     if resolved_dtype is not None:
         model_kwargs["torch_dtype"] = resolved_dtype
     if model_kwargs:
         kwargs["model_kwargs"] = model_kwargs
     log_embedding_backend_policy(
         LOGGER,
-        model_name=model_name,
-        device=device or "default",
-        attention_implementation=attention_implementation,
-        torch_dtype=torch_dtype,
-        torch_compile=torch_compile,
-        torch_compile_mode=torch_compile_mode,
-        prefix="Loading SentenceTransformer",
+        backend_config,
+        "Loading SentenceTransformer",
     )
     model = SentenceTransformer(model_name, **kwargs)
-    if torch_compile:
-        model = compile_sentence_transformer(model, torch_compile_mode)
+    if backend_config.torch_compile:
+        model = compile_sentence_transformer(model, backend_config.torch_compile_mode)
     if hasattr(model, "max_seq_length"):
         model.max_seq_length = 512
     _KURE_MODEL_CACHE[cache_key] = model
@@ -249,15 +263,7 @@ def compile_sentence_transformer(model: Any, mode: str = DEFAULT_TORCH_COMPILE_M
     return model
 
 
-def embedding_backend_policy(
-    *,
-    model_name: str,
-    device: str,
-    attention_implementation: str,
-    torch_dtype: str,
-    torch_compile: bool,
-    torch_compile_mode: str,
-) -> dict[str, Any]:
+def embedding_backend_policy(config: EmbeddingBackendConfig) -> dict[str, Any]:
     try:
         import torch
 
@@ -274,12 +280,12 @@ def embedding_backend_policy(
         cuda_flags = {"error": repr(exc)}
         priority_order = []
     return {
-        "model_name": model_name,
-        "device": device,
-        "attention_implementation": attention_implementation,
-        "torch_dtype": torch_dtype,
-        "torch_compile": bool(torch_compile),
-        "torch_compile_mode": torch_compile_mode if torch_compile else "",
+        "model_name": config.model_name,
+        "device": config.device,
+        "attention_implementation": config.attention_implementation,
+        "torch_dtype": config.torch_dtype,
+        "torch_compile": bool(config.torch_compile),
+        "torch_compile_mode": config.torch_compile_mode if config.torch_compile else "",
         "cuda_available": cuda_available,
         "sdpa_backend_selection": "auto_by_pytorch_dispatcher",
         "sdpa_actual_kernel_visibility": "not_exposed_by_public_api_per_call",
@@ -290,23 +296,10 @@ def embedding_backend_policy(
 
 def log_embedding_backend_policy(
     logger: logging.Logger,
-    *,
-    model_name: str,
-    device: str,
-    attention_implementation: str,
-    torch_dtype: str,
-    torch_compile: bool,
-    torch_compile_mode: str,
+    config: EmbeddingBackendConfig,
     prefix: str,
 ) -> dict[str, Any]:
-    policy = embedding_backend_policy(
-        model_name=model_name,
-        device=device,
-        attention_implementation=attention_implementation,
-        torch_dtype=torch_dtype,
-        torch_compile=torch_compile,
-        torch_compile_mode=torch_compile_mode,
-    )
+    policy = embedding_backend_policy(config)
     logger.info(
         "%s backend policy: model=%s device=%s attn_implementation=%s dtype=%s compile=%s compile_mode=%s "
         "sdpa_selection=%s enabled_backends=%s priority=%s",

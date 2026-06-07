@@ -55,6 +55,7 @@ from GNN_Neural_Network.gnn_recommender.text_embedding import (  # noqa: E402
     DEFAULT_TORCH_COMPILE,
     DEFAULT_TORCH_COMPILE_MODE,
     DEFAULT_TORCH_DTYPE,
+    EmbeddingBackendConfig,
     KURE_MODEL_NAME,
     log_embedding_backend_policy,
     mask_holdout_hobbies,
@@ -338,13 +339,15 @@ def main() -> None:
         )
         embedding_backend_policy = log_embedding_backend_policy(
             LOGGER,
-            model_name=text_embedding_model_name,
-            device=kure_device,
-            attention_implementation=text_embedding_attention_implementation,
-            torch_dtype=text_embedding_torch_dtype,
-            torch_compile=text_embedding_torch_compile,
-            torch_compile_mode=text_embedding_torch_compile_mode,
-            prefix="Train text embedding",
+            EmbeddingBackendConfig(
+                model_name=text_embedding_model_name,
+                device=kure_device,
+                attention_implementation=text_embedding_attention_implementation,
+                torch_dtype=text_embedding_torch_dtype,
+                torch_compile=text_embedding_torch_compile,
+                torch_compile_mode=text_embedding_torch_compile_mode,
+            ),
+            "Train text embedding",
         )
         person_embedding_cache = PersonEmbeddingCache(
             text_embedding_cache_dir,
@@ -496,13 +499,15 @@ def main() -> None:
         if not embedding_backend_policy:
             embedding_backend_policy = log_embedding_backend_policy(
                 LOGGER,
-                model_name=text_embedding_model_name,
-                device=kure_device,
-                attention_implementation=text_embedding_attention_implementation,
-                torch_dtype=text_embedding_torch_dtype,
-                torch_compile=text_embedding_torch_compile,
-                torch_compile_mode=text_embedding_torch_compile_mode,
-                prefix="Train Stage1 text embedding",
+                EmbeddingBackendConfig(
+                    model_name=text_embedding_model_name,
+                    device=kure_device,
+                    attention_implementation=text_embedding_attention_implementation,
+                    torch_dtype=text_embedding_torch_dtype,
+                    torch_compile=text_embedding_torch_compile,
+                    torch_compile_mode=text_embedding_torch_compile_mode,
+                ),
+                "Train Stage1 text embedding",
             )
         if person_embedding_cache is None:
             person_embedding_cache = PersonEmbeddingCache(

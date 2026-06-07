@@ -1,7 +1,19 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import type { ChatMessage, PersonaProfileResponse, RagTraceListResponse, RecommendationStatusResponse, SearchResponse, StatsResponse, SubgraphResponse } from "@/lib/api-types";
+import type {
+  ChatMessage,
+  OperationsHealthResponse,
+  OperationsReadinessResponse,
+  OperationsWarningsResponse,
+  PersonaProfileResponse,
+  RagTraceListResponse,
+  RecommendationQualityResponse,
+  RecommendationStatusResponse,
+  SearchResponse,
+  StatsResponse,
+  SubgraphResponse,
+} from "@/lib/api-types";
 import { personaApi } from "@/lib/api-client";
 import { DEFAULT_PERSONA_UUID } from "@/lib/constants";
 import { shortUuid, uuidWithName } from "@/lib/formatters";
@@ -14,14 +26,31 @@ import { GraphSection } from "@/components/graph-section";
 import { ChatSection } from "@/components/chat-section";
 import { InsightsSection } from "@/components/insights-section";
 import { OperationsSection } from "@/components/operations-section";
+import { RelationshipSection } from "@/components/relationship-section";
 
-type ViewKey = "dashboard" | "search" | "profile" | "graph" | "chat" | "insights" | "operations";
+type ViewKey = "dashboard" | "search" | "profile" | "graph" | "relationships" | "chat" | "insights" | "operations";
+type ThemeMode = "dark" | "light";
+
+const themeStorageKey = "persona-console-theme";
+const defaultThemeMode: ThemeMode = "dark";
+
+function getStoredTheme(): ThemeMode {
+  if (typeof window === "undefined") return defaultThemeMode;
+  return window.localStorage.getItem(themeStorageKey) === "light" ? "light" : defaultThemeMode;
+}
+
+function applyTheme(mode: ThemeMode) {
+  document.documentElement.dataset.theme = mode;
+  document.documentElement.style.colorScheme = mode;
+  window.localStorage.setItem(themeStorageKey, mode);
+}
 
 const views: Array<{ key: ViewKey; label: string; caption: string }> = [
   { key: "dashboard", label: "대시보드", caption: "전체 분포" },
   { key: "search", label: "검색/필터", caption: "페르소나 탐색" },
   { key: "profile", label: "프로필", caption: "상세 정보" },
   { key: "graph", label: "그래프", caption: "관계 맵" },
+  { key: "relationships", label: "관계형 추천", caption: "Guild/Life Track" },
   { key: "chat", label: "대화형 탐색", caption: "질문 기반 분석" },
   { key: "insights", label: "확장 분석", caption: "F16-F18 검수" },
   { key: "operations", label: "운영 상태", caption: "추천/RAG 관측성" },
@@ -40,6 +69,7 @@ const ragTraceAdminAutoLoad = process.env.NEXT_PUBLIC_RAG_TRACE_ADMIN_ENABLED ==
 
 export default function Home() {
   const [activeView, setActiveView] = useState<ViewKey>("dashboard");
+  const [themeMode, setThemeMode] = useState<ThemeMode>(defaultThemeMode);
   const [selectedUuid, setSelectedUuid] = useState(DEFAULT_PERSONA_UUID);
   const [selectedLabel, setSelectedLabel] = useState("기본 페르소나");
   const [stats, loadStats] = useLoadable<StatsResponse>();
@@ -47,6 +77,10 @@ export default function Home() {
   const [profile, loadProfile] = useLoadable<PersonaProfileResponse>();
   const [graph, loadGraph] = useLoadable<SubgraphResponse>();
   const [recommendationStatus, loadRecommendationStatus] = useLoadable<RecommendationStatusResponse>();
+  const [recommendationQuality, loadRecommendationQuality] = useLoadable<RecommendationQualityResponse>();
+  const [operationsHealth, loadOperationsHealth] = useLoadable<OperationsHealthResponse>();
+  const [operationsReadiness, loadOperationsReadiness] = useLoadable<OperationsReadinessResponse>();
+  const [operationsWarnings, loadOperationsWarnings] = useLoadable<OperationsWarningsResponse>();
   const [ragTraces, loadRagTraces] = useLoadable<RagTraceListResponse>();
   const [filters, setFilters] = useState<SearchFilters>(emptySearchFilters);
   const [page, setPage] = useState(1);
@@ -58,9 +92,52 @@ export default function Home() {
   const selectedDisplayName = selectedProfileName ?? (selectedLabel === "기본 페르소나" ? "이름 미등록" : selectedLabel);
 
   useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const nextTheme = getStoredTheme();
+      setThemeMode(nextTheme);
+      applyTheme(nextTheme);
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
     void loadStats(() => personaApi.stats());
     void loadRecommendationStatus(() => personaApi.recommendationStatus());
   }, [loadRecommendationStatus, loadStats]);
+
+  useEffect(() => {
+    if (activeView === "operations" && !recommendationQuality.data && !recommendationQuality.loading && !recommendationQuality.error) {
+      void loadRecommendationQuality(() => personaApi.recommendationQuality());
+    }
+    if (activeView === "operations" && !operationsHealth.data && !operationsHealth.loading && !operationsHealth.error) {
+      void loadOperationsHealth(() => personaApi.operationsHealth());
+    }
+    if (activeView === "operations" && !operationsReadiness.data && !operationsReadiness.loading && !operationsReadiness.error) {
+      void loadOperationsReadiness(() => personaApi.operationsReadiness());
+    }
+    if (activeView === "operations" && !operationsWarnings.data && !operationsWarnings.loading && !operationsWarnings.error) {
+      void loadOperationsWarnings(() => personaApi.operationsWarnings());
+    }
+  }, [
+    activeView,
+    loadOperationsHealth,
+    loadOperationsReadiness,
+    loadOperationsWarnings,
+    loadRecommendationQuality,
+    operationsHealth.data,
+    operationsHealth.error,
+    operationsHealth.loading,
+    operationsReadiness.data,
+    operationsReadiness.error,
+    operationsReadiness.loading,
+    operationsWarnings.data,
+    operationsWarnings.error,
+    operationsWarnings.loading,
+    recommendationQuality.data,
+    recommendationQuality.error,
+    recommendationQuality.loading,
+  ]);
 
   useEffect(() => {
     if (ragTraceAdminAutoLoad && activeView === "operations" && !ragTraces.data && !ragTraces.loading && !ragTraces.error) {
@@ -94,6 +171,11 @@ export default function Home() {
     setActiveView("graph");
   }
 
+  function changeTheme(mode: ThemeMode) {
+    setThemeMode(mode);
+    applyTheme(mode);
+  }
+
   function resetChat() {
     resetChatSessionId();
     setChatMessages([]);
@@ -104,6 +186,10 @@ export default function Home() {
 
   function refreshOperations() {
     void loadRecommendationStatus(() => personaApi.recommendationStatus());
+    void loadRecommendationQuality(() => personaApi.recommendationQuality());
+    void loadOperationsHealth(() => personaApi.operationsHealth());
+    void loadOperationsReadiness(() => personaApi.operationsReadiness());
+    void loadOperationsWarnings(() => personaApi.operationsWarnings());
     void loadRagTraces(() => personaApi.ragTraces({ limit: 20 }));
   }
 
@@ -139,6 +225,14 @@ export default function Home() {
         <div className="brand-mark">KG</div>
         <div className="eyebrow">Nemotron Personas</div>
         <h1 className="brand-title">Persona Knowledge Console</h1>
+        <div className="theme-switch" role="group" aria-label="테마 선택">
+          <button className={themeMode === "dark" ? "active" : ""} type="button" aria-pressed={themeMode === "dark"} onClick={() => changeTheme("dark")}>
+            다크
+          </button>
+          <button className={themeMode === "light" ? "active" : ""} type="button" aria-pressed={themeMode === "light"} onClick={() => changeTheme("light")}>
+            라이트
+          </button>
+        </div>
         <nav className="nav-list" aria-label="주요 화면">
           {views.map((view) => (
             <button key={view.key} className={`nav-button ${activeView === view.key ? "active" : ""}`} onClick={() => setActiveView(view.key)}>
@@ -179,9 +273,20 @@ export default function Home() {
         {activeView === "search" && <SearchSection filters={filters} page={page} search={search} onFilterChange={updateFilter} onSearch={submitSearch} onSelect={selectPersona} />}
         {activeView === "profile" && <ProfileSection profile={profile} selectedUuid={selectedUuid} onUuidChange={(uuid) => selectPersona(uuid, null)} onSelectPersona={selectPersona} />}
         {activeView === "graph" && <GraphSection graph={graph} profile={profile.data} onSelectPersona={selectGraphPersona} />}
+        {activeView === "relationships" && <RelationshipSection selectedUuid={selectedUuid} profile={profile} onSelectPersona={selectPersona} />}
         {activeView === "chat" && <ChatSection messages={chatMessages} input={chatInput} loading={chatLoading} error={chatError} onInputChange={setChatInput} onSubmit={submitChat} onReset={resetChat} />}
         {activeView === "insights" && <InsightsSection />}
-        {activeView === "operations" && <OperationsSection recommendationStatus={recommendationStatus} ragTraces={ragTraces} onRefresh={refreshOperations} />}
+        {activeView === "operations" && (
+          <OperationsSection
+            recommendationStatus={recommendationStatus}
+            recommendationQuality={recommendationQuality}
+            operationsHealth={operationsHealth}
+            operationsReadiness={operationsReadiness}
+            operationsWarnings={operationsWarnings}
+            ragTraces={ragTraces}
+            onRefresh={refreshOperations}
+          />
+        )}
       </main>
     </div>
   );

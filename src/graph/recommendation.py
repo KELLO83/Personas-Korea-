@@ -20,6 +20,92 @@ MATCH (:Person {uuid: $uuid})-[:SIMILAR_TO]->(sim:Person)
 RETURN count(sim) AS count
 """
 
+HOBBY_QUALITY_QUERY = """
+MATCH (p:Person)
+WHERE EXISTS { MATCH (p)-[:SIMILAR_TO]->(:Person) }
+WITH p
+ORDER BY p.uuid
+LIMIT $sample_limit
+MATCH (p)-[:SIMILAR_TO]->(sim:Person)-[:ENJOYS_HOBBY|LIKES]->(hobby:Hobby)
+WITH p, hobby.name AS target, count(sim) AS supporters
+ORDER BY p.uuid, supporters DESC
+WITH p, collect({target: target, supporters: supporters})[0..10] AS recommendations
+WITH collect(recommendations) AS recommendation_lists, count(p) AS sample_size
+UNWIND recommendation_lists AS recommendations
+UNWIND recommendations AS recommendation
+WITH sample_size, recommendation.target AS target, recommendation.supporters AS supporters
+WITH sample_size,
+     target,
+     count(*) AS frequency,
+     avg(toFloat(supporters)) AS avg_supporters
+WITH sample_size,
+     collect({label: target, count: frequency}) AS targets,
+     sum(frequency) AS recommendation_count,
+     count(DISTINCT target) AS unique_target_count,
+     max(frequency) AS max_frequency,
+     sum(CASE WHEN avg_supporters <= 1.0 THEN frequency ELSE 0 END) AS weak_count
+MATCH (catalog:Hobby)
+RETURN sample_size,
+       count(catalog) AS catalog_size,
+       recommendation_count,
+       unique_target_count,
+       max_frequency,
+       weak_count,
+       targets
+"""
+
+PERSONA_SIMILARITY_QUALITY_QUERY = """
+MATCH (p:Person)
+WHERE EXISTS { MATCH (p)-[:SIMILAR_TO]->(:Person) }
+WITH p
+ORDER BY p.uuid
+LIMIT $sample_limit
+MATCH (p)-[similarity:SIMILAR_TO]->(target:Person)
+OPTIONAL MATCH (target)-[:WORKS_AS]->(occupation:Occupation)
+OPTIONAL MATCH (target)-[:LIVES_IN]->(:District)-[:IN_PROVINCE]->(province:Province)
+WITH p, target, similarity, occupation, province
+ORDER BY p.uuid, coalesce(similarity.score, 0.0) DESC
+WITH p,
+     collect({
+        target: coalesce(target.display_name, target.uuid),
+        score: coalesce(similarity.score, 0.0),
+        occupation: occupation.name,
+        province: province.name
+     })[0..10] AS recommendations
+WITH collect(recommendations) AS recommendation_lists, count(p) AS sample_size
+UNWIND recommendation_lists AS recommendations
+UNWIND recommendations AS recommendation
+WITH sample_size,
+     recommendation.target AS target,
+     recommendation.score AS score,
+     recommendation.occupation AS occupation,
+     recommendation.province AS province
+WITH sample_size,
+     target,
+     occupation,
+     province,
+     count(*) AS frequency,
+     avg(toFloat(score)) AS avg_score
+WITH sample_size,
+     collect({label: target, count: frequency}) AS targets,
+     sum(frequency) AS recommendation_count,
+     count(DISTINCT target) AS unique_target_count,
+     count(DISTINCT occupation) AS occupation_diversity,
+     count(DISTINCT province) AS province_diversity,
+     max(frequency) AS max_frequency,
+     sum(CASE WHEN avg_score < 0.1 THEN frequency ELSE 0 END) AS weak_count
+MATCH (catalog:Person)
+RETURN sample_size,
+       count(catalog) AS catalog_size,
+       recommendation_count,
+       unique_target_count,
+       occupation_diversity,
+       province_diversity,
+       max_frequency,
+       weak_count,
+       targets
+"""
+
 def _build_recommendation_query(category: str) -> str:
     relation = {
         "hobby": "ENJOYS_HOBBY",
@@ -141,6 +227,15 @@ class RecommendationService:
                 )
             ]
         return [_format_recommendation(row, category, rank=index) for index, row in enumerate(rows, start=1)]
+
+    def quality_snapshot(self, target: str) -> dict[str, Any]:
+        query = {
+            "hobby": HOBBY_QUALITY_QUERY,
+            "persona_similarity": PERSONA_SIMILARITY_QUALITY_QUERY,
+        }[target]
+        with self.driver.session(database=self.database) as session:
+            record = session.run(Query(cast(LiteralString, query)), sample_limit=500).single()
+            return dict(record) if record else {}
 
 
 def _format_recommendation(row: dict[str, Any], category: str, rank: int = 0) -> dict[str, Any]:

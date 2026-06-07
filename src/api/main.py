@@ -15,6 +15,7 @@ from .routes import (
     influence,
     insight,
     lifestyle_map,
+    operations,
     path,
     persona,
     rag_traces,
@@ -54,6 +55,7 @@ def create_app() -> FastAPI:
     app.include_router(lifestyle_map.router)
     app.include_router(career_transition.router)
     app.include_router(graph_quality.router)
+    app.include_router(operations.router)
     app.include_router(rag_traces.router)
     add_exception_handlers(app)
     logger.info("FastAPI application initialized")

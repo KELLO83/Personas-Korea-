@@ -16,6 +16,8 @@ from src.rag.compare_chain import CompareChain
 
 router = APIRouter(prefix="/api", tags=["compare"])
 
+INSIGHT_RATIO_GAP = 0.08
+
 
 def get_neo4j_driver():  # noqa: ANN201
     return GraphDatabase.driver(
@@ -120,6 +122,53 @@ def _build_count_query(filters: SegmentFilter) -> tuple[str, dict[str, object]]:
     return "\n".join(parts), params
 
 
+def _item_ratios(items: list[CompareDistributionItem]) -> dict[str, float]:
+    return {item.name: item.ratio for item in items}
+
+
+def _build_dimension_insights(
+    dimension: str,
+    label_a: str,
+    label_b: str,
+    comparison: DimensionComparison,
+) -> list[str]:
+    ratios_a = _item_ratios(comparison.segment_a)
+    ratios_b = _item_ratios(comparison.segment_b)
+    candidates: list[tuple[float, str]] = []
+    for name in sorted(set(ratios_a) | set(ratios_b)):
+        gap = ratios_a.get(name, 0.0) - ratios_b.get(name, 0.0)
+        if abs(gap) < INSIGHT_RATIO_GAP:
+            continue
+        stronger_label = label_a if gap > 0 else label_b
+        weaker_label = label_b if gap > 0 else label_a
+        candidates.append(
+            (
+                abs(gap),
+                f"{dimension} '{name}' 비중은 {stronger_label}가 {weaker_label}보다 {abs(gap) * 100:.1f}%p 높습니다.",
+            )
+        )
+    return [sentence for _, sentence in sorted(candidates, reverse=True)[:3]]
+
+
+def _build_segment_summary(
+    label_a: str,
+    count_a: int,
+    label_b: str,
+    count_b: int,
+    comparisons: dict[str, DimensionComparison],
+) -> str:
+    if count_a == 0 or count_b == 0:
+        return "두 세그먼트 중 하나의 표본 수가 0이라 차이 요약을 생성하지 않았습니다."
+    sentences = [
+        f"{label_a} 표본은 {count_a:,}명, {label_b} 표본은 {count_b:,}명입니다.",
+    ]
+    for dimension, comparison in comparisons.items():
+        sentences.extend(comparison.insight_sentences[:2])
+    if len(sentences) == 1:
+        sentences.append("상위 분포 기준으로는 8%p 이상 벌어지는 뚜렷한 차이를 찾지 못했습니다.")
+    return " ".join(sentences[:7])
+
+
 @router.post("/compare/segments", response_model=SegmentCompareResponse)
 def compare_segments(request: SegmentCompareRequest) -> SegmentCompareResponse:
     for dim in request.dimensions:
@@ -172,7 +221,14 @@ def compare_segments(request: SegmentCompareRequest) -> SegmentCompareResponse:
                     segment_b=dist_b,
                     common=list(names_a & names_b),
                     only_a=list(names_a - names_b),
-                    only_b=list(names_b - names_a)
+                    only_b=list(names_b - names_a),
+                    insight_sentences=[],
+                )
+                comparisons[dim].insight_sentences = _build_dimension_insights(
+                    dim,
+                    request.segment_a.label,
+                    request.segment_b.label,
+                    comparisons[dim],
                 )
     finally:
         driver.close()
@@ -200,5 +256,12 @@ def compare_segments(request: SegmentCompareRequest) -> SegmentCompareResponse:
         segment_a=SegmentSummary(label=request.segment_a.label, count=count_a),
         segment_b=SegmentSummary(label=request.segment_b.label, count=count_b),
         comparisons=comparisons,
+        deterministic_summary=_build_segment_summary(
+            request.segment_a.label,
+            count_a,
+            request.segment_b.label,
+            count_b,
+            comparisons,
+        ),
         ai_analysis=ai_analysis
     )

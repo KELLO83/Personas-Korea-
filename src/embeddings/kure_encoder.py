@@ -1,11 +1,15 @@
 import os
-from typing import List, Dict
+from typing import List
 import numpy as np
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 import logging
 
-from GNN_Neural_Network.gnn_recommender.text_embedding import log_embedding_backend_policy, resolve_torch_dtype
+from GNN_Neural_Network.gnn_recommender.text_embedding import (
+    EmbeddingBackendConfig,
+    log_embedding_backend_policy,
+    resolve_torch_dtype,
+)
 from src.config import settings
 
 logger = logging.getLogger(__name__)
@@ -36,13 +40,15 @@ class KUREEncoder:
                 model_kwargs["torch_dtype"] = resolved_dtype
             log_embedding_backend_policy(
                 logger,
-                model_name="nlpai-lab/KURE-v1",
-                device=settings.EMBEDDING_DEVICE,
-                attention_implementation=settings.EMBEDDING_ATTENTION_IMPLEMENTATION,
-                torch_dtype=settings.EMBEDDING_TORCH_DTYPE,
-                torch_compile=False,
-                torch_compile_mode=settings.EMBEDDING_TORCH_COMPILE_MODE,
-                prefix="KUREEncoder",
+                EmbeddingBackendConfig(
+                    model_name="nlpai-lab/KURE-v1",
+                    device=settings.EMBEDDING_DEVICE,
+                    attention_implementation=settings.EMBEDDING_ATTENTION_IMPLEMENTATION,
+                    torch_dtype=settings.EMBEDDING_TORCH_DTYPE,
+                    torch_compile=False,
+                    torch_compile_mode=settings.EMBEDDING_TORCH_COMPILE_MODE,
+                ),
+                "KUREEncoder",
             )
             KUREEncoder._model = SentenceTransformer(
                 "nlpai-lab/KURE-v1",

@@ -69,6 +69,7 @@ from GNN_Neural_Network.gnn_recommender.text_embedding import (  # noqa: E402
     DEFAULT_TORCH_COMPILE,
     DEFAULT_TORCH_COMPILE_MODE,
     DEFAULT_TORCH_DTYPE,
+    EmbeddingBackendConfig,
     KURE_MODEL_NAME,
     log_embedding_backend_policy,
     mask_holdout_hobbies,
@@ -759,13 +760,15 @@ def main() -> None:
         stage1_text_device = "cuda" if stage1_torch.cuda.is_available() else "cpu"
         embedding_backend_policy = log_embedding_backend_policy(
             LOGGER,
-            model_name=text_embedding_model_name,
-            device=stage1_text_device,
-            attention_implementation=text_embedding_attention_implementation,
-            torch_dtype=text_embedding_torch_dtype,
-            torch_compile=text_embedding_torch_compile,
-            torch_compile_mode=text_embedding_torch_compile_mode,
-            prefix="Evaluate Stage1 text embedding",
+            EmbeddingBackendConfig(
+                model_name=text_embedding_model_name,
+                device=stage1_text_device,
+                attention_implementation=text_embedding_attention_implementation,
+                torch_dtype=text_embedding_torch_dtype,
+                torch_compile=text_embedding_torch_compile,
+                torch_compile_mode=text_embedding_torch_compile_mode,
+            ),
+            "Evaluate Stage1 text embedding",
         )
         stage1_person_embedding_cache = PersonEmbeddingCache(
             stage1_text_cache_dir,
@@ -856,13 +859,15 @@ def main() -> None:
             if not embedding_backend_policy:
                 embedding_backend_policy = log_embedding_backend_policy(
                     LOGGER,
-                    model_name=KURE_MODEL_NAME,
-                    device=mmr_device,
-                    attention_implementation=text_embedding_attention_implementation,
-                    torch_dtype=text_embedding_torch_dtype,
-                    torch_compile=text_embedding_torch_compile,
-                    torch_compile_mode=text_embedding_torch_compile_mode,
-                    prefix="Evaluate MMR/DPP text embedding",
+                    EmbeddingBackendConfig(
+                        model_name=KURE_MODEL_NAME,
+                        device=mmr_device,
+                        attention_implementation=text_embedding_attention_implementation,
+                        torch_dtype=text_embedding_torch_dtype,
+                        torch_compile=text_embedding_torch_compile,
+                        torch_compile_mode=text_embedding_torch_compile_mode,
+                    ),
+                    "Evaluate MMR/DPP text embedding",
                 )
             hobby_cache = HobbyEmbeddingCache(
                 mmr_cache_dir,
@@ -1058,13 +1063,15 @@ def main() -> None:
         text_device = "cuda" if text_torch.cuda.is_available() else "cpu"
         embedding_backend_policy = log_embedding_backend_policy(
             LOGGER,
-            model_name=text_embedding_model_name,
-            device=text_device,
-            attention_implementation=text_embedding_attention_implementation,
-            torch_dtype=text_embedding_torch_dtype,
-            torch_compile=text_embedding_torch_compile,
-            torch_compile_mode=text_embedding_torch_compile_mode,
-            prefix="Evaluate text embedding",
+            EmbeddingBackendConfig(
+                model_name=text_embedding_model_name,
+                device=text_device,
+                attention_implementation=text_embedding_attention_implementation,
+                torch_dtype=text_embedding_torch_dtype,
+                torch_compile=text_embedding_torch_compile,
+                torch_compile_mode=text_embedding_torch_compile_mode,
+            ),
+            "Evaluate text embedding",
         )
         LOGGER.info(
             "KURE model source prepared: model=%s device=%s embedding_cache_dir=%s huggingface_cache=%s",

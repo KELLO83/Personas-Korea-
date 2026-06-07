@@ -1,4 +1,5 @@
 :root {
+  color-scheme: dark;
   --bg: #081018;
   --panel: rgba(13, 24, 35, 0.78);
   --panel-strong: rgba(18, 34, 49, 0.92);
@@ -13,6 +14,128 @@
   --red: #ff7b7b;
   --violet: #d7a8ff;
   --shadow: 0 24px 80px rgba(0, 0, 0, 0.42);
+  --body-background:
+    radial-gradient(circle at 12% 18%, rgba(116, 214, 255, 0.2), transparent 28rem),
+    radial-gradient(circle at 82% 8%, rgba(215, 168, 255, 0.15), transparent 24rem),
+    linear-gradient(135deg, #06111a 0%, #0a1720 50%, #10120d 100%);
+  --sidebar-background: linear-gradient(180deg, rgba(8, 16, 24, 0.96), rgba(9, 22, 32, 0.82));
+  --sidebar-text: #e9f6ff;
+  --sidebar-muted: #92a9ba;
+  --sidebar-accent: #74d6ff;
+  --sidebar-line: rgba(138, 174, 198, 0.18);
+  --brand-background: rgba(116, 214, 255, 0.08);
+  --brand-shadow: 0 0 36px rgba(116, 214, 255, 0.14);
+  --nav-hover-background: rgba(116, 214, 255, 0.06);
+  --nav-active-background: rgba(116, 214, 255, 0.12);
+  --field-background: rgba(4, 10, 15, 0.72);
+  --ghost-background: rgba(255, 255, 255, 0.03);
+  --result-background: rgba(255, 255, 255, 0.035);
+  --result-hover-background: rgba(116, 214, 255, 0.085);
+  --selected-background: rgba(116, 214, 255, 0.09);
+  --modal-backdrop: rgba(0, 0, 0, 0.68);
+  --modal-background: rgba(8, 16, 24, 0.96);
+  --detail-background: rgba(255, 255, 255, 0.035);
+  --pill-background: rgba(255, 255, 255, 0.04);
+  --bar-hover-background: rgba(116, 214, 255, 0.07);
+  --bar-track-background: rgba(255, 255, 255, 0.045);
+  --bar-track-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  --graph-background:
+    radial-gradient(circle at 50% 46%, rgba(116, 214, 255, 0.09), transparent 26rem),
+    radial-gradient(circle at 18% 72%, rgba(139, 255, 176, 0.07), transparent 20rem),
+    linear-gradient(145deg, rgba(3, 8, 13, 0.98), rgba(5, 15, 23, 0.96));
+  --graph-shadow: inset 0 0 80px rgba(0, 0, 0, 0.32);
+  --graph-grid-line: rgba(116, 214, 255, 0.045);
+  --graph-overlay-background: rgba(4, 10, 15, 0.76);
+  --graph-label-background: rgba(4, 10, 15, 0.18);
+  --graph-edge-label-text: rgba(233, 246, 255, 0.84);
+  --graph-edge-label-background: rgba(4, 10, 15, 0.8);
+  --graph-edge-label-active-background: rgba(3, 22, 34, 0.92);
+  --graph-node-label-background: rgba(4, 10, 15, 0.5);
+  --graph-node-label-shadow: 0 1px 8px rgba(0, 0, 0, 0.62);
+  --graph-node-detail-shadow: 0 1px 8px rgba(0, 0, 0, 0.56);
+  --graph-node-core: rgba(4, 10, 15, 0.92);
+  --graph-node-core-strong: rgba(4, 10, 15, 0.9);
+  --graph-center-core: rgba(8, 22, 34, 0.94);
+  --message-user-background: rgba(139, 255, 176, 0.07);
+  --message-assistant-background: rgba(116, 214, 255, 0.06);
+  --error-text: #ffd9d9;
+  --error-background: rgba(255, 123, 123, 0.08);
+  --danger-background: rgba(255, 123, 123, 0.08);
+  --ops-panel-background: rgba(3, 8, 13, 0.82);
+  --ops-panel-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 18px 56px rgba(0, 0, 0, 0.26);
+  --ops-cell-background:
+    linear-gradient(180deg, rgba(116, 214, 255, 0.065), rgba(255, 255, 255, 0.018)),
+    rgba(4, 10, 15, 0.76);
+  --ops-row-background: rgba(255, 255, 255, 0.026);
+  --ops-head-background: rgba(116, 214, 255, 0.06);
+  --ops-alert-background: rgba(116, 214, 255, 0.055);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f7f8fb;
+  --panel: rgba(255, 255, 255, 0.94);
+  --panel-strong: #ffffff;
+  --line: #d9e1ec;
+  --line-strong: #b7c4d6;
+  --text: #172033;
+  --muted: #647084;
+  --dim: #8794a7;
+  --cyan: #2563eb;
+  --green: #16803c;
+  --amber: #b45309;
+  --red: #b91c1c;
+  --violet: #7c3aed;
+  --shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+  --body-background: linear-gradient(180deg, #f7f8fb 0%, #edf3f8 100%);
+  --sidebar-background: #111827;
+  --sidebar-text: #f8fafc;
+  --sidebar-muted: #aab7ca;
+  --sidebar-accent: #93c5fd;
+  --sidebar-line: rgba(255, 255, 255, 0.12);
+  --brand-background: #f8fafc;
+  --brand-shadow: none;
+  --nav-hover-background: #1f2937;
+  --nav-active-background: #243244;
+  --field-background: #ffffff;
+  --ghost-background: #ffffff;
+  --result-background: #ffffff;
+  --result-hover-background: #f8fafc;
+  --selected-background: #eff6ff;
+  --modal-backdrop: rgba(15, 23, 42, 0.48);
+  --modal-background: #ffffff;
+  --detail-background: #f8fafc;
+  --pill-background: #f8fafc;
+  --bar-hover-background: #eef6ff;
+  --bar-track-background: #e8eef6;
+  --bar-track-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.04);
+  --graph-background:
+    radial-gradient(circle at 52% 44%, rgba(37, 99, 235, 0.08), transparent 25rem),
+    linear-gradient(145deg, #ffffff, #eef4fb);
+  --graph-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+  --graph-grid-line: rgba(37, 99, 235, 0.08);
+  --graph-overlay-background: rgba(255, 255, 255, 0.86);
+  --graph-label-background: rgba(255, 255, 255, 0.72);
+  --graph-edge-label-text: #334155;
+  --graph-edge-label-background: rgba(255, 255, 255, 0.9);
+  --graph-edge-label-active-background: #eef6ff;
+  --graph-node-label-background: rgba(255, 255, 255, 0.9);
+  --graph-node-label-shadow: 0 1px 8px rgba(148, 163, 184, 0.38);
+  --graph-node-detail-shadow: 0 1px 8px rgba(148, 163, 184, 0.32);
+  --graph-node-core: rgba(255, 255, 255, 0.92);
+  --graph-node-core-strong: rgba(255, 255, 255, 0.96);
+  --graph-center-core: rgba(239, 246, 255, 0.96);
+  --message-user-background: #f0fdf4;
+  --message-assistant-background: #eff6ff;
+  --error-text: #991b1b;
+  --error-background: #fef2f2;
+  --danger-background: #fef2f2;
+  --ops-panel-background: #ffffff;
+  --ops-panel-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --ops-cell-background: #f8fafc;
+  --ops-row-background: #ffffff;
+  --ops-head-background: #eef2f7;
+  --ops-alert-background: #eff6ff;
 }
 
 * {
@@ -27,10 +150,7 @@ body {
   margin: 0;
   min-height: 100vh;
   color: var(--text);
-  background:
-    radial-gradient(circle at 12% 18%, rgba(116, 214, 255, 0.2), transparent 28rem),
-    radial-gradient(circle at 82% 8%, rgba(215, 168, 255, 0.15), transparent 24rem),
-    linear-gradient(135deg, #06111a 0%, #0a1720 50%, #10120d 100%);
+  background: var(--body-background);
   font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
 }
 
@@ -56,8 +176,9 @@ button {
   top: 0;
   height: 100vh;
   padding: 26px 20px;
-  border-right: 1px solid var(--line);
-  background: linear-gradient(180deg, rgba(8, 16, 24, 0.96), rgba(9, 22, 32, 0.82));
+  border-right: 1px solid var(--sidebar-line);
+  color: var(--sidebar-text);
+  background: var(--sidebar-background);
   backdrop-filter: blur(22px);
 }
 
@@ -68,9 +189,9 @@ button {
   place-items: center;
   border: 1px solid var(--line-strong);
   border-radius: 16px;
-  color: var(--cyan);
-  background: rgba(116, 214, 255, 0.08);
-  box-shadow: 0 0 36px rgba(116, 214, 255, 0.14);
+  color: var(--sidebar-accent);
+  background: var(--brand-background);
+  box-shadow: var(--brand-shadow);
 }
 
 .eyebrow {
@@ -79,6 +200,10 @@ button {
   font-weight: 800;
   letter-spacing: 0.16em;
   text-transform: uppercase;
+}
+
+.sidebar .eyebrow {
+  color: var(--sidebar-accent);
 }
 
 .brand-title {
@@ -91,9 +216,41 @@ button {
 
 .brand-copy {
   margin: 0;
-  color: var(--muted);
+  color: var(--sidebar-muted);
   font-size: 13px;
   line-height: 1.6;
+}
+
+.theme-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  margin-top: 18px;
+  padding: 4px;
+  border: 1px solid var(--sidebar-line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.theme-switch button {
+  min-height: 32px;
+  border: 0;
+  border-radius: 7px;
+  color: var(--sidebar-muted);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.theme-switch button:hover,
+.theme-switch button:focus-visible {
+  color: var(--sidebar-text);
+  outline: none;
+}
+
+.theme-switch button.active {
+  color: #111827;
+  background: #f8fafc;
 }
 
 .nav-list {
@@ -107,23 +264,23 @@ button {
   padding: 12px 13px;
   border: 1px solid transparent;
   border-radius: 14px;
-  color: var(--muted);
+  color: var(--sidebar-muted);
   background: transparent;
   text-align: left;
   transition: 160ms ease;
 }
 
 .nav-button:hover {
-  color: var(--text);
+  color: var(--sidebar-text);
   border-color: var(--line-strong);
-  background: rgba(116, 214, 255, 0.06);
+  background: var(--nav-hover-background);
 }
 
 .nav-button.active {
-  color: var(--text);
-  border-color: var(--cyan);
-  border-left: 3px solid var(--cyan);
-  background: rgba(116, 214, 255, 0.12);
+  color: var(--sidebar-text);
+  border-color: var(--sidebar-accent);
+  border-left: 3px solid var(--sidebar-accent);
+  background: var(--nav-active-background);
 }
 
 .main-panel {
@@ -247,7 +404,7 @@ button {
   border: 1px solid var(--line);
   border-radius: 13px;
   color: var(--text);
-  background: rgba(4, 10, 15, 0.72);
+  background: var(--field-background);
   outline: none;
 }
 
@@ -280,7 +437,7 @@ button {
 .ghost-button {
   border: 1px solid var(--line);
   color: var(--text);
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--ghost-background);
 }
 
 .results-list,
@@ -294,12 +451,36 @@ button {
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.035);
+  color: var(--text);
+  background: var(--result-background);
+  text-align: left;
 }
 
 .result-card.selected {
   border-color: var(--cyan);
-  background: rgba(116, 214, 255, 0.09);
+  background: var(--selected-background);
+}
+
+button.result-card {
+  width: 100%;
+  display: block;
+}
+
+button.result-card:hover,
+button.result-card:focus-visible {
+  border-color: var(--line-strong);
+  background: var(--result-hover-background);
+  outline: none;
+}
+
+.result-card h3,
+.result-card strong {
+  color: var(--text);
+}
+
+.result-card .muted,
+.result-card .small {
+  color: var(--muted);
 }
 
 .card-actions {
@@ -316,7 +497,7 @@ button {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(0, 0, 0, 0.68);
+  background: var(--modal-backdrop);
   backdrop-filter: blur(10px);
 }
 
@@ -329,7 +510,7 @@ button {
   overflow: auto;
   border: 1px solid var(--line-strong);
   border-radius: 28px;
-  background: rgba(8, 16, 24, 0.96);
+  background: var(--modal-background);
   box-shadow: 0 30px 100px rgba(0, 0, 0, 0.58);
   padding: 22px;
 }
@@ -355,7 +536,7 @@ button {
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.035);
+  background: var(--detail-background);
 }
 
 .detail-panel h3 {
@@ -382,7 +563,7 @@ button {
   border: 1px solid var(--line);
   border-radius: 999px;
   color: var(--muted);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--pill-background);
   font-size: 12px;
 }
 
@@ -408,7 +589,7 @@ button {
 
 .bar-row.interactive:hover {
   color: var(--text);
-  background: rgba(116, 214, 255, 0.07);
+  background: var(--bar-hover-background);
   transform: translateX(2px);
 }
 
@@ -416,8 +597,8 @@ button {
   height: 14px;
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.045);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  background: var(--bar-track-background);
+  box-shadow: var(--bar-track-shadow);
 }
 
 .bar-fill {
@@ -441,11 +622,8 @@ button {
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 24px;
-  background:
-    radial-gradient(circle at 50% 46%, rgba(116, 214, 255, 0.09), transparent 26rem),
-    radial-gradient(circle at 18% 72%, rgba(139, 255, 176, 0.07), transparent 20rem),
-    linear-gradient(145deg, rgba(3, 8, 13, 0.98), rgba(5, 15, 23, 0.96));
-  box-shadow: inset 0 0 80px rgba(0, 0, 0, 0.32);
+  background: var(--graph-background);
+  box-shadow: var(--graph-shadow);
 }
 
 .graph-stage::before {
@@ -453,8 +631,8 @@ button {
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(rgba(116, 214, 255, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(116, 214, 255, 0.045) 1px, transparent 1px);
+    linear-gradient(var(--graph-grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--graph-grid-line) 1px, transparent 1px);
   background-size: 56px 56px;
   opacity: 0.52;
   mask-image: radial-gradient(circle at 50% 50%, black 0%, transparent 76%);
@@ -507,7 +685,7 @@ button {
   padding: 8px;
   border: 1px solid var(--line);
   border-radius: 16px;
-  background: rgba(4, 10, 15, 0.76);
+  background: var(--graph-overlay-background);
   backdrop-filter: blur(16px);
 }
 
@@ -524,8 +702,8 @@ button {
 
 .graph-toolbar .ghost-button[aria-pressed="true"] {
   border-color: var(--cyan);
-  color: #f4fbff;
-  background: rgba(116, 214, 255, 0.16);
+  color: var(--text);
+  background: var(--selected-background);
 }
 
 .graph-help {
@@ -537,7 +715,7 @@ button {
   padding: 7px 10px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: rgba(4, 10, 15, 0.68);
+  background: var(--graph-overlay-background);
   backdrop-filter: blur(12px);
 }
 
@@ -558,7 +736,7 @@ button {
   border: 1px solid color-mix(in srgb, var(--cyan) 12%, transparent);
   border-radius: 999px;
   color: color-mix(in srgb, var(--text) 26%, transparent);
-  background: rgba(4, 10, 15, 0.18);
+  background: var(--graph-label-background);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: -0.01em;
@@ -592,8 +770,8 @@ button {
   padding: 4px 7px;
   border: 1px solid rgba(116, 214, 255, 0.22);
   border-radius: 999px;
-  color: rgba(233, 246, 255, 0.84);
-  background: rgba(4, 10, 15, 0.8);
+  color: var(--graph-edge-label-text);
+  background: var(--graph-edge-label-background);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
   font-size: 8px;
   font-weight: 700;
@@ -606,7 +784,7 @@ button {
 
 .graph-edge-label.is-active {
   border-color: color-mix(in srgb, var(--green) 50%, transparent);
-  background: rgba(3, 22, 34, 0.92);
+  background: var(--graph-edge-label-active-background);
   color: var(--text);
 }
 
@@ -690,7 +868,7 @@ button {
   border-radius: 999px;
   background:
     radial-gradient(circle at 42% 32%, color-mix(in srgb, var(--node-color) 46%, white 8%), transparent 20%),
-    radial-gradient(circle at 50% 52%, color-mix(in srgb, var(--node-color) 32%, rgba(4, 10, 15, 0.92)), rgba(4, 10, 15, 0.9) 68%);
+    radial-gradient(circle at 50% 52%, color-mix(in srgb, var(--node-color) 32%, var(--graph-node-core)), var(--graph-node-core-strong) 68%);
   box-shadow:
     0 0 0 4px color-mix(in srgb, var(--node-color) 8%, transparent),
     0 7px 18px rgba(0, 0, 0, 0.3),
@@ -766,12 +944,12 @@ button {
   padding: 2px 6px;
   border-radius: 999px;
   color: var(--text);
-  background: rgba(4, 10, 15, 0.5);
+  background: var(--graph-node-label-background);
   font-size: 10.5px;
   line-height: 1.18;
   white-space: nowrap;
   text-overflow: ellipsis;
-  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.62);
+  text-shadow: var(--graph-node-label-shadow);
   transition: opacity 150ms ease, transform 150ms ease, background-color 150ms ease;
 }
 
@@ -783,7 +961,7 @@ button {
   line-height: 1.1;
   white-space: nowrap;
   text-overflow: ellipsis;
-  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.56);
+  text-shadow: var(--graph-node-detail-shadow);
   transition: opacity 150ms ease, transform 150ms ease;
 }
 
@@ -819,7 +997,7 @@ button {
   border-color: var(--cyan);
   background:
     radial-gradient(circle at 42% 30%, rgba(233, 246, 255, 0.26), transparent 18%),
-    radial-gradient(circle, rgba(116, 214, 255, 0.34), rgba(8, 22, 34, 0.94) 70%);
+    radial-gradient(circle, rgba(116, 214, 255, 0.34), var(--graph-center-core) 70%);
   box-shadow:
     0 0 0 8px rgba(116, 214, 255, 0.08),
     0 16px 34px rgba(0, 0, 0, 0.42),
@@ -851,18 +1029,18 @@ button {
 
 .message.user {
   border-color: rgba(139, 255, 176, 0.34);
-  background: rgba(139, 255, 176, 0.07);
+  background: var(--message-user-background);
 }
 
 .message.assistant {
   border-color: rgba(116, 214, 255, 0.32);
-  background: rgba(116, 214, 255, 0.06);
+  background: var(--message-assistant-background);
 }
 
 .error-box {
   border: 1px solid rgba(255, 123, 123, 0.36);
-  color: #ffd9d9;
-  background: rgba(255, 123, 123, 0.08);
+  color: var(--error-text);
+  background: var(--error-background);
 }
 
 .chart-card {
@@ -928,12 +1106,176 @@ button {
   overflow-wrap: anywhere;
 }
 
+.ops-console {
+  display: grid;
+  gap: 14px;
+}
+
+.ops-header,
+.ops-panel {
+  border: 1px solid rgba(116, 214, 255, 0.18);
+  border-radius: 18px;
+  background: var(--ops-panel-background);
+  box-shadow: var(--ops-panel-shadow);
+  backdrop-filter: blur(18px);
+}
+
+.ops-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 20px;
+}
+
+.ops-header h2,
+.ops-panel h3 {
+  margin: 0;
+}
+
+.ops-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ops-status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--green);
+  box-shadow: 0 0 18px var(--green);
+}
+
+.ops-status-dot.danger {
+  background: var(--red);
+  box-shadow: 0 0 18px var(--red);
+}
+
+.ops-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.ops-kpi,
+.ops-metric-cell {
+  min-height: 92px;
+  padding: 13px 14px;
+  border: 1px solid rgba(142, 212, 255, 0.16);
+  border-radius: 12px;
+  color: var(--text);
+  background: var(--ops-cell-background);
+}
+
+.ops-kpi {
+  display: grid;
+  align-content: space-between;
+}
+
+.ops-kpi strong,
+.ops-metric-cell strong {
+  color: var(--cyan);
+  font-size: 24px;
+  letter-spacing: 0;
+}
+
+.ops-panel-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.ops-panel {
+  padding: 16px;
+}
+
+.ops-panel-title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.ops-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ops-alert {
+  padding: 11px 13px;
+  border: 1px solid rgba(116, 214, 255, 0.2);
+  border-radius: 12px;
+  color: var(--muted);
+  background: var(--ops-alert-background);
+  font-size: 13px;
+}
+
+.ops-alert.danger {
+  border-color: rgba(255, 123, 123, 0.34);
+  color: var(--error-text);
+  background: var(--danger-background);
+}
+
+.ops-meta-grid {
+  display: grid;
+  grid-template-columns: 128px minmax(0, 1fr);
+  gap: 8px 12px;
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.ops-meta-grid strong {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.ops-table {
+  display: grid;
+  gap: 2px;
+  overflow: hidden;
+  border: 1px solid rgba(142, 212, 255, 0.12);
+  border-radius: 12px;
+}
+
+.ops-table-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 92px 96px 72px;
+  gap: 12px;
+  align-items: center;
+  min-height: 44px;
+  padding: 9px 12px;
+  background: var(--ops-row-background);
+}
+
+.ops-table-row.warnings {
+  grid-template-columns: minmax(0, 1fr) 92px minmax(220px, 0.9fr);
+}
+
+.ops-table-row.head {
+  min-height: 34px;
+  color: var(--dim);
+  background: var(--ops-head-background);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
 @media (max-width: 1100px) {
   .app-shell,
   .hero,
   .grid.two,
-  .grid.three {
+  .grid.three,
+  .ops-panel-grid {
     grid-template-columns: 1fr;
+  }
+
+  .ops-kpi-grid,
+  .ops-metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .sidebar {
@@ -953,6 +1295,21 @@ button {
   }
 
   .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ops-header,
+  .ops-table-row {
+    grid-template-columns: 1fr;
+  }
+
+  .ops-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .ops-kpi-grid,
+  .ops-metric-grid {
     grid-template-columns: 1fr;
   }
 }

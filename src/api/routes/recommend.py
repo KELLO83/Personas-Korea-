@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+from time import perf_counter
 from typing import Any
 
 from fastapi import APIRouter, Query
@@ -8,7 +10,16 @@ from ...graph.recommendation import (
     VALID_RECOMMENDATION_CATEGORIES,
 )
 from ..exceptions import BadRequestException, NotFoundException, ServiceUnavailableException
-from ..schemas import RecommendItem, RecommendationModelInfo, RecommendationStatusResponse, RecommendResponse
+from ..schemas import (
+    RankedItem,
+    RecommendItem,
+    RecommendationModelInfo,
+    RecommendationQualityMetric,
+    RecommendationQualityResponse,
+    RecommendationQualityTarget,
+    RecommendationStatusResponse,
+    RecommendResponse,
+)
 
 router = APIRouter(prefix="/api", tags=["recommendations"])
 
@@ -117,6 +128,29 @@ def recommendation_status() -> RecommendationStatusResponse:
     )
 
 
+@router.get("/recommendation/quality", response_model=RecommendationQualityResponse)
+def recommendation_quality(
+    target: str | None = Query(default=None, description="hobby 또는 persona_similarity. 비우면 둘 다 반환합니다."),
+) -> RecommendationQualityResponse:
+    targets = ["hobby", "persona_similarity"] if target is None else [target]
+    invalid_targets = sorted(set(targets) - {"hobby", "persona_similarity"})
+    if invalid_targets:
+        raise BadRequestException(f"지원하지 않는 추천 품질 target입니다: {', '.join(invalid_targets)}")
+
+    service = get_recommendation_service()
+    try:
+        snapshots = [_build_quality_target(item, service) for item in targets]
+    finally:
+        service.close()
+
+    return RecommendationQualityResponse(
+        targets=snapshots,
+        dashboard_policy=(
+            "운영 상태 탭의 개발자용 품질 대시보드입니다. 현재 값은 승격 모델이 아니라 Neo4j graph/rule fallback 후보에서 계산됩니다."
+        ),
+    )
+
+
 def _with_fallback_contract(item: dict[str, Any], rank: int) -> dict[str, Any]:
     normalized = dict(item)
     normalized.setdefault("rank", rank)
@@ -138,3 +172,77 @@ def _with_fallback_contract(item: dict[str, Any], rank: int) -> dict[str, Any]:
             }
         ]
     return normalized
+
+
+def _ratio(numerator: float, denominator: float) -> float:
+    if denominator <= 0:
+        return 0.0
+    return round(numerator / denominator, 6)
+
+
+def _metric(name: str, value: float, description: str, *, unit: str = "ratio", warn_below: float | None = None) -> RecommendationQualityMetric:
+    status = "warning" if warn_below is not None and value < warn_below else "ok"
+    return RecommendationQualityMetric(
+        name=name,
+        value=round(value, 6),
+        unit=unit,
+        status=status,
+        description=description,
+    )
+
+
+def _build_quality_target(target: str, service: RecommendationService) -> RecommendationQualityTarget:
+    started_at = perf_counter()
+    row = service.quality_snapshot(target)
+    latency_ms = (perf_counter() - started_at) * 1000
+    sample_size = int(row.get("sample_size") or 0)
+    catalog_size = int(row.get("catalog_size") or 0)
+    recommendation_count = int(row.get("recommendation_count") or 0)
+    unique_target_count = int(row.get("unique_target_count") or 0)
+    max_frequency = int(row.get("max_frequency") or 0)
+    weak_count = int(row.get("weak_count") or 0)
+    top_targets = _top_quality_targets(row.get("targets"))
+    metrics = [
+        _metric("coverage", _ratio(unique_target_count, catalog_size), "추천 후보가 전체 카탈로그를 얼마나 넓게 쓰는지", warn_below=0.05),
+        _metric("diversity", _ratio(unique_target_count, recommendation_count), "상위 추천 슬롯 중 서로 다른 target 비율", warn_below=0.2),
+        _metric("hub_target_rate", _ratio(max_frequency, recommendation_count), "가장 많이 반복된 target의 슬롯 점유율"),
+        _metric("weak_only_rate", _ratio(weak_count, recommendation_count), "약한 근거만 가진 추천 슬롯 비율"),
+        _metric("explanation_coverage", 1.0 if recommendation_count else 0.0, "fallback reason card를 붙일 수 있는 추천 비율", warn_below=0.95),
+        _metric("query_latency_ms", latency_ms, "품질 스냅샷 집계 쿼리 시간", unit="ms"),
+    ]
+    if target == "persona_similarity":
+        metrics.extend(
+            [
+                _metric("occupation_diversity", _ratio(float(row.get("occupation_diversity") or 0), recommendation_count), "추천 persona 직업 다양성"),
+                _metric("province_diversity", _ratio(float(row.get("province_diversity") or 0), recommendation_count), "추천 persona 지역 다양성"),
+            ]
+        )
+    warnings = []
+    if sample_size == 0:
+        warnings.append("SIMILAR_TO 기반 추천 후보가 없어 품질 지표를 계산하지 못했습니다.")
+    if catalog_size == 0:
+        warnings.append("카탈로그 크기가 0입니다. 그래프 적재 상태를 확인하세요.")
+    return RecommendationQualityTarget(
+        target=target,
+        score_source="fallback",
+        sample_size=sample_size,
+        catalog_size=catalog_size,
+        metrics=metrics,
+        top_targets=top_targets,
+        warnings=warnings,
+        generated_at=datetime.now(UTC).isoformat(),
+    )
+
+
+def _top_quality_targets(value: object) -> list[RankedItem]:
+    if not isinstance(value, list):
+        return []
+    rows: list[RankedItem] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        label = item.get("label")
+        if not label:
+            continue
+        rows.append(RankedItem(label=str(label), count=int(item.get("count") or 0)))
+    return sorted(rows, key=lambda item: (-item.count, item.label))[:8]
