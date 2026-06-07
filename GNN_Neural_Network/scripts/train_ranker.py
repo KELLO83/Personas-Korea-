@@ -50,7 +50,16 @@ from GNN_Neural_Network.gnn_recommender.ranker import (
     build_kure_semantic_candidate_scores,
 )  # noqa: E402
 from GNN_Neural_Network.gnn_recommender.rerank import HobbyCandidate, build_reranker_config  # noqa: E402
-from GNN_Neural_Network.gnn_recommender.text_embedding import KURE_MODEL_NAME, mask_holdout_hobbies, post_mask_leakage_audit  # noqa: E402
+from GNN_Neural_Network.gnn_recommender.text_embedding import (  # noqa: E402
+    DEFAULT_ATTENTION_IMPLEMENTATION,
+    DEFAULT_TORCH_COMPILE,
+    DEFAULT_TORCH_COMPILE_MODE,
+    DEFAULT_TORCH_DTYPE,
+    KURE_MODEL_NAME,
+    log_embedding_backend_policy,
+    mask_holdout_hobbies,
+    post_mask_leakage_audit,
+)
 
 TEXT_EMBEDDING_PREPROCESSING_VERSION = "domain_tagged_masked_v1"
 
@@ -102,6 +111,30 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default="",
         help="Optional model revision recorded in embedding cache metadata.",
+    )
+    parser.add_argument(
+        "--text-embedding-attn-implementation",
+        type=str,
+        default=DEFAULT_ATTENTION_IMPLEMENTATION,
+        help="Transformers attention implementation for SentenceTransformer backbones. Default sdpa lets PyTorch select the backend kernel.",
+    )
+    parser.add_argument(
+        "--text-embedding-torch-dtype",
+        type=str,
+        default=DEFAULT_TORCH_DTYPE,
+        help="Torch dtype for SentenceTransformer loading. Default float16 enables mixed precision on CUDA.",
+    )
+    parser.add_argument(
+        "--text-embedding-torch-compile",
+        action="store_true",
+        default=DEFAULT_TORCH_COMPILE,
+        help="Opt in to torch.compile for the SentenceTransformer auto_model. Default off due first-run compile cost.",
+    )
+    parser.add_argument(
+        "--text-embedding-torch-compile-mode",
+        type=str,
+        default=DEFAULT_TORCH_COMPILE_MODE,
+        help="torch.compile mode when --text-embedding-torch-compile is enabled.",
     )
     parser.add_argument(
         "--text-embedding-batch-size",
@@ -175,6 +208,10 @@ def main() -> None:
     start_time = time.perf_counter()
     text_embedding_model_name = str(args.text_embedding_model_name or KURE_MODEL_NAME).strip() or KURE_MODEL_NAME
     text_embedding_model_revision = str(args.text_embedding_model_revision or "").strip()
+    text_embedding_attention_implementation = str(args.text_embedding_attn_implementation or "").strip()
+    text_embedding_torch_dtype = str(args.text_embedding_torch_dtype or "").strip()
+    text_embedding_torch_compile = bool(args.text_embedding_torch_compile)
+    text_embedding_torch_compile_mode = str(args.text_embedding_torch_compile_mode or "").strip()
     show_progress = args.progress_mode == "on" or (args.progress_mode == "auto" and sys.stderr.isatty())
     logical_cpus = os.cpu_count() or 1
     default_cpu_threads = min(max(logical_cpus - 4, 1), 18)
@@ -262,6 +299,7 @@ def main() -> None:
     text_rank_margin_lookup: dict[int, dict[int, dict[str, float]]] = {}
     kure_device = ""
     embedding_resource_plan: dict[str, object] = {}
+    embedding_backend_policy: dict[str, object] = {}
     effective_text_batch_size = 0
     text_leakage_audit = {
         "enabled": args.include_text_embedding_feature,
@@ -298,6 +336,16 @@ def main() -> None:
             embedding_resource_plan["target_vram_mb"],
             embedding_resource_plan["estimated_vram_mb"],
         )
+        embedding_backend_policy = log_embedding_backend_policy(
+            LOGGER,
+            model_name=text_embedding_model_name,
+            device=kure_device,
+            attention_implementation=text_embedding_attention_implementation,
+            torch_dtype=text_embedding_torch_dtype,
+            torch_compile=text_embedding_torch_compile,
+            torch_compile_mode=text_embedding_torch_compile_mode,
+            prefix="Train text embedding",
+        )
         person_embedding_cache = PersonEmbeddingCache(
             text_embedding_cache_dir,
             model_name=text_embedding_model_name,
@@ -305,6 +353,10 @@ def main() -> None:
             preprocessing_version=TEXT_EMBEDDING_PREPROCESSING_VERSION,
             batch_size=effective_text_batch_size,
             device=kure_device,
+            attention_implementation=text_embedding_attention_implementation,
+            torch_dtype=text_embedding_torch_dtype,
+            torch_compile=text_embedding_torch_compile,
+            torch_compile_mode=text_embedding_torch_compile_mode,
         )
         LOGGER.info(
             "Text embedding model source prepared: model=%s revision=%s device=%s embedding_cache_dir=%s huggingface_cache=%s",
@@ -321,8 +373,13 @@ def main() -> None:
             preprocessing_version=TEXT_EMBEDDING_PREPROCESSING_VERSION,
             batch_size=effective_text_batch_size,
             device=kure_device,
+            attention_implementation=text_embedding_attention_implementation,
+            torch_dtype=text_embedding_torch_dtype,
+            torch_compile=text_embedding_torch_compile,
+            torch_compile_mode=text_embedding_torch_compile_mode,
         )
         text_leakage_audit["resource_plan"] = embedding_resource_plan
+        text_leakage_audit["backend_policy"] = embedding_backend_policy
         text_leakage_payload = _prepare_text_leakage_context(
             person_ids=val_person_ids,
             split_edges=val_edges,
@@ -369,6 +426,11 @@ def main() -> None:
             batch_size=effective_text_batch_size,
             device=kure_device,
             resource_plan=embedding_resource_plan,
+            attention_implementation=text_embedding_attention_implementation,
+            torch_dtype=text_embedding_torch_dtype,
+            torch_compile=text_embedding_torch_compile,
+            torch_compile_mode=text_embedding_torch_compile_mode,
+            backend_policy=embedding_backend_policy,
         )
         save_json(args.output_dir / "embedding_model_metadata.json", embedding_model_metadata)
         save_json(args.output_dir / "ranker_params.json", {
@@ -431,6 +493,17 @@ def main() -> None:
         kure_device = _select_kure_device(args.text_embedding_device)
         embedding_resource_plan = _resolve_text_embedding_resource_plan(args, kure_device)
         effective_text_batch_size = int(embedding_resource_plan["effective_batch_size"])
+        if not embedding_backend_policy:
+            embedding_backend_policy = log_embedding_backend_policy(
+                LOGGER,
+                model_name=text_embedding_model_name,
+                device=kure_device,
+                attention_implementation=text_embedding_attention_implementation,
+                torch_dtype=text_embedding_torch_dtype,
+                torch_compile=text_embedding_torch_compile,
+                torch_compile_mode=text_embedding_torch_compile_mode,
+                prefix="Train Stage1 text embedding",
+            )
         if person_embedding_cache is None:
             person_embedding_cache = PersonEmbeddingCache(
                 text_embedding_cache_dir,
@@ -439,6 +512,10 @@ def main() -> None:
                 preprocessing_version=TEXT_EMBEDDING_PREPROCESSING_VERSION,
                 batch_size=effective_text_batch_size,
                 device=kure_device,
+                attention_implementation=text_embedding_attention_implementation,
+                torch_dtype=text_embedding_torch_dtype,
+                torch_compile=text_embedding_torch_compile,
+                torch_compile_mode=text_embedding_torch_compile_mode,
             )
         if hobby_embedding_cache is None:
             hobby_embedding_cache = HobbyEmbeddingCache(
@@ -448,6 +525,10 @@ def main() -> None:
                 preprocessing_version=TEXT_EMBEDDING_PREPROCESSING_VERSION,
                 batch_size=effective_text_batch_size,
                 device=kure_device,
+                attention_implementation=text_embedding_attention_implementation,
+                torch_dtype=text_embedding_torch_dtype,
+                torch_compile=text_embedding_torch_compile,
+                torch_compile_mode=text_embedding_torch_compile_mode,
             )
         print("[progress] Encoding KURE embeddings and scoring Stage1 semantic candidates...", flush=True)
         stage1_kure_semantic_scores, stage1_kure_metadata = build_kure_semantic_candidate_scores(
@@ -461,6 +542,7 @@ def main() -> None:
             show_progress_bar=show_progress,
             progress_desc="KURE Stage1 semantic scoring (train)",
         )
+        stage1_kure_metadata["backend_policy"] = embedding_backend_policy
         stage1_provider_cache_fingerprint = str(stage1_kure_metadata.get("fingerprint", ""))
         text_leakage_audit["stage1_kure_semantic_provider"] = stage1_kure_metadata
 
@@ -661,6 +743,11 @@ def main() -> None:
         batch_size=effective_text_batch_size if (args.include_text_embedding_feature or args.stage1_kure_semantic_provider) else 0,
         device=kure_device if (args.include_text_embedding_feature or args.stage1_kure_semantic_provider) else "",
         resource_plan=embedding_resource_plan if (args.include_text_embedding_feature or args.stage1_kure_semantic_provider) else {},
+        attention_implementation=text_embedding_attention_implementation if (args.include_text_embedding_feature or args.stage1_kure_semantic_provider) else "",
+        torch_dtype=text_embedding_torch_dtype if (args.include_text_embedding_feature or args.stage1_kure_semantic_provider) else "",
+        torch_compile=text_embedding_torch_compile if (args.include_text_embedding_feature or args.stage1_kure_semantic_provider) else False,
+        torch_compile_mode=text_embedding_torch_compile_mode if (args.include_text_embedding_feature or args.stage1_kure_semantic_provider) else "",
+        backend_policy=embedding_backend_policy if (args.include_text_embedding_feature or args.stage1_kure_semantic_provider) else {},
     )
     save_json(output_dir / "embedding_model_metadata.json", embedding_model_metadata)
 
@@ -807,18 +894,28 @@ def _embedding_model_metadata(
     batch_size: int,
     device: str,
     resource_plan: dict[str, object],
+    attention_implementation: str,
+    torch_dtype: str,
+    torch_compile: bool,
+    torch_compile_mode: str,
+    backend_policy: dict[str, object],
 ) -> dict[str, object]:
     return {
         "enabled": enabled,
         "model_name": model_name if enabled else "",
         "model_revision": model_revision if enabled else "",
         "preprocessing_version": TEXT_EMBEDDING_PREPROCESSING_VERSION if enabled else "",
+        "attention_implementation": attention_implementation if enabled else "",
+        "torch_dtype": torch_dtype if enabled else "",
+        "torch_compile": bool(torch_compile) if enabled else False,
+        "torch_compile_mode": torch_compile_mode if enabled and torch_compile else "",
+        "backend_policy": backend_policy if enabled else {},
         "text_builder": "build_domain_tagged_persona_text" if enabled else "",
         "cache_dir": str(cache_dir) if enabled else "",
         "batch_size": batch_size,
         "device": device,
         "resource_plan": resource_plan,
-        "cache_key_policy": "model_name|model_revision|preprocessing_version|text",
+        "cache_key_policy": "model_name|model_revision|preprocessing_version|attention_implementation|torch_dtype|torch_compile|torch_compile_mode|text",
     }
 
 

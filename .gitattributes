@@ -1,0 +1,20 @@
+* text=auto eol=lf
+
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.xlsx binary
+*.xls binary
+*.parquet binary
+*.npz binary
+*.npy binary
+*.pkl binary
+*.pt binary
+*.bin binary
+*.txt text eol=lf

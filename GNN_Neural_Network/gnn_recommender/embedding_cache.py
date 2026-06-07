@@ -11,7 +11,14 @@ import numpy as np
 from numpy.linalg import norm
 from tqdm import tqdm
 
-from .text_embedding import KURE_MODEL_NAME, _load_kure_model
+from .text_embedding import (
+    DEFAULT_ATTENTION_IMPLEMENTATION,
+    DEFAULT_TORCH_COMPILE,
+    DEFAULT_TORCH_COMPILE_MODE,
+    DEFAULT_TORCH_DTYPE,
+    KURE_MODEL_NAME,
+    _load_kure_model,
+)
 
 
 HOBBY_MATRIX_CACHE_SUBDIR = "hobby_matrix"
@@ -32,13 +39,28 @@ class PersonEmbeddingCache:
         preprocessing_version: str = DEFAULT_PREPROCESSING_VERSION,
         batch_size: int = 32,
         device: str | None = None,
+        attention_implementation: str = DEFAULT_ATTENTION_IMPLEMENTATION,
+        torch_dtype: str = DEFAULT_TORCH_DTYPE,
+        torch_compile: bool = DEFAULT_TORCH_COMPILE,
+        torch_compile_mode: str = DEFAULT_TORCH_COMPILE_MODE,
     ):
         self.base_cache_dir = Path(cache_dir) if cache_dir else None
         self.model_name = model_name
         self.model_revision = model_revision
         self.preprocessing_version = preprocessing_version
+        self.attention_implementation = attention_implementation
+        self.torch_dtype = torch_dtype
+        self.torch_compile = bool(torch_compile)
+        self.torch_compile_mode = torch_compile_mode
         self.cache_dir = _model_cache_dir(
-            self.base_cache_dir, self.model_name, self.model_revision, self.preprocessing_version,
+            self.base_cache_dir,
+            self.model_name,
+            self.model_revision,
+            self.preprocessing_version,
+            self.attention_implementation,
+            self.torch_dtype,
+            self.torch_compile,
+            self.torch_compile_mode,
         ) if self.base_cache_dir else None
         self.batch_size = max(1, int(batch_size))
         self.device = device if device else self._default_device()
@@ -57,7 +79,16 @@ class PersonEmbeddingCache:
     def _cache_path(self, text: str) -> Path | None:
         if self.cache_dir is None:
             return None
-        key = _embedding_cache_key(text, self.model_name, self.model_revision, self.preprocessing_version)
+        key = _embedding_cache_key(
+            text,
+            self.model_name,
+            self.model_revision,
+            self.preprocessing_version,
+            self.attention_implementation,
+            self.torch_dtype,
+            self.torch_compile,
+            self.torch_compile_mode,
+        )
         return self.cache_dir / f"person_emb_{key}.npy"
 
     def get(self, text: str) -> np.ndarray | None:
@@ -73,6 +104,10 @@ class PersonEmbeddingCache:
                 model_name=self.model_name,
                 model_revision=self.model_revision,
                 preprocessing_version=self.preprocessing_version,
+                attention_implementation=self.attention_implementation,
+                torch_dtype=self.torch_dtype,
+                torch_compile=self.torch_compile,
+                torch_compile_mode=self.torch_compile_mode,
                 embedding_dim=_embedding_dim(arr),
             ):
                 self._memory[text] = arr
@@ -98,6 +133,10 @@ class PersonEmbeddingCache:
                         self.model_name,
                         self.model_revision,
                         self.preprocessing_version,
+                        self.attention_implementation,
+                        self.torch_dtype,
+                        self.torch_compile,
+                        self.torch_compile_mode,
                         embedding,
                     ),
                     ensure_ascii=False,
@@ -107,7 +146,15 @@ class PersonEmbeddingCache:
             )
 
     def _legacy_cache_path(self, text: str, prefix: str) -> Path | None:
-        if not _allow_legacy_cache_lookup(self.model_name, self.model_revision, self.preprocessing_version):
+        if not _allow_legacy_cache_lookup(
+            self.model_name,
+            self.model_revision,
+            self.preprocessing_version,
+            self.attention_implementation,
+            self.torch_dtype,
+            self.torch_compile,
+            self.torch_compile_mode,
+        ):
             return None
         if self.base_cache_dir is None:
             return None
@@ -122,6 +169,10 @@ class PersonEmbeddingCache:
             self.device,
             model_name=self.model_name,
             model_revision=self.model_revision,
+            attention_implementation=self.attention_implementation,
+            torch_dtype=self.torch_dtype,
+            torch_compile=self.torch_compile,
+            torch_compile_mode=self.torch_compile_mode,
         )
         emb = model.encode(
             text,
@@ -146,6 +197,10 @@ class PersonEmbeddingCache:
                 self.device,
                 model_name=self.model_name,
                 model_revision=self.model_revision,
+                attention_implementation=self.attention_implementation,
+                torch_dtype=self.torch_dtype,
+                torch_compile=self.torch_compile,
+                torch_compile_mode=self.torch_compile_mode,
             )
             chunks = list(_iter_encode_chunks(missing, self.batch_size))
             iterator = tqdm(
@@ -188,13 +243,28 @@ class HobbyEmbeddingCache:
         preprocessing_version: str = DEFAULT_PREPROCESSING_VERSION,
         batch_size: int = 32,
         device: str | None = None,
+        attention_implementation: str = DEFAULT_ATTENTION_IMPLEMENTATION,
+        torch_dtype: str = DEFAULT_TORCH_DTYPE,
+        torch_compile: bool = DEFAULT_TORCH_COMPILE,
+        torch_compile_mode: str = DEFAULT_TORCH_COMPILE_MODE,
     ):
         self.model_name = model_name
         self.model_revision = model_revision
         self.preprocessing_version = preprocessing_version
+        self.attention_implementation = attention_implementation
+        self.torch_dtype = torch_dtype
+        self.torch_compile = bool(torch_compile)
+        self.torch_compile_mode = torch_compile_mode
         self.base_cache_dir = Path(cache_dir) if cache_dir else None
         self.cache_dir = _model_cache_dir(
-            self.base_cache_dir, self.model_name, self.model_revision, self.preprocessing_version,
+            self.base_cache_dir,
+            self.model_name,
+            self.model_revision,
+            self.preprocessing_version,
+            self.attention_implementation,
+            self.torch_dtype,
+            self.torch_compile,
+            self.torch_compile_mode,
         ) if self.base_cache_dir else None
         self.batch_size = max(1, int(batch_size))
         self.device = device if device else self._default_device()
@@ -215,6 +285,10 @@ class HobbyEmbeddingCache:
             "model_name": self.model_name,
             "model_revision": self.model_revision,
             "preprocessing_version": self.preprocessing_version,
+            "attention_implementation": self.attention_implementation,
+            "torch_dtype": self.torch_dtype,
+            "torch_compile": self.torch_compile,
+            "torch_compile_mode": self.torch_compile_mode,
             "hobby_names": sorted(hobby_names),
         }
         raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
@@ -230,7 +304,16 @@ class HobbyEmbeddingCache:
     def _cache_path(self, hobby_name: str) -> Path | None:
         if self.cache_dir is None:
             return None
-        key = _embedding_cache_key(hobby_name, self.model_name, self.model_revision, self.preprocessing_version)
+        key = _embedding_cache_key(
+            hobby_name,
+            self.model_name,
+            self.model_revision,
+            self.preprocessing_version,
+            self.attention_implementation,
+            self.torch_dtype,
+            self.torch_compile,
+            self.torch_compile_mode,
+        )
         return self.cache_dir / f"hobby_emb_{key}.npy"
 
     def get(self, hobby_name: str) -> np.ndarray | None:
@@ -246,6 +329,10 @@ class HobbyEmbeddingCache:
                 model_name=self.model_name,
                 model_revision=self.model_revision,
                 preprocessing_version=self.preprocessing_version,
+                attention_implementation=self.attention_implementation,
+                torch_dtype=self.torch_dtype,
+                torch_compile=self.torch_compile,
+                torch_compile_mode=self.torch_compile_mode,
                 embedding_dim=_embedding_dim(arr),
             ):
                 self._memory[hobby_name] = arr
@@ -271,6 +358,10 @@ class HobbyEmbeddingCache:
                         self.model_name,
                         self.model_revision,
                         self.preprocessing_version,
+                        self.attention_implementation,
+                        self.torch_dtype,
+                        self.torch_compile,
+                        self.torch_compile_mode,
                         embedding,
                     ),
                     ensure_ascii=False,
@@ -280,7 +371,15 @@ class HobbyEmbeddingCache:
             )
 
     def _legacy_cache_path(self, hobby_name: str, prefix: str) -> Path | None:
-        if not _allow_legacy_cache_lookup(self.model_name, self.model_revision, self.preprocessing_version):
+        if not _allow_legacy_cache_lookup(
+            self.model_name,
+            self.model_revision,
+            self.preprocessing_version,
+            self.attention_implementation,
+            self.torch_dtype,
+            self.torch_compile,
+            self.torch_compile_mode,
+        ):
             return None
         if self.base_cache_dir is None:
             return None
@@ -295,6 +394,10 @@ class HobbyEmbeddingCache:
             self.device,
             model_name=self.model_name,
             model_revision=self.model_revision,
+            attention_implementation=self.attention_implementation,
+            torch_dtype=self.torch_dtype,
+            torch_compile=self.torch_compile,
+            torch_compile_mode=self.torch_compile_mode,
         )
         emb = model.encode(hobby_name, convert_to_numpy=True, show_progress_bar=False)
         self.set(hobby_name, emb)
@@ -313,6 +416,10 @@ class HobbyEmbeddingCache:
                 self.device,
                 model_name=self.model_name,
                 model_revision=self.model_revision,
+                attention_implementation=self.attention_implementation,
+                torch_dtype=self.torch_dtype,
+                torch_compile=self.torch_compile,
+                torch_compile_mode=self.torch_compile_mode,
             )
             chunks = list(_iter_encode_chunks(missing, self.batch_size))
             iterator = tqdm(
@@ -367,6 +474,18 @@ class HobbyEmbeddingCache:
         if metadata.get("preprocessing_version") != self.preprocessing_version:
             return None, None
 
+        if metadata.get("attention_implementation", DEFAULT_ATTENTION_IMPLEMENTATION) != self.attention_implementation:
+            return None, None
+
+        if metadata.get("torch_dtype", DEFAULT_TORCH_DTYPE) != self.torch_dtype:
+            return None, None
+
+        if bool(metadata.get("torch_compile", DEFAULT_TORCH_COMPILE)) != self.torch_compile:
+            return None, None
+
+        if metadata.get("torch_compile_mode", DEFAULT_TORCH_COMPILE_MODE) != self.torch_compile_mode:
+            return None, None
+
         if metadata.get("cache_version") != CACHE_VERSION:
             return None, None
 
@@ -396,6 +515,10 @@ class HobbyEmbeddingCache:
                 "model_name": self.model_name,
                 "model_revision": self.model_revision,
                 "preprocessing_version": self.preprocessing_version,
+                "attention_implementation": self.attention_implementation,
+                "torch_dtype": self.torch_dtype,
+                "torch_compile": self.torch_compile,
+                "torch_compile_mode": self.torch_compile_mode,
             }
 
         cache_path, meta_path = self._matrix_cache_paths(hobby_names)
@@ -455,6 +578,10 @@ class HobbyEmbeddingCache:
             "model_name": self.model_name,
             "model_revision": self.model_revision,
             "preprocessing_version": self.preprocessing_version,
+            "attention_implementation": self.attention_implementation,
+            "torch_dtype": self.torch_dtype,
+            "torch_compile": self.torch_compile,
+            "torch_compile_mode": self.torch_compile_mode,
             "batch_size": self.batch_size,
             "device": self.device,
             "embedding_dim": int(matrix.shape[1]) if matrix.ndim == 2 and matrix.size else 0,
@@ -477,11 +604,19 @@ def _allow_legacy_cache_lookup(
     model_name: str,
     model_revision: str,
     preprocessing_version: str,
+    attention_implementation: str,
+    torch_dtype: str,
+    torch_compile: bool,
+    torch_compile_mode: str,
 ) -> bool:
     return (
         model_name == KURE_MODEL_NAME
         and model_revision == ""
         and preprocessing_version == DEFAULT_PREPROCESSING_VERSION
+        and not attention_implementation
+        and torch_dtype in {"", "float32"}
+        and not torch_compile
+        and torch_compile_mode == DEFAULT_TORCH_COMPILE_MODE
     )
 
 
@@ -490,8 +625,22 @@ def _model_cache_dir(
     model_name: str,
     model_revision: str = "",
     preprocessing_version: str = DEFAULT_PREPROCESSING_VERSION,
+    attention_implementation: str = DEFAULT_ATTENTION_IMPLEMENTATION,
+    torch_dtype: str = DEFAULT_TORCH_DTYPE,
+    torch_compile: bool = DEFAULT_TORCH_COMPILE,
+    torch_compile_mode: str = DEFAULT_TORCH_COMPILE_MODE,
 ) -> Path:
-    identity = "|".join((model_name, model_revision, preprocessing_version))
+    identity = "|".join(
+        (
+            model_name,
+            model_revision,
+            preprocessing_version,
+            attention_implementation,
+            torch_dtype,
+            str(bool(torch_compile)),
+            torch_compile_mode,
+        )
+    )
     safe_name = identity.replace("\\", "__").replace("/", "__").replace(":", "__").replace("|", "__")
     return cache_dir / safe_name
 
@@ -501,12 +650,20 @@ def _embedding_cache_key(
     model_name: str,
     model_revision: str,
     preprocessing_version: str,
+    attention_implementation: str,
+    torch_dtype: str,
+    torch_compile: bool,
+    torch_compile_mode: str,
 ) -> str:
     payload = {
         "text": text,
         "model_name": model_name,
         "model_revision": model_revision,
         "preprocessing_version": preprocessing_version,
+        "attention_implementation": attention_implementation,
+        "torch_dtype": torch_dtype,
+        "torch_compile": bool(torch_compile),
+        "torch_compile_mode": torch_compile_mode,
     }
     raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
@@ -536,6 +693,10 @@ def _embedding_metadata(
     model_name: str,
     model_revision: str,
     preprocessing_version: str,
+    attention_implementation: str,
+    torch_dtype: str,
+    torch_compile: bool,
+    torch_compile_mode: str,
     embedding: np.ndarray,
 ) -> dict[str, Any]:
     return {
@@ -543,6 +704,10 @@ def _embedding_metadata(
         "model_name": model_name,
         "model_revision": model_revision,
         "preprocessing_version": preprocessing_version,
+        "attention_implementation": attention_implementation,
+        "torch_dtype": torch_dtype,
+        "torch_compile": bool(torch_compile),
+        "torch_compile_mode": torch_compile_mode,
         "embedding_dim": _embedding_dim(embedding),
         "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
@@ -554,6 +719,10 @@ def _metadata_matches(
     model_name: str,
     model_revision: str,
     preprocessing_version: str,
+    attention_implementation: str,
+    torch_dtype: str,
+    torch_compile: bool,
+    torch_compile_mode: str,
     embedding_dim: int,
 ) -> bool:
     try:
@@ -567,6 +736,10 @@ def _metadata_matches(
         and metadata.get("model_name") == model_name
         and metadata.get("model_revision", "") == model_revision
         and metadata.get("preprocessing_version") == preprocessing_version
+        and metadata.get("attention_implementation", DEFAULT_ATTENTION_IMPLEMENTATION) == attention_implementation
+        and metadata.get("torch_dtype", DEFAULT_TORCH_DTYPE) == torch_dtype
+        and bool(metadata.get("torch_compile", DEFAULT_TORCH_COMPILE)) == torch_compile
+        and metadata.get("torch_compile_mode", DEFAULT_TORCH_COMPILE_MODE) == torch_compile_mode
         and metadata.get("embedding_dim") == embedding_dim
     )
 

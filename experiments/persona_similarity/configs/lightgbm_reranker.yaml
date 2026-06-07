@@ -87,6 +87,10 @@ evaluation:
 
 text_embedding:
   model_name: nlpai-lab/KURE-v1
+  attention_implementation: sdpa
+  torch_dtype: float16
+  torch_compile: false
+  torch_compile_mode: reduce-overhead
   device: auto
   batch_size: 128
   progress: true

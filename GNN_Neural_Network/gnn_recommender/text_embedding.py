@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -9,7 +10,12 @@ import numpy as np
 
 KURE_MODEL_NAME = "nlpai-lab/KURE-v1"
 CACHE_DIR = "GNN_Neural_Network/artifacts/embeddings_cache"
+DEFAULT_ATTENTION_IMPLEMENTATION = "sdpa"
+DEFAULT_TORCH_DTYPE = "float16"
+DEFAULT_TORCH_COMPILE = False
+DEFAULT_TORCH_COMPILE_MODE = "reduce-overhead"
 _KURE_MODEL_CACHE: dict[str, Any] = {}
+LOGGER = logging.getLogger(__name__)
 
 
 class HobbyEmbeddingCache:
@@ -153,8 +159,22 @@ def _load_kure_model(
     *,
     model_name: str = KURE_MODEL_NAME,
     model_revision: str = "",
+    attention_implementation: str = DEFAULT_ATTENTION_IMPLEMENTATION,
+    torch_dtype: str = DEFAULT_TORCH_DTYPE,
+    torch_compile: bool = DEFAULT_TORCH_COMPILE,
+    torch_compile_mode: str = DEFAULT_TORCH_COMPILE_MODE,
 ) -> Any:
-    cache_key = f"{model_name}|{model_revision}|{device or 'default'}"
+    cache_key = "|".join(
+        (
+            model_name,
+            model_revision,
+            device or "default",
+            attention_implementation,
+            torch_dtype,
+            str(bool(torch_compile)),
+            torch_compile_mode,
+        )
+    )
     cached = _KURE_MODEL_CACHE.get(cache_key)
     if cached is not None:
         return cached
@@ -169,11 +189,162 @@ def _load_kure_model(
         kwargs["device"] = device
     if model_revision:
         kwargs["revision"] = model_revision
+    resolved_dtype = resolve_torch_dtype(torch_dtype, device)
+    model_kwargs: dict[str, Any] = {}
+    if attention_implementation:
+        model_kwargs["attn_implementation"] = attention_implementation
+    if resolved_dtype is not None:
+        model_kwargs["torch_dtype"] = resolved_dtype
+    if model_kwargs:
+        kwargs["model_kwargs"] = model_kwargs
+    log_embedding_backend_policy(
+        LOGGER,
+        model_name=model_name,
+        device=device or "default",
+        attention_implementation=attention_implementation,
+        torch_dtype=torch_dtype,
+        torch_compile=torch_compile,
+        torch_compile_mode=torch_compile_mode,
+        prefix="Loading SentenceTransformer",
+    )
     model = SentenceTransformer(model_name, **kwargs)
+    if torch_compile:
+        model = compile_sentence_transformer(model, torch_compile_mode)
     if hasattr(model, "max_seq_length"):
         model.max_seq_length = 512
     _KURE_MODEL_CACHE[cache_key] = model
     return model
+
+
+def resolve_torch_dtype(dtype_name: str, device: str | None = None) -> Any:
+    normalized = str(dtype_name or "").strip().lower()
+    if normalized in {"", "none", "float32", "fp32"}:
+        return None
+    if normalized == "auto":
+        normalized = "float16" if str(device or "").startswith("cuda") else "float32"
+    if normalized in {"float16", "fp16", "half"}:
+        import torch
+
+        return torch.float16
+    if normalized in {"bfloat16", "bf16"}:
+        import torch
+
+        return torch.bfloat16
+    raise ValueError(f"Unsupported torch dtype for text embeddings: {dtype_name}")
+
+
+def compile_sentence_transformer(model: Any, mode: str = DEFAULT_TORCH_COMPILE_MODE) -> Any:
+    import torch
+
+    first_module = model._first_module() if hasattr(model, "_first_module") else None
+    auto_model = getattr(first_module, "auto_model", None)
+    if auto_model is None:
+        LOGGER.warning("torch.compile requested but SentenceTransformer auto_model was not found; continuing without compile")
+        return model
+    try:
+        first_module.auto_model = torch.compile(auto_model, mode=mode)
+        LOGGER.info("torch.compile enabled for SentenceTransformer auto_model: mode=%s", mode)
+    except Exception as exc:
+        LOGGER.warning("torch.compile failed for SentenceTransformer auto_model; continuing eager. error=%s", exc)
+    return model
+
+
+def embedding_backend_policy(
+    *,
+    model_name: str,
+    device: str,
+    attention_implementation: str,
+    torch_dtype: str,
+    torch_compile: bool,
+    torch_compile_mode: str,
+) -> dict[str, Any]:
+    try:
+        import torch
+
+        cuda_available = torch.cuda.is_available()
+        cuda_flags = {
+            "flash_sdp_enabled": getattr(torch.backends.cuda, "flash_sdp_enabled", lambda: None)(),
+            "mem_efficient_sdp_enabled": getattr(torch.backends.cuda, "mem_efficient_sdp_enabled", lambda: None)(),
+            "math_sdp_enabled": getattr(torch.backends.cuda, "math_sdp_enabled", lambda: None)(),
+            "cudnn_sdp_enabled": getattr(torch.backends.cuda, "cudnn_sdp_enabled", lambda: None)(),
+        }
+        priority_order = [_sdp_backend_name(item) for item in getattr(torch._C, "_get_sdp_priority_order", lambda: [])()]
+    except Exception as exc:
+        cuda_available = False
+        cuda_flags = {"error": repr(exc)}
+        priority_order = []
+    return {
+        "model_name": model_name,
+        "device": device,
+        "attention_implementation": attention_implementation,
+        "torch_dtype": torch_dtype,
+        "torch_compile": bool(torch_compile),
+        "torch_compile_mode": torch_compile_mode if torch_compile else "",
+        "cuda_available": cuda_available,
+        "sdpa_backend_selection": "auto_by_pytorch_dispatcher",
+        "sdpa_actual_kernel_visibility": "not_exposed_by_public_api_per_call",
+        "sdpa_enabled_backends": cuda_flags,
+        "sdpa_priority_order": priority_order,
+    }
+
+
+def log_embedding_backend_policy(
+    logger: logging.Logger,
+    *,
+    model_name: str,
+    device: str,
+    attention_implementation: str,
+    torch_dtype: str,
+    torch_compile: bool,
+    torch_compile_mode: str,
+    prefix: str,
+) -> dict[str, Any]:
+    policy = embedding_backend_policy(
+        model_name=model_name,
+        device=device,
+        attention_implementation=attention_implementation,
+        torch_dtype=torch_dtype,
+        torch_compile=torch_compile,
+        torch_compile_mode=torch_compile_mode,
+    )
+    logger.info(
+        "%s backend policy: model=%s device=%s attn_implementation=%s dtype=%s compile=%s compile_mode=%s "
+        "sdpa_selection=%s enabled_backends=%s priority=%s",
+        prefix,
+        policy["model_name"],
+        policy["device"],
+        policy["attention_implementation"],
+        policy["torch_dtype"],
+        policy["torch_compile"],
+        policy["torch_compile_mode"],
+        policy["sdpa_backend_selection"],
+        policy["sdpa_enabled_backends"],
+        policy["sdpa_priority_order"],
+    )
+    return policy
+
+
+def _sdp_backend_name(value: Any) -> str:
+    name = getattr(value, "name", "")
+    if name:
+        return str(name)
+    try:
+        from torch.nn.attention import SDPBackend
+
+        for candidate in (
+            "FLASH_ATTENTION",
+            "EFFICIENT_ATTENTION",
+            "MATH",
+            "CUDNN_ATTENTION",
+            "OVERRIDEABLE",
+            "ERROR",
+        ):
+            backend = getattr(SDPBackend, candidate)
+            if value == backend or int(value) == int(backend):
+                return candidate
+    except Exception:
+        pass
+    return str(value)
 
 
 def compute_text_embedding_similarity(*args: Any, **kwargs: Any) -> float | np.ndarray:

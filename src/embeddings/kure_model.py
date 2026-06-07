@@ -4,6 +4,11 @@ from typing import Any
 import numpy as np
 import torch
 
+from GNN_Neural_Network.gnn_recommender.text_embedding import (
+    compile_sentence_transformer,
+    log_embedding_backend_policy,
+    resolve_torch_dtype,
+)
 from src.config import settings
 
 logger = logging.getLogger(__name__)
@@ -15,9 +20,17 @@ class KureEmbedder:
         model_name: str = settings.EMBEDDING_MODEL_NAME,
         device: str = settings.EMBEDDING_DEVICE,
         batch_size: int | None = settings.EMBEDDING_BATCH_SIZE,  # None 허용
+        attention_implementation: str = settings.EMBEDDING_ATTENTION_IMPLEMENTATION,
+        torch_dtype: str = settings.EMBEDDING_TORCH_DTYPE,
+        torch_compile: bool = settings.EMBEDDING_TORCH_COMPILE,
+        torch_compile_mode: str = settings.EMBEDDING_TORCH_COMPILE_MODE,
     ) -> None:
         self.model_name = model_name
         self.device = device
+        self.attention_implementation = attention_implementation
+        self.torch_dtype = torch_dtype
+        self.torch_compile = bool(torch_compile)
+        self.torch_compile_mode = torch_compile_mode
         # 배치 사이즈는 _load_model() 호출 시점에 결정됨 (지연 평가)
         self.batch_size = batch_size 
         self._model: Any | None = None
@@ -115,11 +128,30 @@ class KureEmbedder:
         from sentence_transformers import SentenceTransformer
 
         try:
-            return SentenceTransformer(
+            model_kwargs: dict[str, Any] = {
+                "attn_implementation": self.attention_implementation,
+            }
+            resolved_dtype = resolve_torch_dtype(self.torch_dtype, self.device)
+            if resolved_dtype is not None:
+                model_kwargs["torch_dtype"] = resolved_dtype
+            log_embedding_backend_policy(
+                logger,
+                model_name=self.model_name,
+                device=self.device,
+                attention_implementation=self.attention_implementation,
+                torch_dtype=self.torch_dtype,
+                torch_compile=self.torch_compile,
+                torch_compile_mode=self.torch_compile_mode,
+                prefix="KURE embedder",
+            )
+            model = SentenceTransformer(
                 self.model_name,
                 device=self.device,
-                model_kwargs={"torch_dtype": "float16"},
+                model_kwargs=model_kwargs,
             )
+            if self.torch_compile:
+                model = compile_sentence_transformer(model, self.torch_compile_mode)
+            return model
         except (RuntimeError, OSError) as exc:
             message = f"Failed to load KURE-v1 on device '{self.device}'. CPU fallback is disabled."
             logger.warning("%s Original error: %s", message, exc)

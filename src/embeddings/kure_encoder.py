@@ -5,6 +5,9 @@ from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 import logging
 
+from GNN_Neural_Network.gnn_recommender.text_embedding import log_embedding_backend_policy, resolve_torch_dtype
+from src.config import settings
+
 logger = logging.getLogger(__name__)
 
 # 프로젝트 전반에서 공유할 캐싱 디렉토리 설정
@@ -27,7 +30,25 @@ class KUREEncoder:
     def __init__(self):
         if KUREEncoder._model is None:
             logger.info("[KURE] Loading model (this may take a while on first run)...")
-            KUREEncoder._model = SentenceTransformer("nlpai-lab/KURE-v1")
+            model_kwargs = {"attn_implementation": settings.EMBEDDING_ATTENTION_IMPLEMENTATION}
+            resolved_dtype = resolve_torch_dtype(settings.EMBEDDING_TORCH_DTYPE, settings.EMBEDDING_DEVICE)
+            if resolved_dtype is not None:
+                model_kwargs["torch_dtype"] = resolved_dtype
+            log_embedding_backend_policy(
+                logger,
+                model_name="nlpai-lab/KURE-v1",
+                device=settings.EMBEDDING_DEVICE,
+                attention_implementation=settings.EMBEDDING_ATTENTION_IMPLEMENTATION,
+                torch_dtype=settings.EMBEDDING_TORCH_DTYPE,
+                torch_compile=False,
+                torch_compile_mode=settings.EMBEDDING_TORCH_COMPILE_MODE,
+                prefix="KUREEncoder",
+            )
+            KUREEncoder._model = SentenceTransformer(
+                "nlpai-lab/KURE-v1",
+                device=settings.EMBEDDING_DEVICE,
+                model_kwargs=model_kwargs,
+            )
             logger.info("[KURE] Model loaded successfully.")
 
     @property

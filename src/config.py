@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     
     EMBEDDING_MODEL_NAME: str = "nlpai-lab/KURE-v1"
     EMBEDDING_DEVICE: str = "cuda"
+    EMBEDDING_ATTENTION_IMPLEMENTATION: str = "sdpa"
+    EMBEDDING_TORCH_DTYPE: str = "float16"
+    EMBEDDING_TORCH_COMPILE: bool = False
+    EMBEDDING_TORCH_COMPILE_MODE: str = "reduce-overhead"
     # Dynamically calculated based on available VRAM (min 128) if None
     EMBEDDING_BATCH_SIZE: int | None = None
     EMBEDDING_DIMENSION: int = 1024

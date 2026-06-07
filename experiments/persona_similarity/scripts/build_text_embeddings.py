@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import sys
 import time
@@ -14,6 +15,12 @@ if str(PROJECT_ROOT) not in sys.path:
 import numpy as np
 import polars as pl
 
+from GNN_Neural_Network.gnn_recommender.text_embedding import (
+    DEFAULT_TORCH_COMPILE_MODE,
+    compile_sentence_transformer,
+    log_embedding_backend_policy,
+    resolve_torch_dtype,
+)
 from experiments.persona_similarity.scripts.common import (
     ensure_parent,
     file_sha256,
@@ -24,6 +31,8 @@ from experiments.persona_similarity.scripts.common import (
     write_json,
 )
 from experiments.persona_similarity.scripts.text_feature_builder import TEXT_DOMAINS, build_domain_text, embedding_key, text_hash
+
+LOGGER = logging.getLogger(__name__)
 
 
 def default_cpu_threads() -> int:
@@ -59,6 +68,7 @@ def build_text_records(personas: pl.DataFrame, progress: bool) -> list[dict[str,
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="experiments/persona_similarity/configs/lightgbm_reranker.yaml")
     parser.add_argument("--force", action="store_true")
@@ -101,7 +111,29 @@ def main() -> None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
     batch_size = int(text_config.get("batch_size") or 128)
     start_time = time.perf_counter()
-    model = SentenceTransformer(str(text_config["model_name"]), device=device)
+    attention_implementation = str(text_config.get("attention_implementation", "sdpa") or "").strip()
+    torch_dtype_name = str(text_config.get("torch_dtype", "float16") or "").strip()
+    torch_compile = bool(text_config.get("torch_compile", False))
+    torch_compile_mode = str(text_config.get("torch_compile_mode", DEFAULT_TORCH_COMPILE_MODE) or DEFAULT_TORCH_COMPILE_MODE)
+    model_kwargs: dict[str, Any] = {}
+    if attention_implementation:
+        model_kwargs["attn_implementation"] = attention_implementation
+    resolved_dtype = resolve_torch_dtype(torch_dtype_name, device)
+    if resolved_dtype is not None:
+        model_kwargs["torch_dtype"] = resolved_dtype
+    backend_policy = log_embedding_backend_policy(
+        LOGGER,
+        model_name=str(text_config["model_name"]),
+        device=device,
+        attention_implementation=attention_implementation,
+        torch_dtype=torch_dtype_name,
+        torch_compile=torch_compile,
+        torch_compile_mode=torch_compile_mode,
+        prefix="Persona-similarity text embedding",
+    )
+    model = SentenceTransformer(str(text_config["model_name"]), device=device, model_kwargs=model_kwargs or None)
+    if torch_compile:
+        model = compile_sentence_transformer(model, torch_compile_mode)
     embeddings = model.encode(
         texts,
         batch_size=batch_size,
@@ -129,6 +161,11 @@ def main() -> None:
             "cache_hit": False,
             "cache_reason": cache_reason,
             "model_name": text_config["model_name"],
+            "attention_implementation": attention_implementation,
+            "torch_dtype": torch_dtype_name,
+            "torch_compile": torch_compile,
+            "torch_compile_mode": torch_compile_mode if torch_compile else "",
+            "backend_policy": backend_policy,
             "device": device,
             "batch_size": batch_size,
             "embedding_rows": int(len(records)),
