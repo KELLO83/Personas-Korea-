@@ -143,6 +143,14 @@ export interface SubgraphResponse {
   edges: GraphEdge[];
 }
 
+export interface PathResponse {
+  path_found: boolean;
+  length: number;
+  path: ApiRecord[];
+  shared_nodes: ApiRecord[];
+  summary: string;
+}
+
 export interface ChatResponse {
   response: string;
   context_filters: Record<string, string>;
@@ -471,6 +479,75 @@ export interface GraphQualityCheck {
 export interface GraphQualityResponse {
   checks: GraphQualityCheck[];
   migration_plan: GraphMigrationStep[];
+}
+
+export interface HobbyVariant {
+  name: string;
+  count: number;
+}
+
+export interface HobbyNormalizationCandidate {
+  keyword: string;
+  canonical_label: string;
+  support_count: number;
+  variant_count: number;
+  variants: HobbyVariant[];
+}
+
+export interface SkillExtractionCandidate {
+  name: string;
+  count: number;
+  examples: string[];
+}
+
+export interface CommunityLabelCandidate {
+  community_id: number;
+  label: string;
+  size: number;
+  top_province: string | null;
+  top_occupation: string | null;
+  top_hobby_keyword: string | null;
+  summary: string;
+}
+
+export interface GraphDataQualityIssue {
+  name: string;
+  severity: string;
+  value: number;
+  total: number;
+  ratio: number;
+  impact: string;
+  recommendation: string;
+  examples: string[];
+}
+
+export interface BridgePersonaCandidate {
+  uuid: string;
+  display_name: string | null;
+  community_id: number | null;
+  neighbor_community_count: number;
+  average_similarity: number;
+  neighbor_communities: number[];
+}
+
+export interface HobbyOccupationRegionPath {
+  hobby_keyword: string;
+  occupation: string;
+  province: string;
+  support_count: number;
+  representative_persona_uuid: string | null;
+  representative_persona_name: string | null;
+}
+
+export interface GraphInsightsResponse {
+  summary: Record<string, number>;
+  dashboard_policy: string;
+  hobby_normalization_candidates: HobbyNormalizationCandidate[];
+  skill_extraction_candidates: SkillExtractionCandidate[];
+  community_label_candidates: CommunityLabelCandidate[];
+  data_quality_issues: GraphDataQualityIssue[];
+  bridge_personas: BridgePersonaCandidate[];
+  hobby_occupation_region_paths: HobbyOccupationRegionPath[];
 }
 
 export interface OperationsHealthCheck {

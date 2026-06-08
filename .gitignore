@@ -24,6 +24,9 @@ MANIFEST
 *.png
 *.jpg
 
+# Hidden tool/cache directories
+.*/
+
 # Virtual Environment
 .env
 .venv
@@ -47,7 +50,8 @@ secrets.json
 # Data / Databases
 /data/
 artifacts/
-GNN_Neural_Network/data/
+**/llm_wiki/
+experiments/hobby_recommender_ml/data/
 experiments/**/artifacts/datasets/
 experiments/**/artifacts/**/*.xlsx
 experiments/**/artifacts/**/*.xls
@@ -60,32 +64,32 @@ experiments/**/artifacts/**/*.pt
 experiments/**/artifacts/**/*.pth
 experiments/**/artifacts/**/*.bin
 experiments/**/artifacts/**/~$*
-GNN_Neural_Network/artifacts/*
-!GNN_Neural_Network/artifacts/experiment_decisions.json
-!GNN_Neural_Network/artifacts/experiment_run_summary.md
-!GNN_Neural_Network/artifacts/experiments/
-!GNN_Neural_Network/artifacts/experiments/**
-GNN_Neural_Network/artifacts/experiments/**/cache/
-GNN_Neural_Network/artifacts/experiments/**/hobby_embedding_cache/
-GNN_Neural_Network/artifacts/experiments/**/*.npy
-GNN_Neural_Network/artifacts/experiments/**/*.npz
-GNN_Neural_Network/artifacts/experiments/**/__pycache__/
-!GNN_Neural_Network/artifacts/experiments/**/*.csv
+experiments/hobby_recommender_ml/artifacts/*
+experiments/hobby_recommender_ml/artifacts/experiments/
 *.parquet
 *.csv
-!GNN_Neural_Network/artifacts/experiments/**/*.csv
-GNN_Neural_Network/artifacts/experiments/**/*dataset*.csv
-GNN_Neural_Network/artifacts/experiments/**/*ranker_dataset*.csv
-GNN_Neural_Network/artifacts/experiments/**/*features*.csv
-GNN_Neural_Network/artifacts/experiments/**/*pairs*.csv
 *.jsonl
 *.sqlite3
 *.db
 *.neo4j
 
+# ML/model artifacts
+*.joblib
+*.model
+*.onnx
+*.safetensors
+*.ckpt
+*.arrow
+*.feather
+*.h5
+*.hdf5
+
 # Logs
 logs/
 *.log
+
+# Local scratch scripts
+tmp_*.py
 
 # IDE / Editor
 .vscode/

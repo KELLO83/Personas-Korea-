@@ -577,6 +577,75 @@ class GraphQualityResponse(BaseModel):
     migration_plan: list[GraphMigrationStep] = Field(default_factory=list)
 
 
+class HobbyVariant(BaseModel):
+    name: str
+    count: int
+
+
+class HobbyNormalizationCandidate(BaseModel):
+    keyword: str
+    canonical_label: str
+    support_count: int
+    variant_count: int
+    variants: list[HobbyVariant] = Field(default_factory=list)
+
+
+class SkillExtractionCandidate(BaseModel):
+    name: str
+    count: int
+    examples: list[str] = Field(default_factory=list)
+
+
+class CommunityLabelCandidate(BaseModel):
+    community_id: int
+    label: str
+    size: int
+    top_province: str | None = None
+    top_occupation: str | None = None
+    top_hobby_keyword: str | None = None
+    summary: str
+
+
+class GraphDataQualityIssue(BaseModel):
+    name: str
+    severity: str
+    value: float
+    total: float
+    ratio: float
+    impact: str
+    recommendation: str
+    examples: list[str] = Field(default_factory=list)
+
+
+class BridgePersonaCandidate(BaseModel):
+    uuid: str
+    display_name: str | None = None
+    community_id: int | None = None
+    neighbor_community_count: int
+    average_similarity: float
+    neighbor_communities: list[int] = Field(default_factory=list)
+
+
+class HobbyOccupationRegionPath(BaseModel):
+    hobby_keyword: str
+    occupation: str
+    province: str
+    support_count: int
+    representative_persona_uuid: str | None = None
+    representative_persona_name: str | None = None
+
+
+class GraphInsightsResponse(BaseModel):
+    summary: dict[str, int | float] = Field(default_factory=dict)
+    dashboard_policy: str
+    hobby_normalization_candidates: list[HobbyNormalizationCandidate] = Field(default_factory=list)
+    skill_extraction_candidates: list[SkillExtractionCandidate] = Field(default_factory=list)
+    community_label_candidates: list[CommunityLabelCandidate] = Field(default_factory=list)
+    data_quality_issues: list[GraphDataQualityIssue] = Field(default_factory=list)
+    bridge_personas: list[BridgePersonaCandidate] = Field(default_factory=list)
+    hobby_occupation_region_paths: list[HobbyOccupationRegionPath] = Field(default_factory=list)
+
+
 class ChatRequest(BaseModel):
     session_id: str = Field(min_length=1)
     message: str = Field(min_length=1)

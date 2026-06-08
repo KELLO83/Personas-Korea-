@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, KeyboardEvent, MouseEvent, PointerEvent, WheelEvent } from "react";
-import type { PersonaProfileResponse, SubgraphResponse } from "@/lib/api-types";
+import type { ApiRecord, PathResponse, PersonaProfileResponse, SubgraphResponse } from "@/lib/api-types";
+import { personaApi } from "@/lib/api-client";
 import type { Loadable } from "@/hooks/use-loadable";
 import { NODE_COLORS, NODE_EMOJIS } from "@/lib/constants";
 import { nodeTypeLabel, relationLabel } from "@/lib/formatters";
@@ -48,6 +49,13 @@ type NodeDragState = {
   nodeId: string;
   startX: number;
   startY: number;
+};
+
+type PathState = {
+  targetLabel: string;
+  data: PathResponse | null;
+  loading: boolean;
+  error: string | null;
 };
 
 const GRAPH_NODE_LIMIT = 36;
@@ -236,6 +244,19 @@ function extractPersonaUuid(node: GraphNode): string | null {
   return node.id.startsWith("person_") ? node.id.slice("person_".length) : node.id;
 }
 
+function recordText(record: ApiRecord, key: string): string | null {
+  const value = record[key];
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function pathNodeText(item: ApiRecord): string {
+  return recordText(item, "node") ?? "-";
+}
+
+function pathEdgeText(item: ApiRecord): string | null {
+  return recordText(item, "edge");
+}
+
 function semanticLayout(graph: SubgraphResponse | null, manualPositions: Record<string, { left: number; top: number }>): PositionedNode[] {
   if (!graph) return [];
 
@@ -361,6 +382,7 @@ export function GraphSection({ graph, profile, onSelectPersona }: GraphSectionPr
   const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
   const [showAllEdgeLabels, setShowAllEdgeLabels] = useState(false);
   const [manualPositions, setManualPositions] = useState<Record<string, { left: number; top: number }>>({});
+  const [pathState, setPathState] = useState<PathState>({ targetLabel: "", data: null, loading: false, error: null });
   const dragStartRef = useRef<{ pointerId: number; x: number; y: number; panX: number; panY: number } | null>(null);
   const nodeDragRef = useRef<NodeDragState | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
@@ -457,6 +479,46 @@ export function GraphSection({ graph, profile, onSelectPersona }: GraphSectionPr
     if (!activeNodeId) return null;
     return positionedNodes.find((item) => item.node.id === activeNodeId)?.node.label ?? null;
   }, [positionedNodes, activeNodeId]);
+
+  const focusedPersonaNode = useMemo(() => {
+    if (!focusedNodeId || focusedNodeId === centerNodeId) return null;
+    const node = positionedNodes.find((item) => item.node.id === focusedNodeId)?.node ?? null;
+    return node && extractPersonaUuid(node) ? node : null;
+  }, [centerNodeId, focusedNodeId, positionedNodes]);
+
+  useEffect(() => {
+    const targetUuid = focusedPersonaNode ? extractPersonaUuid(focusedPersonaNode) : null;
+    const sourceUuid = profile?.uuid ?? graph.data?.center_uuid ?? null;
+    if (!focusedPersonaNode || !sourceUuid || !targetUuid || sourceUuid === targetUuid) {
+      const clearTimer = window.setTimeout(() => setPathState({ targetLabel: "", data: null, loading: false, error: null }), 0);
+      return () => window.clearTimeout(clearTimer);
+    }
+
+    let cancelled = false;
+    const targetLabel = focusedPersonaNode.label;
+    const requestTimer = window.setTimeout(() => {
+      setPathState({ targetLabel, data: null, loading: true, error: null });
+      personaApi.path(sourceUuid, targetUuid, { max_depth: 4 })
+        .then((data) => {
+          if (!cancelled) setPathState({ targetLabel, data, loading: false, error: null });
+        })
+        .catch((error) => {
+          if (!cancelled) {
+            setPathState({
+              targetLabel,
+              data: null,
+              loading: false,
+              error: error instanceof Error ? error.message : "경로 설명을 불러오지 못했습니다.",
+            });
+          }
+        });
+    }, 0);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(requestTimer);
+    };
+  }, [focusedPersonaNode, graph.data?.center_uuid, profile?.uuid]);
 
   const laneSummaries = useMemo(() => {
     const counts = new Map<LaneKey, number>();
@@ -623,18 +685,21 @@ export function GraphSection({ graph, profile, onSelectPersona }: GraphSectionPr
   return (
     <section className="grid graph-section">
       {graph.error && <div className="card error-box">{graph.error}</div>}
-      <div className="grid two">
-        <div className="card">
+      <div className="grid two graph-summary-grid">
+        <div className="card graph-summary-card">
+          <div className="eyebrow">Focus Persona</div>
           <h2>{graph.data?.center_label ?? profile?.display_name ?? "관계 그래프"}</h2>
           <p className="muted">{countSummary}</p>
         </div>
-        <div className="card">
+        <div className="card graph-summary-card">
+          <div className="eyebrow">Path Legend</div>
           <h3>관계 관점</h3>
           <div className="pill-row">
             {laneSummaries.map(({ lane, count }) => <span className="pill" key={lane}>{LANE_CONFIG[lane].label} {count}</span>)}
           </div>
         </div>
       </div>
+      <PathExplanationPanel state={pathState} />
       <div className="graph-stage">
         <div className="graph-toolbar" aria-label="그래프 조작 도구">
           <button className="ghost-button" type="button" onClick={() => zoomByFactor(1 / KEYBOARD_ZOOM_FACTOR)}>축소</button>
@@ -763,5 +828,59 @@ export function GraphSection({ graph, profile, onSelectPersona }: GraphSectionPr
         {graph.loading && <div className="card" style={{ position: "absolute", left: 24, top: 24 }}>그래프를 불러오는 중…</div>}
       </div>
     </section>
+  );
+}
+
+function PathExplanationPanel({ state }: { state: PathState }) {
+  if (!state.loading && !state.data && !state.error) {
+    return (
+      <div className="card path-explainer idle">
+        <div>
+          <div className="eyebrow">Path Explanation</div>
+          <h3>Person 노드를 클릭하면 경로가 설명됩니다</h3>
+        </div>
+        <p className="muted small">그래프 안의 유사 페르소나를 선택하면 shortest path와 공유 속성을 텍스트로 검수할 수 있습니다.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card path-explainer">
+      <div className="path-explainer-head">
+        <div>
+          <div className="eyebrow">Path Explanation</div>
+          <h3>{state.targetLabel || "선택 노드"} 연결 경로</h3>
+        </div>
+        <span className={`badge ${state.error ? "danger" : ""}`}>{state.loading ? "loading" : state.data?.path_found ? `${state.data.length} hops` : "no path"}</span>
+      </div>
+      {state.loading && <p className="muted small">shortest path를 조회하는 중입니다.</p>}
+      {state.error && <div className="error-box modal-error">{state.error}</div>}
+      {state.data && (
+        <>
+          <p className="muted small">{state.data.summary || "공유 노드 요약이 없습니다."}</p>
+          {state.data.path_found ? (
+            <div className="path-chain">
+              {state.data.path.map((item, index) => (
+                <span key={`${pathNodeText(item)}-${index}`}>
+                  <strong>{pathNodeText(item)}</strong>
+                  {pathEdgeText(item) && <em>{pathEdgeText(item)}</em>}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="muted small">설정된 depth 안에서 연결 경로를 찾지 못했습니다.</p>
+          )}
+          {state.data.shared_nodes.length > 0 && (
+            <div className="pill-row">
+              {state.data.shared_nodes.slice(0, 10).map((node, index) => (
+                <span className="pill" key={`${recordText(node, "type")}-${recordText(node, "name")}-${index}`}>
+                  {recordText(node, "type") ?? "Node"} {recordText(node, "name") ?? "-"}
+                </span>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
   );
 }

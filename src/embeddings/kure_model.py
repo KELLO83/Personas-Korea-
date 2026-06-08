@@ -4,7 +4,7 @@ from typing import Any
 import numpy as np
 import torch
 
-from GNN_Neural_Network.gnn_recommender.text_embedding import (
+from experiments.hobby_recommender_ml.hobby_recommender.text_embedding import (
     EmbeddingBackendConfig,
     compile_sentence_transformer,
     log_embedding_backend_policy,
@@ -67,7 +67,7 @@ class KureEmbedder:
         # CPU 환경: 로그 출력 및 안전한 배치 사이즈 1 반환
         if not torch.cuda.is_available():
             logger.info(
-                "⚠️ CUDA가 사용 불가능하여 CPU에서 임베딩을 생성합니다 (Full Back 모드). "
+                "?? CUDA가 사용 불가능하여 CPU에서 임베딩을 생성합니다 (Full Back 모드). "
                 "이는 상당한 시간이 소요될 수 있습니다."
             )
             return 1
@@ -112,7 +112,7 @@ class KureEmbedder:
             logger.warning(message)
             raise RuntimeError(message)
 
-        # ✅ [수정] 동적 배치 사이즈 결정 로직 실행
+        # ? [수정] 동적 배치 사이즈 결정 로직 실행
         if self.batch_size is None:
             self.batch_size = self._get_optimal_batch_size()
 

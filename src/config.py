@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     HF_DATASET_ID: str = "nvidia/Nemotron-Personas-Korea"
     HF_DATASET_SPLIT: str = "train"
     DATA_SAMPLE_SIZE: int | None = None
+    PGVECTOR_DATABASE_URI: str = "postgresql://postgres:1234@localhost:5432/persona_vector"
+    PGVECTOR_TABLE_NAME: str = "persona_vectors"
 
     @field_validator("DATA_SAMPLE_SIZE", mode="before")
     @classmethod

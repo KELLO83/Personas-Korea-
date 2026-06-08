@@ -5,7 +5,7 @@ from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 import logging
 
-from GNN_Neural_Network.gnn_recommender.text_embedding import (
+from experiments.hobby_recommender_ml.hobby_recommender.text_embedding import (
     EmbeddingBackendConfig,
     log_embedding_backend_policy,
     resolve_torch_dtype,
@@ -15,7 +15,13 @@ from src.config import settings
 logger = logging.getLogger(__name__)
 
 # 프로젝트 전반에서 공유할 캐싱 디렉토리 설정
-EMBEDDING_CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "GNN_Neural_Network", "artifacts", "embeddings_cache")
+EMBEDDING_CACHE_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+    "experiments",
+    "hobby_recommender_ml",
+    "artifacts",
+    "embeddings_cache",
+)
 
 
 class KUREEncoder:

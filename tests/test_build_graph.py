@@ -1,7 +1,12 @@
 import polars as pl
 import pytest
 
-from scripts import build_graph
+from ops.graph import build_graph as ops_build_graph
+from ops.graph import build_graph
+
+
+def test_ops_import_points_to_build_graph_module() -> None:
+    assert build_graph is ops_build_graph
 
 
 def test_load_to_neo4j_requires_display_name_column() -> None:

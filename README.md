@@ -1,223 +1,24 @@
-# Korean Persona Knowledge Graph Insight Platform
+﻿# Korean Persona Knowledge Graph Insight Platform
 
-NVIDIA `Nemotron-Personas-Korea` 데이터셋을 Neo4j 지식 그래프로 구성하고, 한국인 가상 페르소나 데이터를 검색·비교·분석할 수 있도록 만든 프로젝트입니다.
+This project turns the NVIDIA `Nemotron-Personas-Korea` dataset into a Neo4j knowledge graph and exposes search, analytics, recommendation, and RAG workflows through a FastAPI backend and a Next.js frontend.
 
-성별, 연령, 지역, 직업, 취미, 기술, 가족 정보 등 여러 속성을 연결해 다음과 같은 질문을 확인할 수 있습니다.
+The repository currently separates the production platform from recommender experiments:
 
-- 광주에 사는 30대 남성들이 많이 가진 취미는 무엇인가?
-- 서울 서초구 여성들의 직업 목표나 관심사는 어떤 경향이 있는가?
-- 특정 페르소나와 생활 방식이 비슷한 사람은 누구인가?
-- 두 페르소나는 어떤 지역, 직업, 취미, 기술로 연결되는가?
+- Platform runtime: `src/`, `ops/`, `frontend/`, root `PRD.md`, and `README.md`.
+- Hobby recommendation experiment (`Person -> Hobby`): `experiments/hobby_recommender_ml/`.
+- Similar-persona recommendation experiment (`Person -> Person`): `experiments/persona_similarity/`.
 
-## 문서 역할 및 우선순위
+## Current Runtime Baseline
 
-- `PRD.md`: 요구사항, 범위, 아키텍처 결정의 기준 문서입니다.
-- `TASKS.md`: PRD 실행 상태와 진행 조건을 추적하는 실행 기준 문서입니다.
-- `README.md`: 설치/실행 방법, 현재 상태, 참고 자료를 정리하는 운영 안내서입니다.
-- 충돌이 있을 경우 우선순위는 **`PRD.md` → `TASKS.md` → `README.md`** 입니다.
-
-추천시스템 실험은 루트 문서에 섞지 않고 각 실험 폴더 문서를 기준으로 관리합니다.
-
-- 취미 추천(`Person -> Hobby`): `GNN_Neural_Network/`
-- 유사 페르소나 추천(`Person -> Person`): `experiments/persona_similarity/`
-
----
-
-## 프로젝트 목적
-
-이 프로젝트의 목적은 큰 규모의 페르소나 데이터를 단순 표 형태로만 보는 것이 아니라, 사람과 속성 사이의 관계를 그래프로 구성해 탐색하기 쉽게 만드는 것입니다.
-
-일반 사용자는 화면에서 조건을 선택하거나 자연어로 질문해 데이터를 확인할 수 있고, 개발자는 FastAPI 엔드포인트를 통해 검색, 통계, 추천, 그래프 탐색 기능을 사용할 수 있습니다.
-
----
-
-## 주요 기능
-
-### 1. 페르소나 검색
-지역, 연령대, 성별, 직업, 취미, 기술 등의 조건으로 페르소나를 검색합니다.
-
-예시:
-- 서울에 사는 20대 개발자
-- 등산을 취미로 가진 40대 남성
-- 특정 기술을 가진 페르소나 목록
-
-### 2. 프로필 상세 보기
-특정 페르소나의 기본 정보와 연결된 속성을 한 번에 확인합니다.
-
-포함 정보:
-- 나이, 성별, 거주 지역, 직업
-- 취미, 관심사, 보유 기술
-- 유사 페르소나 미리보기
-- 커뮤니티 정보
-
-### 3. 통계 대시보드
-전체 데이터 또는 필터링된 그룹의 분포를 확인합니다.
-
-확인 가능한 항목:
-- 연령대 분포
-- 성별 분포
-- 지역 분포
-- 직업, 취미, 기술 순위
-
-### 4. 자연어 인사이트 질의
-Cypher 쿼리를 직접 작성하지 않아도 문장 형태의 질문으로 데이터를 조회할 수 있습니다.
-
-예시:
-- “부산 30대 여성들이 많이 가진 취미는?”
-- “서울 거주자 중 개발자 비율은?”
-- “특정 UUID와 비슷한 사람을 찾아줘”
-
-### 5. 유사 페르소나 조회
-특정 페르소나를 기준으로 그래프 구조상 가까운 사람을 찾고, 왜 비슷한지 설명 가능한 공통 속성을 제공합니다.
-
-유사 페르소나는 실시간 LLM 호출이 아니라 Neo4j GDS가 만든 `SIMILAR_TO` 관계와 후처리 설명 API를 기반으로 계산합니다.
-
-### 6. 커뮤니티 및 관계 경로 분석
-비슷한 속성을 공유하는 페르소나 그룹을 확인하고, 두 페르소나가 어떤 속성으로 연결되는지 경로를 조회합니다.
-
----
-
-## 데이터셋
-
-| 항목 | 내용 |
-|---|---|
-| Dataset ID | `nvidia/Nemotron-Personas-Korea` |
-| 제공처 | Hugging Face |
-| 데이터 수 | 1,000,000 rows |
-| 주요 컬럼 | 성별, 나이, 직업, 지역, 취미, 기술, 페르소나 텍스트 |
-| 언어 | 한국어 |
-| 라이선스 | CC-BY-4.0 |
-
-기본 설정에서는 전체 데이터를 사용할 수 있습니다. 개발 또는 테스트 환경에서는 `.env`의 `DATA_SAMPLE_SIZE` 값을 지정해 일부 데이터만 로드할 수 있습니다.
-
-현재 로컬 실험 DB는 원본 전체가 아니라 10대/20대/30대 중심 5만 페르소나 샘플을 기준으로 운영될 수 있습니다. 샘플링 조건은 그래프 빌드 명령과 실험 문서에서 별도로 확인합니다.
-
----
-
-## 추천시스템 실험 구분
-
-이 저장소에는 추천 관련 실험이 두 개 있습니다. 데이터셋, 라벨, metric, artifact, 모델 결정을 섞지 않습니다.
-
-| 실험 | 위치 | 추천 대상 | 현재 기본 방향 |
-|---|---|---|---|
-| 취미 추천 | `GNN_Neural_Network/` | `Person -> Hobby` | popularity/co-occurrence 후보생성 + LightGBM reranker |
-| 유사 페르소나 추천 | `experiments/persona_similarity/` | `Person -> Person` | FastRP/KNN 후보생성 + LightGBM/CatBoost 후보 reranker 실험 |
-
-루트 API/프론트엔드/그래프 빌드 동작이 바뀌는 경우에만 루트 `PRD.md`, `TASKS.md`, `README.md`를 함께 갱신합니다.
-
-## 현재 구현 상태
-
-| 구분 | 상태 | 내용 |
-|---|---|---|
-| Phase 1 | 완료 | 데이터 적재, 지식 그래프 구축, 유사도 매칭, 커뮤니티 탐지 |
-| Phase 2 | 완료 | 검색/필터, 통계 대시보드, 프로필 상세, 세그먼트 비교, 서브그래프 조회 |
-| Phase 3 | 핵심 기능 구현 완료 및 검증 진행 중 | 네트워크 영향력 분석, 추천 엔진, 대화형 탐색 기능 |
-
-자세한 구현 항목은 `TASKS.md`에서 확인할 수 있습니다. 기능 요구사항과 설계 배경은 `PRD.md`에 정리되어 있습니다.
-
----
-
-## 시스템 구성
-
-```text
-[Next.js React 화면]
-      |
-      v
-[FastAPI 서버]
-      |
-      +-- 검색 / 통계 / 프로필 / 추천 API
-      +-- 자연어 질의 처리
-      +-- 그래프 경로 및 커뮤니티 조회
-      |
-      v
-[Neo4j 지식 그래프]
-      |
-      +-- Person, Region, Occupation, Hobby, Skill 노드
-      +-- LIVES_IN, WORKS_AS, ENJOYS_HOBBY, HAS_SKILL 관계
-      +-- GDS 기반 유사도, 커뮤니티, 중심성 결과
-```
-
----
-
-## 기술 스택
-
-| 영역 | 사용 기술 |
-|---|---|
-| 백엔드 | Python 3.11, FastAPI |
-| 화면 | Next.js React |
-| 그래프 DB | Neo4j Community Edition 5.x |
-| 그래프 분석 | Neo4j GDS, FastRP, KNN, Leiden, PageRank |
-| 자연어 질의 | LangChain, LangGraph |
-| 임베딩 | KURE-v1 |
-| 테스트 | PyTest |
-
----
-
-## 로컬 실행 방법
-
-이 프로젝트는 Python 3.11 가상환경 기준으로 실행합니다.
-
-### 1. 가상환경 생성 및 패키지 설치
+Use `.venv314` with Python 3.14 for the backend, graph, RAG, PostgreSQL, and platform scripts.
 
 ```powershell
-py -3.11 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-.\.venv\Scripts\python.exe -m pip install --upgrade pip
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv314\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv314\Scripts\python.exe -m pytest tests -q
+.\.venv314\Scripts\python.exe -m uvicorn src.api.main:app --host 0.0.0.0 --port 8000
 ```
 
-### 2. 환경 변수 설정
-
-`.env.example`을 복사해 `.env` 파일을 만든 뒤 Neo4j 등 실행에 필요한 환경 변수 값을 입력합니다.
-
-```powershell
-Copy-Item .env.example .env
-```
-
-주요 설정값:
-
-```env
-NEO4J_URI=bolt://localhost:7687
-NEO4J_USER=neo4j
-NEO4J_PASSWORD=your_password_here
-
-NVIDIA_API_KEY=your_nvidia_api_key_here
-NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
-LLM_MODEL=deepseek-ai/deepseek-v4-pro
-
-HF_DATASET_ID=nvidia/Nemotron-Personas-Korea
-HF_DATASET_SPLIT=train
-DATA_SAMPLE_SIZE=
-
-EMBEDDING_MODEL_NAME=nlpai-lab/KURE-v1
-EMBEDDING_DEVICE=cuda
-```
-
-### 3. 백엔드 실행
-
-```powershell
-.\.venv\Scripts\python.exe -m uvicorn src.api.main:app --host 0.0.0.0 --port 8000
-```
-
-### 3.5 Neo4j 그래프 재적재 (10/20/30대 1만명 이내)
-
-`scripts/build_graph.py`를 다음처럼 실행해 기존 그래프를 지우고, 연령대 기반으로 샘플링해 새로 적재할 수 있습니다.
-
-```powershell
-.\.venv\Scripts\python.exe scripts\build_graph.py \
-  --reset \
-  --age-groups 10,20,30 \
-  --target-persons 10000 \
-  --age-sample-seed 42
-```
-
-파이프라인이 큰 경우에는 `--sample-size`로 사전 축소한 뒤 연령대 샘플링을 적용할 수 있고, `--target-persons`를 생략하면 제한 없이 연령대만 필터링됩니다.
-
-### 4. 화면 실행
-
-### Next.js React 화면
-
-React 프론트는 `frontend/`에서 실행합니다. FastAPI 서버는 먼저 `:8000`에서 실행되어 있어야 합니다.
+The frontend is the active Next.js application in `frontend/`.
 
 ```powershell
 cd frontend
@@ -225,41 +26,93 @@ npm install
 npm run dev
 ```
 
-기본 접속 주소는 `http://localhost:3000`입니다. API 주소를 바꾸려면 `frontend/.env.local`에 아래 값을 설정합니다.
+The default frontend port is `4000`; the backend defaults to `8000`.
 
-```env
-NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
-```
+## Local Infrastructure
 
----
+- Neo4j runs in Docker as `neo4j-personas`.
+  - HTTP: `http://localhost:7474`
+  - Bolt: `bolt://localhost:7687`
+- PostgreSQL/pgvector runs as the local PostgreSQL service, not a project Docker
+  container.
+  - URI: `postgresql://postgres:1234@localhost:5432/persona_vector`
+  - Table: `persona_vectors`
+- The old `pgvector-toeic` Docker container is not part of this project runtime.
 
-## 테스트
+## Dependency Baseline
+
+The Python runtime is defined by `requirements.txt`:
+
+- Core config: `python-dotenv`, `pydantic`, `pydantic-settings`.
+- Data: `pandas`, `polars`, `pyarrow`, `openpyxl`, `datasets`.
+- Graph: `neo4j`, `graphdatascience`.
+- Embeddings: `sentence-transformers`, `torch`.
+- RAG: `langchain`, `langchain-community`, `langchain-neo4j`, `langchain-openai`, `langgraph`.
+- Observability, opt-in: `langsmith`, `arize-phoenix-otel`, `arize-phoenix-client`, `opentelemetry-sdk`.
+- API: `fastapi`, `uvicorn`.
+- PostgreSQL/vector storage: `psycopg[binary]`.
+- Utilities: `tqdm`, `httpx`, `pytest`.
+
+The frontend runtime is defined by `frontend/package.json`:
+
+- Next.js `16.x`
+- React `19.x`
+- TypeScript `5.x`
+- D3 / d3-force
+- ECharts
+- ESLint with Next config
+
+## Current Source Layout
+
+- `src/api/`: FastAPI app, route registration, request/response schemas, exception handling.
+- `src/graph/`: Neo4j loading, query, search, stats, recommendation, and subgraph helpers.
+- `src/gds/`: Neo4j GDS services for centrality, FastRP, similarity, and communities.
+- `src/rag/`: LangGraph/LangChain chat, routing, Cypher/vector chains, LLM integration, tracing.
+- `src/data/`: dataset loading, parsing, preprocessing, sampling, and parallel preprocessing.
+- `src/embeddings/`: KURE embedding wrappers and Neo4j vector-index helpers.
+- `src/jobs/`: reusable batch jobs, currently including centrality batch orchestration.
+- `ops/data/`: dataset download and preview entrypoints.
+- `ops/graph/`: graph build, display-name backfill, and GDS build entrypoints.
+- `ops/vector/`: embedding build, pgvector schema, and pgvector load entrypoints.
+- `ops/dev/`: local environment verification helpers.
+- `frontend/`: maintained Next.js UI.
+
+## Main API Surfaces
+
+The FastAPI app registers these route groups from `src/api/main.py`:
+
+- Insight and RAG: `/api/insight`, `/api/chat`, `/api/rag/*` trace routes.
+- Persona lookup: `/api/persona/{uuid}`.
+- Search and stats: `/api/search`, `/api/stats`.
+- Similarity and recommendations: `/api/similar/{uuid}`, `/api/recommend/{uuid}`.
+- Graph exploration: `/api/graph/subgraph/{uuid}`, `/api/path/{uuid1}/{uuid2}`.
+- Communities and influence: `/api/communities`, `/api/influence/*`.
+- Segment and advanced analytics: `/api/compare/segments`, target persona, lifestyle map, career transition, graph insights, graph quality.
+- Operations: health, readiness, warnings, and operational status routes.
+
+## Data and Graph Operations
+
+Build or refresh graph data through `ops/graph/`:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests -q
+.\.venv314\Scripts\python.exe ops\graph\build_graph.py --help
+.\.venv314\Scripts\python.exe ops\graph\build_gds.py --top-k 50
+.\.venv314\Scripts\python.exe ops\graph\backfill_display_names.py --help
 ```
 
----
+Embedding and pgvector workflows live under `ops/vector/`:
 
-## 관련 문서
+```powershell
+.\.venv314\Scripts\python.exe ops\vector\build_embeddings.py --help
+.\.venv314\Scripts\python.exe ops\vector\load_pgvector_embeddings.py --help
+```
 
-- `PRD.md`: 제품 요구사항과 기능 설계
-- `TASKS.md`: 구현 진행 상황
-- `AGENTS.md`: 코딩 에이전트 공통 작업 지침
-- `GNN_Neural_Network/PRD.md`: 취미 추천 실험 계획
-- `GNN_Neural_Network/TASKS.md`: 취미 추천 실험 진행 상태
-- `experiments/persona_similarity/PRD.md`: 유사 페르소나 추천 실험 계획
-- `experiments/persona_similarity/TASKS.md`: 유사 페르소나 추천 실험 진행 상태
-- `experiments/persona_similarity/DATASET_EXPLAIN.md`: 유사 페르소나 학습 데이터 형태 설명
-- `docs/embedding-storage-workflow.md`: 임베딩 저장 및 적재 절차
-- `docs/centrality-batch-operations.md`: F10 중심성 배치 실행 및 외부 스케줄러 운영 절차
-- `docs/usage-guide.md`: 사용자/운영 사용 가이드(요약)
-- `docs/phase20-f14-chatbot-ux-integration-plan.md`: F14 통합 챗봇 UX/오케스트레이션 설계안
-- `docs/f12-chatbot-implementation-plan.md`: F12 대화형 탐색 챗봇 구현 계획
-- `docs/decisions/`: 주요 아키텍처 결정 기록
+## Documentation Routing
 
----
+- Root `PRD.md`: current platform product scope and runtime contracts.
+- `README.md`: setup, source map, and operational entrypoints.
+- `ops/docs/`: focused design notes and operations notes.
+- `ops/decisions/`: architecture decision records.
+- `experiments/persona_similarity/`: similar-persona recommender experiment documentation.
+- `experiments/hobby_recommender_ml/`: hobby recommender experiment documentation.
 
-## 참고
-
-이 저장소에는 실제 원본 데이터와 개인 설정 파일을 포함하지 않습니다. 데이터 파일, `.env`, 로컬 DB 파일은 `.gitignore`에 의해 제외됩니다.

@@ -1,177 +1,177 @@
-# code-review-graph 사용법
+# code-review-graph Usage
 
-이 문서는 `Nemotron-Personas-Korea` 저장소에서 `code-review-graph` MCP를 실제로 어떻게 써야 하는지 정리한 운영 가이드입니다.
+This operating guide explains how to use the `code-review-graph` MCP effectively in the `Nemotron-Personas-Korea` repository.
 
-이 프로젝트는 코드 규모가 크고, 특히 `GNN_Neural_Network/artifacts/experiments/` 아래에 대형 실험 산출물이 많습니다. 그래서 broad query를 무심코 호출하면 타임아웃이 날 수 있습니다. 이 문서의 목적은 **그래프를 먼저 사용하되, 이 저장소에서 타임아웃 없이 안정적으로 쓰는 방법**을 정리하는 것입니다.
-
----
-
-## 기본 원칙
-
-`AGENTS.md` 기준으로 이 저장소에서는 **코드 탐색 전에 항상 `code-review-graph`를 먼저 사용**해야 합니다.
-
-- 코드 탐색: `semantic_search_nodes` 또는 `query_graph`
-- 영향 범위 확인: `get_impact_radius`
-- 변경 리뷰: `detect_changes`
-- 실행 흐름 확인: `get_affected_flows`
-- 테스트 연결 확인: `query_graph(pattern="tests_for")`
-
-다만 다음 경우에는 파일 기반 탐색으로 우회해도 됩니다.
-
-- graph tool이 반복적으로 타임아웃 나는 경우
-- 이번 작업이 코드 관계 분석보다 문서 상태 확인이 더 중요한 경우
-- broad graph query 대신 직접 파일 몇 개를 읽는 편이 더 빠르고 정확한 경우
-
-즉, 원칙은 **graph first**이고, 예외는 **graph가 현재 질문을 실용적으로 처리하지 못할 때**입니다.
+This project has a large codebase, and it contains many large experiment artifacts under `experiments/hobby_recommender_ml/artifacts/experiments/`. Because of that, broad queries can time out if they are called casually. The purpose of this document is to explain **how to use the graph first while keeping usage stable and timeout-free in this repository**.
 
 ---
 
-## 이 저장소에서 타임아웃이 자주 나는 이유
+## Basic Principles
 
-이 저장소는 그래프 규모가 크고, Git diff 범위도 쉽게 커집니다.
+Based on `AGENTS.md`, this repository should **always use `code-review-graph` before code exploration**.
 
-- 그래프 크기: 파일 수와 노드 수가 큰 편이라 broad query 비용이 큼
-- GNN 실험 산출물: `artifacts/experiments/**` 아래 CSV, 모델 텍스트, 메트릭 JSON이 많음
-- Git 변경 범위: `HEAD~1` 기준 diff가 대형 generated file까지 포함하면 `detect_changes`나 `get_minimal_context`가 느려질 수 있음
-- 그래프 stale 상태: 자동 갱신이 밀렸으면 현재 변경과 그래프 상태가 어긋날 수 있음
+- Code exploration: `semantic_search_nodes` or `query_graph`
+- Impact scope checks: `get_impact_radius`
+- Change review: `detect_changes`
+- Execution flow checks: `get_affected_flows`
+- Test linkage checks: `query_graph(pattern="tests_for")`
 
-특히 다음 파일들은 review/change analysis 범위를 크게 키울 수 있습니다.
+However, file-based exploration is acceptable in these cases.
 
-- `GNN_Neural_Network/artifacts/experiments/**/*.csv`
-- `GNN_Neural_Network/artifacts/experiments/**/ranker_model.txt`
-- 대형 실험 결과 JSON 및 summary 파일
+- The graph tool repeatedly times out
+- The task is more about checking document state than analyzing code relationships
+- Reading a few files directly is faster and more accurate than using a broad graph query
+
+In short, the principle is **graph first**, and the exception is **when the graph cannot practically answer the current question**.
 
 ---
 
-## 가장 중요한 운영 규칙
+## Why Timeouts Are Common in This Repository
 
-### 1. broad call보다 targeted call을 우선합니다
+This repository has a large graph, and the Git diff scope can easily become large as well.
 
-좋은 예:
+- Graph size: the repository has many files and nodes, making broad queries expensive
+- GNN experiment artifacts: there are many CSV files, model text files, and metrics JSON files under `artifacts/experiments/**`
+- Git change scope: if a `HEAD~1` diff includes large generated files, `detect_changes` or `get_minimal_context` can become slow
+- Stale graph state: if automatic updates lag behind, the graph state may diverge from the current changes
+
+The following files can especially expand the review/change-analysis scope.
+
+- `experiments/hobby_recommender_ml/artifacts/experiments/**/*.csv`
+- `experiments/hobby_recommender_ml/artifacts/experiments/**/ranker_model.txt`
+- Large experiment result JSON and summary files
+
+---
+
+## Most Important Operating Rules
+
+### 1. Prefer targeted calls over broad calls
+
+Good example:
 
 ```text
 detect_changes(base="HEAD~1", changed_files=["src/api/main.py"], detail_level="minimal")
 ```
 
-나쁜 예:
+Bad example:
 
 ```text
 get_minimal_context(task="review everything changed in GNN", base="HEAD~1")
 ```
 
-### 2. `changed_files`를 직접 넣어 범위를 줄입니다
+### 2. Reduce scope by passing `changed_files` directly
 
-이 저장소에서는 `base="HEAD~1"`만 주고 자동 diff를 태우면, 실험 산출물까지 전부 포함되어 느려질 수 있습니다.
+In this repository, passing only `base="HEAD~1"` and relying on automatic diff detection can include all experiment artifacts and become slow.
 
-가능하면 다음처럼 **실제로 보고 싶은 파일만 명시**합니다.
+Whenever possible, **explicitly list only the files you actually want to inspect**.
 
 ```text
 changed_files=[
-  "GNN_Neural_Network/PRD.md",
-  "GNN_Neural_Network/TASKS.md",
-  "GNN_Neural_Network/artifacts/experiment_decisions.json",
-  "GNN_Neural_Network/artifacts/experiment_run_summary.md"
+  "experiments/hobby_recommender_ml/PRD.md",
+  "experiments/hobby_recommender_ml/TASKS.md",
+  "experiments/hobby_recommender_ml/artifacts/experiment_decisions.json",
+  "experiments/hobby_recommender_ml/artifacts/experiment_run_summary.md"
 ]
 ```
 
-### 3. detail level은 항상 최소로 시작합니다
+### 3. Always start with the minimum detail level
 
-기본값은 다음처럼 생각하면 됩니다.
+Use this as the default pattern.
 
-- 1차 호출: `detail_level="minimal"`
-- 정말 더 필요할 때만: `detail_level="standard"`
-- 특정 함수/파일만 깊게 볼 때만 추가 확장
+- First call: `detail_level="minimal"`
+- Only when truly needed: `detail_level="standard"`
+- Expand further only for a specific function or file
 
-### 4. generated artifact는 review 범위에서 빼는 것이 좋습니다
+### 4. Exclude generated artifacts from review scope
 
-특히 아래 경로는 broad graph review에서 제외하는 쪽이 안전합니다.
+For broad graph reviews, it is safer to exclude the paths below.
 
-- `GNN_Neural_Network/artifacts/experiments/**`
+- `experiments/hobby_recommender_ml/artifacts/experiments/**`
 - `**/*.csv`
 - `**/ranker_model.txt`
 
-이 파일들은 코드 관계를 이해하는 데 비해 토큰과 처리 시간을 크게 잡아먹습니다.
+These files consume much more token budget and processing time than they contribute to understanding code relationships.
 
 ---
 
-## 추천 사용 순서
+## Recommended Usage Order
 
-## 1) 코드 탐색
+## 1) Code Exploration
 
-특정 기능이나 심볼을 찾고 싶을 때:
+When you want to find a specific feature or symbol:
 
 ```text
 semantic_search_nodes(query="recommendation ranking", kind="Function", detail_level="minimal")
 ```
 
-혹은 특정 파일/심볼 관계를 확인할 때:
+Or when you want to inspect relationships for a specific file or symbol:
 
 ```text
-query_graph(pattern="file_summary", target="GNN_Neural_Network/scripts/evaluate_ranker.py", detail_level="minimal")
+query_graph(pattern="file_summary", target="experiments/hobby_recommender_ml/scripts/evaluate_ranker.py", detail_level="minimal")
 query_graph(pattern="callers_of", target="some_function_name", detail_level="minimal")
 ```
 
-추천 상황:
+Recommended situations:
 
-- 함수가 어디 있는지 찾고 싶을 때
-- 어떤 함수가 누구를 호출하는지 보고 싶을 때
-- 테스트가 연결되어 있는지 보고 싶을 때
+- You want to find where a function is located
+- You want to see what a function calls or what calls it
+- You want to see whether tests are connected
 
 ---
 
-## 2) Git 변경 리뷰
+## 2) Git Change Review
 
-이 저장소에서 가장 기본적인 Git 리뷰 흐름은 다음입니다.
+The most basic Git review flow in this repository is:
 
-### 최소 리뷰 흐름
+### Minimal Review Flow
 
 ```text
 detect_changes(base="HEAD~1", changed_files=[...], detail_level="minimal")
 ```
 
-그 다음 필요 시:
+Then, if needed:
 
 ```text
 get_affected_flows(base="HEAD~1", changed_files=[...])
 query_graph(pattern="tests_for", target="<changed file or function>", detail_level="minimal")
 ```
 
-### 예시: 문서/결정 파일만 검토할 때
+### Example: Reviewing Only Document/Decision Files
 
 ```text
 detect_changes(
   base="HEAD~1",
   changed_files=[
-    "GNN_Neural_Network/PRD.md",
-    "GNN_Neural_Network/TASKS.md",
-    "GNN_Neural_Network/artifacts/experiment_decisions.json",
-    "GNN_Neural_Network/artifacts/experiment_run_summary.md"
+    "experiments/hobby_recommender_ml/PRD.md",
+    "experiments/hobby_recommender_ml/TASKS.md",
+    "experiments/hobby_recommender_ml/artifacts/experiment_decisions.json",
+    "experiments/hobby_recommender_ml/artifacts/experiment_run_summary.md"
   ],
   detail_level="minimal"
 )
 ```
 
-### 예시: 특정 코드 파일 영향 확인
+### Example: Checking the Impact of a Specific Code File
 
 ```text
 detect_changes(
   base="HEAD~1",
-  changed_files=["GNN_Neural_Network/scripts/evaluate_ranker.py"],
+  changed_files=["experiments/hobby_recommender_ml/scripts/evaluate_ranker.py"],
   detail_level="minimal"
 )
 
 query_graph(
   pattern="tests_for",
-  target="GNN_Neural_Network/scripts/evaluate_ranker.py",
+  target="experiments/hobby_recommender_ml/scripts/evaluate_ranker.py",
   detail_level="minimal"
 )
 ```
 
 ---
 
-## 3) 영향 범위 분석
+## 3) Impact Scope Analysis
 
-변경이 다른 모듈에 어떤 영향을 주는지 보고 싶을 때:
+When you want to see how a change affects other modules:
 
 ```text
 get_impact_radius(
@@ -182,7 +182,7 @@ get_impact_radius(
 )
 ```
 
-실행 흐름까지 보고 싶으면:
+When you also want execution flows:
 
 ```text
 get_affected_flows(
@@ -191,26 +191,26 @@ get_affected_flows(
 )
 ```
 
-추천 상황:
+Recommended situations:
 
-- API 변경이 어떤 경로에 영향을 주는지 보고 싶을 때
-- 추천 엔진 변경이 어느 실행 흐름에 들어가는지 보고 싶을 때
+- You want to see which paths are affected by an API change
+- You want to see which execution flow includes a recommender engine change
 
 ---
 
-## 4) 테스트 연결 확인
+## 4) Test Linkage Checks
 
-변경한 코드에 연결된 테스트가 있는지 먼저 확인할 수 있습니다.
+You can first check whether tests are connected to the code you changed.
 
 ```text
 query_graph(
   pattern="tests_for",
-  target="GNN_Neural_Network/scripts/evaluate_ranker.py",
+  target="experiments/hobby_recommender_ml/scripts/evaluate_ranker.py",
   detail_level="minimal"
 )
 ```
 
-특정 함수의 호출자까지 보고 싶으면:
+If you also want callers of a specific function:
 
 ```text
 query_graph(pattern="callers_of", target="evaluate_ranker", detail_level="minimal")
@@ -219,56 +219,56 @@ query_graph(pattern="callees_of", target="evaluate_ranker", detail_level="minima
 
 ---
 
-## 타임아웃이 날 때의 대응 순서
+## Timeout Response Order
 
-이 저장소에서는 아래 순서로 대응하는 것이 가장 안전합니다.
+In this repository, the safest response order is:
 
-### 1. 같은 broad call을 반복하지 않습니다
+### 1. Do not repeat the same broad call
 
-예를 들어 `get_minimal_context(task="GNN 전체 리뷰")`가 타임아웃 났다면, 같은 형태로 다시 크게 호출하지 않습니다.
+For example, if `get_minimal_context(task="full GNN review")` times out, do not retry the same large call shape.
 
-### 2. 범위를 바로 줄입니다
+### 2. Reduce the scope immediately
 
-- `base="HEAD~1"` 자동 diff만 쓰지 않기
-- `changed_files`를 직접 넣기
-- generated artifact 제외하기
-- `detail_level="minimal"` 유지하기
+- Do not rely only on automatic diff detection with `base="HEAD~1"`
+- Pass `changed_files` directly
+- Exclude generated artifacts
+- Keep `detail_level="minimal"`
 
-### 3. 그래도 느리면 도구를 바꿉니다
+### 3. If it is still slow, switch tools
 
-예:
+Examples:
 
-- broad review → `detect_changes`로 축소
-- change analysis → `query_graph(pattern="tests_for")`처럼 targeted query로 전환
-- 문서 상태 점검 → `Read/Grep`로 우회
+- Broad review -> reduce to `detect_changes`
+- Change analysis -> switch to a targeted query such as `query_graph(pattern="tests_for")`
+- Document state check -> bypass to `Read/Grep`
 
-### 4. 문서 분석 작업이면 graph를 과하게 고집하지 않습니다
+### 4. Do not overuse the graph for document analysis tasks
 
-예를 들어 다음 작업은 graph보다 직접 읽기가 더 적합할 수 있습니다.
+For example, direct reading may be more appropriate than the graph for these tasks.
 
-- `PRD.md` 완료 상태 확인
-- `TASKS.md` 남은 작업 확인
-- `experiment_decisions.json` 결정 상태 확인
-- `experiment_run_summary.md` 최근 실험 요약 확인
+- Check the relevant `PRD.md` completion state
+- Check remaining work in the owning experiment `TASKS.md` when the change is experiment-scoped
+- Check decision state in `experiment_decisions.json`
+- Check the latest experiment summary in `experiment_run_summary.md`
 
 ---
 
-## 그래프 업데이트 방법
+## Graph Update Method
 
-이 저장소의 로컬 지침상 그래프는 **파일 변경 시 hook으로 자동 업데이트**됩니다.
+According to this repository's local instructions, the graph is **automatically updated by a hook when files change**.
 
-즉, 일반적인 경우에는 별도 수동 작업 없이 최신 상태가 유지되는 것이 정상입니다.
+That means that, in normal cases, it should stay current without a separate manual action.
 
-하지만 다음 경우에는 수동 업데이트가 필요할 수 있습니다.
+However, a manual update may be needed in these cases.
 
-- graph 결과가 최근 변경을 반영하지 않는 것 같을 때
-- stale 상태로 보일 때
-- 대규모 파일 이동/리팩터링 후 결과가 이상할 때
-- 다른 환경에서 graph DB를 새로 준비해야 할 때
+- Graph results do not seem to reflect recent changes
+- The graph appears stale
+- Results look wrong after large file moves or refactors
+- You need to prepare a new graph DB in another environment
 
-### 증분 업데이트
+### Incremental Update
 
-가장 먼저 시도할 수 있는 방법입니다.
+This is the first method to try.
 
 ```text
 code-review-graph_build_or_update_graph_tool(
@@ -278,15 +278,15 @@ code-review-graph_build_or_update_graph_tool(
 )
 ```
 
-설명:
+Explanation:
 
-- `full_rebuild=false`: 바뀐 부분만 반영
-- `base="HEAD~1"`: 최근 변경 기준으로 증분 계산
-- `postprocess="minimal"`: 비용을 줄여 빠르게 갱신
+- `full_rebuild=false`: reflect only changed parts
+- `base="HEAD~1"`: compute incrementally from recent changes
+- `postprocess="minimal"`: reduce cost and update quickly
 
-### 전체 재빌드
+### Full Rebuild
 
-그래프가 많이 꼬였거나, 증분 업데이트로 해결되지 않을 때 사용합니다.
+Use this when the graph is badly inconsistent or an incremental update does not fix the issue.
 
 ```text
 code-review-graph_build_or_update_graph_tool(
@@ -295,13 +295,13 @@ code-review-graph_build_or_update_graph_tool(
 )
 ```
 
-전체 재빌드는 비용이 크므로 자주 쓰기보다 필요할 때만 사용하는 것이 좋습니다.
+A full rebuild is expensive, so it is better to use it only when needed instead of running it frequently.
 
 ---
 
-## 이 저장소에서 추천하는 실전 패턴
+## Recommended Practical Patterns for This Repository
 
-### 패턴 A: 일반 코드 리뷰
+### Pattern A: General Code Review
 
 ```text
 detect_changes(base="HEAD~1", changed_files=["src/api/main.py"], detail_level="minimal")
@@ -309,24 +309,24 @@ get_affected_flows(changed_files=["src/api/main.py"], base="HEAD~1")
 query_graph(pattern="tests_for", target="src/api/main.py", detail_level="minimal")
 ```
 
-### 패턴 B: GNN 문서/실험 상태 점검
+### Pattern B: GNN Document/Experiment State Check
 
 ```text
 detect_changes(
   base="HEAD~1",
   changed_files=[
-    "GNN_Neural_Network/PRD.md",
-    "GNN_Neural_Network/TASKS.md",
-    "GNN_Neural_Network/artifacts/experiment_decisions.json",
-    "GNN_Neural_Network/artifacts/experiment_run_summary.md"
+    "experiments/hobby_recommender_ml/PRD.md",
+    "experiments/hobby_recommender_ml/TASKS.md",
+    "experiments/hobby_recommender_ml/artifacts/experiment_decisions.json",
+    "experiments/hobby_recommender_ml/artifacts/experiment_run_summary.md"
   ],
   detail_level="minimal"
 )
 ```
 
-그래도 타임아웃이 나면 바로 `Read/Grep`로 전환합니다.
+If that still times out, switch immediately to `Read/Grep`.
 
-### 패턴 C: 특정 함수 영향 확인
+### Pattern C: Specific Function Impact Check
 
 ```text
 query_graph(pattern="callers_of", target="evaluate_ranker", detail_level="minimal")
@@ -336,45 +336,45 @@ query_graph(pattern="tests_for", target="evaluate_ranker", detail_level="minimal
 
 ---
 
-## 하지 말아야 할 것
+## What Not To Do
 
-- broad graph call을 반복 재시도하기
-- 대형 generated artifact까지 포함한 상태로 `HEAD~1` 전체 리뷰 돌리기
-- 처음부터 `detail_level="standard"` 이상으로 크게 시작하기
-- 문서 상태 점검 작업인데 graph를 끝까지 고집하기
-- graph가 stale한데 결과만 믿고 진행하기
+- Repeatedly retry broad graph calls
+- Run a full `HEAD~1` review while large generated artifacts are included
+- Start with `detail_level="standard"` or higher
+- Insist on using the graph all the way through a document state check
+- Trust results blindly when the graph is stale
 
 ---
 
-## 빠른 치트시트
+## Quick Cheatsheet
 
-### 코드 탐색
+### Code Exploration
 
 ```text
 semantic_search_nodes(query="keyword", kind="Function", detail_level="minimal")
 query_graph(pattern="file_summary", target="path/to/file.py", detail_level="minimal")
 ```
 
-### Git 변경 리뷰
+### Git Change Review
 
 ```text
 detect_changes(base="HEAD~1", changed_files=[...], detail_level="minimal")
 ```
 
-### 영향 확인
+### Impact Check
 
 ```text
 get_impact_radius(changed_files=[...], base="HEAD~1", detail_level="minimal")
 get_affected_flows(changed_files=[...], base="HEAD~1")
 ```
 
-### 테스트 연결
+### Test Linkage
 
 ```text
 query_graph(pattern="tests_for", target="...", detail_level="minimal")
 ```
 
-### 그래프 갱신
+### Graph Refresh
 
 ```text
 code-review-graph_build_or_update_graph_tool(full_rebuild=false, base="HEAD~1", postprocess="minimal")
@@ -383,14 +383,14 @@ code-review-graph_build_or_update_graph_tool(full_rebuild=true, postprocess="min
 
 ---
 
-## 정리
+## Summary
 
-이 저장소에서 `code-review-graph`는 매우 유용하지만, **크게 던지는 broad query보다 작고 명시적인 query가 훨씬 안정적**입니다.
+`code-review-graph` is very useful in this repository, but **small, explicit queries are much more stable than large broad queries**.
 
-가장 중요한 것은 다음 세 가지입니다.
+The three most important points are:
 
-1. 먼저 graph를 사용한다.
-2. 반드시 범위를 줄인다.
-3. graph가 반복적으로 실패하면 문서/파일 직접 읽기로 빠르게 전환한다.
+1. Use the graph first.
+2. Always reduce the scope.
+3. If the graph repeatedly fails, switch quickly to direct document/file reads.
 
-이 원칙만 지켜도 대부분의 타임아웃과 불필요한 토큰 낭비를 크게 줄일 수 있습니다.
+Following only these principles will significantly reduce most timeouts and unnecessary token usage.

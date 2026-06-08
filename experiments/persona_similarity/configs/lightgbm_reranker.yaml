@@ -92,6 +92,7 @@ text_embedding:
   torch_compile: false
   torch_compile_mode: reduce-overhead
   device: auto
-  batch_size: 128
+  batch_size: 0
+  vram_fraction: 0.9
   progress: true
   preprocessing_version: persona_similarity_text_v1

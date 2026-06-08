@@ -1,13 +1,13 @@
 # Persona Similarity Tasks
 
-이 문서는 `experiments/persona_similarity/PRD.md`의 실험계획을 실행 가능한 체크리스트로 나눈다.
+This document breaks the experiment plan in `experiments/persona_similarity/PRD.md` into an executable checklist.
 
-현재 상태 기준:
+Current status:
 
-- 코드 구축은 대부분 완료.
-- 실제 대규모 실험 실행은 아직 미완료.
-- production 기본 동작은 여전히 `FastRP/KNN -> SIMILAR_TO`.
-- LightGBM reranker는 아직 promotion/integration 대상이 아니다.
+- The code scaffold is mostly complete.
+- Large-scale experiment runs are still incomplete.
+- The default production behavior remains `FastRP/KNN -> SIMILAR_TO`.
+- The LightGBM reranker is not yet a promotion/integration target.
 
 ## Phase 0 - Workspace Setup
 
@@ -128,7 +128,7 @@
 
 ## Phase 8-B - Lessons From Hobby Recommender
 
-Apply the same controlled 2-stage policy learned from `GNN_Neural_Network/`.
+Apply the same controlled 2-stage policy learned from `experiments/hobby_recommender_ml/`.
 
 - [ ] Keep Stage1 as `FastRP/KNN topK >= 50` until a decision artifact says candidate recall is insufficient.
 - [ ] Treat KURE/Snowflake text embeddings as Stage2 reranker features first, not as a new Stage1 candidate generator.
@@ -196,7 +196,7 @@ Apply the same controlled 2-stage policy learned from `GNN_Neural_Network/`.
 Run one experiment-purpose script at a time.
 
 ```text
-1. scripts/build_gds.py --top-k 50
+1. ops/graph/build_gds.py --top-k 50
 2. experiments/persona_similarity/scripts/export_pairs.py
 3. experiments/persona_similarity/scripts/build_features.py
 4. experiments/persona_similarity/scripts/evaluate_fastrp_baseline.py
@@ -223,7 +223,7 @@ Run one experiment-purpose script at a time.
 
 ## Current Decision
 
-Status: code scaffold is implemented, but the full experiment suite has not been run.
+Status: the code scaffold is implemented, but the full experiment suite has not been run.
 
 Default production behavior remains:
 

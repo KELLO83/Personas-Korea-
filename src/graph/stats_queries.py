@@ -47,8 +47,22 @@ ORDER BY count DESC LIMIT $limit
 """
 
 TOP_SKILLS_QUERY = """
-MATCH (p:Person)-[:HAS_SKILL]->(s:Skill)
-RETURN s.name AS skill, count(p) AS count
+CALL db.relationshipTypes() YIELD relationshipType
+WITH collect(relationshipType) AS relationship_types
+CALL (relationship_types) {
+  WITH relationship_types
+  WHERE "HAS_SKILL" IN relationship_types
+  MATCH (p:Person)-[r]->(s)
+  WHERE type(r) = "HAS_SKILL" AND "Skill" IN labels(s)
+  RETURN s.name AS skill, count(p) AS count
+  UNION
+  WITH relationship_types
+  WHERE NOT "HAS_SKILL" IN relationship_types
+  RETURN NULL AS skill, 0 AS count
+}
+WITH skill, count
+WHERE skill IS NOT NULL
+RETURN skill, count
 ORDER BY count DESC LIMIT $limit
 """
 

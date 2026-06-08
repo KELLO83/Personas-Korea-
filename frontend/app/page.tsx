@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import type {
   ChatMessage,
+  GraphInsightsResponse,
   OperationsHealthResponse,
   OperationsReadinessResponse,
   OperationsWarningsResponse,
@@ -16,7 +17,7 @@ import type {
 } from "@/lib/api-types";
 import { personaApi } from "@/lib/api-client";
 import { DEFAULT_PERSONA_UUID } from "@/lib/constants";
-import { shortUuid, uuidWithName } from "@/lib/formatters";
+import { compactNumber, fullNumber, shortUuid, uuidWithName } from "@/lib/formatters";
 import { chatSessionId, resetChatSessionId } from "@/lib/chat-session";
 import { useLoadable } from "@/hooks/use-loadable";
 import { DashboardSection } from "@/components/dashboard-section";
@@ -27,8 +28,9 @@ import { ChatSection } from "@/components/chat-section";
 import { InsightsSection } from "@/components/insights-section";
 import { OperationsSection } from "@/components/operations-section";
 import { RelationshipSection } from "@/components/relationship-section";
+import { GraphInsightsSection } from "@/components/graph-insights-section";
 
-type ViewKey = "dashboard" | "search" | "profile" | "graph" | "relationships" | "chat" | "insights" | "operations";
+type ViewKey = "dashboard" | "search" | "profile" | "graph" | "relationships" | "chat" | "insights" | "graphInsights" | "operations";
 type ThemeMode = "dark" | "light";
 
 const themeStorageKey = "persona-console-theme";
@@ -46,14 +48,23 @@ function applyTheme(mode: ThemeMode) {
 }
 
 const views: Array<{ key: ViewKey; label: string; caption: string }> = [
-  { key: "dashboard", label: "대시보드", caption: "전체 분포" },
-  { key: "search", label: "검색/필터", caption: "페르소나 탐색" },
-  { key: "profile", label: "프로필", caption: "상세 정보" },
-  { key: "graph", label: "그래프", caption: "관계 맵" },
-  { key: "relationships", label: "관계형 추천", caption: "Guild/Life Track" },
-  { key: "chat", label: "대화형 탐색", caption: "질문 기반 분석" },
+  { key: "dashboard", label: "대시보드", caption: "관계 관측소" },
+  { key: "search", label: "검색/필터", caption: "세그먼트 탐색" },
+  { key: "profile", label: "프로필", caption: "페르소나 맥락" },
+  { key: "graph", label: "그래프", caption: "경로와 노드" },
+  { key: "relationships", label: "관계형 추천", caption: "근거 기반 추천" },
+  { key: "chat", label: "대화형 탐색", caption: "RAG 출처 확인" },
   { key: "insights", label: "확장 분석", caption: "F16-F18 검수" },
-  { key: "operations", label: "운영 상태", caption: "추천/RAG 관측성" },
+  { key: "graphInsights", label: "그래프 인사이트", caption: "정제/브릿지/경로" },
+  { key: "operations", label: "운영 상태", caption: "품질과 준비도" },
+];
+
+const workflowSteps: Array<{ key: ViewKey; label: string; detail: string }> = [
+  { key: "search", label: "01 검색", detail: "지역/취미/직업" },
+  { key: "profile", label: "02 프로필", detail: "생활 맥락" },
+  { key: "graph", label: "03 관계 그래프", detail: "경로 집중" },
+  { key: "relationships", label: "04 추천 근거", detail: "유사/대조" },
+  { key: "chat", label: "05 RAG 탐색", detail: "질문과 출처" },
 ];
 
 const emptySearchFilters: SearchFilters = {
@@ -78,6 +89,7 @@ export default function Home() {
   const [graph, loadGraph] = useLoadable<SubgraphResponse>();
   const [recommendationStatus, loadRecommendationStatus] = useLoadable<RecommendationStatusResponse>();
   const [recommendationQuality, loadRecommendationQuality] = useLoadable<RecommendationQualityResponse>();
+  const [graphInsights, loadGraphInsights] = useLoadable<GraphInsightsResponse>();
   const [operationsHealth, loadOperationsHealth] = useLoadable<OperationsHealthResponse>();
   const [operationsReadiness, loadOperationsReadiness] = useLoadable<OperationsReadinessResponse>();
   const [operationsWarnings, loadOperationsWarnings] = useLoadable<OperationsWarningsResponse>();
@@ -90,6 +102,16 @@ export default function Home() {
   const [chatError, setChatError] = useState<string | null>(null);
   const selectedProfileName = profile.data?.uuid === selectedUuid ? profile.data.display_name : null;
   const selectedDisplayName = selectedProfileName ?? (selectedLabel === "기본 페르소나" ? "이름 미등록" : selectedLabel);
+  const selectedProfile = profile.data?.uuid === selectedUuid ? profile.data : null;
+  const selectedLocation = selectedProfile
+    ? [selectedProfile.location.province, selectedProfile.location.district].filter(Boolean).join(" ") || "-"
+    : "프로필 대기";
+  const selectedOccupation = selectedProfile?.occupation ?? "-";
+  const selectedConnectionCount = selectedProfile ? compactNumber(selectedProfile.graph_stats.total_connections) : "-";
+  const graphNodeSummary = graph.data ? compactNumber(graph.data.node_count) : "-";
+  const graphEdgeSummary = graph.data ? compactNumber(graph.data.edge_count) : "-";
+  const totalPersonaSummary = stats.data ? fullNumber(stats.data.total_personas) : stats.loading ? "..." : "-";
+  const topProvince = stats.data?.province_distribution[0]?.label ?? "-";
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -138,6 +160,12 @@ export default function Home() {
     recommendationQuality.error,
     recommendationQuality.loading,
   ]);
+
+  useEffect(() => {
+    if (activeView === "graphInsights" && !graphInsights.data && !graphInsights.loading && !graphInsights.error) {
+      void loadGraphInsights(() => personaApi.graphInsights({ limit: 12 }));
+    }
+  }, [activeView, graphInsights.data, graphInsights.error, graphInsights.loading, loadGraphInsights]);
 
   useEffect(() => {
     if (ragTraceAdminAutoLoad && activeView === "operations" && !ragTraces.data && !ragTraces.loading && !ragTraces.error) {
@@ -225,6 +253,7 @@ export default function Home() {
         <div className="brand-mark">KG</div>
         <div className="eyebrow">Nemotron Personas</div>
         <h1 className="brand-title">Persona Knowledge Console</h1>
+        <p className="brand-copy">한국 페르소나의 지역, 취미, 직업, 유사도 경로를 추적하는 지식그래프 워크스테이션</p>
         <div className="theme-switch" role="group" aria-label="테마 선택">
           <button className={themeMode === "dark" ? "active" : ""} type="button" aria-pressed={themeMode === "dark"} onClick={() => changeTheme("dark")}>
             다크
@@ -246,16 +275,62 @@ export default function Home() {
 
       <main className="main-panel">
         {activeView === "dashboard" ? (
-          <section className="hero">
-            <div className="hero-card">
-              <div className="eyebrow">Graph Intelligence Dashboard</div>
-              <h1>Nemotron-Personas-Korea 분석</h1>
+          <section className="hero observatory-hero">
+            <div className="hero-card observatory-card">
+              <div className="eyebrow">Korean Persona Knowledge Graph Observatory</div>
+              <h1>사람, 취미, 직업, 지역의 관계 경로를 추적합니다</h1>
+              <p>
+                검색으로 세그먼트를 좁히고, 선택한 페르소나의 생활 맥락을 그래프 중심으로 전환한 뒤,
+                추천 이유와 RAG 출처까지 같은 흐름에서 검증합니다.
+              </p>
+              <div className="route-rail" aria-label="관계 탐색 흐름">
+                {workflowSteps.map((step) => (
+                  <button
+                    className={`route-step ${activeView === step.key ? "active" : ""}`}
+                    key={step.key}
+                    type="button"
+                    onClick={() => setActiveView(step.key)}
+                  >
+                    <span>{step.label}</span>
+                    <strong>{step.detail}</strong>
+                  </button>
+                ))}
+              </div>
+              <div className="signal-strip" aria-label="데이터 신호 요약">
+                <div>
+                  <span className="small muted">personas</span>
+                  <strong>{totalPersonaSummary}</strong>
+                </div>
+                <div>
+                  <span className="small muted">top region</span>
+                  <strong>{topProvince}</strong>
+                </div>
+                <div>
+                  <span className="small muted">current graph</span>
+                  <strong>{graphNodeSummary} nodes</strong>
+                </div>
+                <div>
+                  <span className="small muted">relations</span>
+                  <strong>{graphEdgeSummary} edges</strong>
+                </div>
+              </div>
             </div>
-            <div className="card status-card">
-              <span className="status-dot" /> <span className="small muted">현재 선택</span>
+            <div className="card status-card context-card">
+              <div className="context-card-header">
+                <span className="status-dot" />
+                <span className="small muted">현재 선택</span>
+              </div>
               <h2>{selectedDisplayName}</h2>
               <p className="muted small">UUID {uuidWithName(selectedUuid, selectedDisplayName)}</p>
-              <button className="ghost-button" onClick={() => setActiveView("graph")}>관계 그래프로 보기</button>
+              <div className="context-grid">
+                <span>지역</span><strong>{selectedLocation}</strong>
+                <span>직업</span><strong>{selectedOccupation}</strong>
+                <span>연결</span><strong>{selectedConnectionCount}</strong>
+              </div>
+              <div className="context-actions">
+                <button className="ghost-button" onClick={() => setActiveView("profile")}>프로필</button>
+                <button className="primary-button" onClick={() => setActiveView("graph")}>관계 그래프</button>
+              </div>
             </div>
           </section>
         ) : (
@@ -265,7 +340,12 @@ export default function Home() {
               <div className="eyebrow">현재 선택</div>
               <h2>{selectedDisplayName} <span className="muted">({uuidWithName(selectedUuid, selectedDisplayName)})</span></h2>
             </div>
-            <button className="ghost-button" onClick={() => setActiveView("graph")} style={{ marginLeft: "auto" }}>관계 그래프</button>
+            <div className="compact-context">
+              <span>{selectedLocation}</span>
+              <span>{selectedOccupation}</span>
+              <span>{selectedConnectionCount} links</span>
+            </div>
+            <button className="ghost-button compact-graph-button" onClick={() => setActiveView("graph")}>관계 그래프</button>
           </div>
         )}
 
@@ -276,8 +356,10 @@ export default function Home() {
         {activeView === "relationships" && <RelationshipSection selectedUuid={selectedUuid} profile={profile} onSelectPersona={selectPersona} />}
         {activeView === "chat" && <ChatSection messages={chatMessages} input={chatInput} loading={chatLoading} error={chatError} onInputChange={setChatInput} onSubmit={submitChat} onReset={resetChat} />}
         {activeView === "insights" && <InsightsSection />}
+        {activeView === "graphInsights" && <GraphInsightsSection insights={graphInsights} onSelectPersona={selectPersona} />}
         {activeView === "operations" && (
           <OperationsSection
+            selectedUuid={selectedUuid}
             recommendationStatus={recommendationStatus}
             recommendationQuality={recommendationQuality}
             operationsHealth={operationsHealth}

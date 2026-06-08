@@ -51,17 +51,17 @@ Do not put hobby recommendation (`Person -> Hobby`) experiments in this folder.
 - Use one script per experiment purpose.
 - Long-running export, feature building, embedding, training, and evaluation
   scripts must show progress.
-- Inherit the root `.venv` Python 3.11 runtime.
+- Default runtime is the root `.venv314` Python 3.14 environment.
 - `.venv314t` may be used only for explicit local ML acceleration experiments
   after recording the Python executable, package versions, and cache identity.
-  Backend/API/frontend paths must remain on `.venv` Python 3.11.
+  Backend/API/frontend paths must remain on `.venv314` Python 3.14.
 - In `.venv314t`, use already-exported local parquet/csv/npz artifacts and
   Polars-based processing only. Neo4j export, Excel export, pandas/openpyxl,
-  and pyarrow utility paths belong to `.venv` Python 3.11.
+  and pyarrow utility paths belong to `.venv314` Python 3.14.
 - Inherit the root default CPU policy: use `18` threads/workers unless an
   experiment explicitly records a safer override.
 - Python-heavy feature/evaluation loops should use `ThreadPoolExecutor`. This
-  policy is applied consistently under both `.venv` Python 3.11 and `.venv314t`
+  policy is applied consistently under both `.venv314` Python 3.14 and `.venv314t`
   Python 3.14t to avoid duplicated worker memory and OOM shutdowns. Keep native
   ML libraries such as LightGBM on their own `num_threads` settings.
 - Under verified `.venv314t` runs, the verified local stack for the default

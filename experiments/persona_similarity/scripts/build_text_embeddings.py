@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -15,7 +16,7 @@ if str(PROJECT_ROOT) not in sys.path:
 import numpy as np
 import polars as pl
 
-from GNN_Neural_Network.gnn_recommender.text_embedding import (
+from experiments.hobby_recommender_ml.hobby_recommender.text_embedding import (
     DEFAULT_TORCH_COMPILE_MODE,
     EmbeddingBackendConfig,
     compile_sentence_transformer,
@@ -34,6 +35,11 @@ from experiments.persona_similarity.scripts.common import (
 from experiments.persona_similarity.scripts.text_feature_builder import TEXT_DOMAINS, build_domain_text, embedding_key, text_hash
 
 LOGGER = logging.getLogger(__name__)
+CPU_TEXT_EMBEDDING_BATCH_SIZE = 32
+MAX_AUTO_TEXT_EMBEDDING_BATCH_SIZE = 1024
+MIN_AUTO_TEXT_EMBEDDING_BATCH_SIZE = 64
+TEXT_EMBEDDING_MB_PER_TEXT = 18
+DEFAULT_TEXT_EMBEDDING_VRAM_FRACTION = 0.9
 
 
 def default_cpu_threads() -> int:
@@ -110,7 +116,14 @@ def main() -> None:
     device = str(text_config.get("device", "auto"))
     if device == "auto":
         device = "cuda" if torch.cuda.is_available() else "cpu"
-    batch_size = int(text_config.get("batch_size") or 128)
+    requested_batch_size = int(text_config.get("batch_size") or 0)
+    vram_fraction = float(text_config.get("vram_fraction", DEFAULT_TEXT_EMBEDDING_VRAM_FRACTION))
+    batch_size = resolve_text_embedding_batch_size(
+        requested=requested_batch_size,
+        device=device,
+        vram_fraction=vram_fraction,
+        torch_module=torch,
+    )
     start_time = time.perf_counter()
     attention_implementation = str(text_config.get("attention_implementation", "sdpa") or "").strip()
     torch_dtype_name = str(text_config.get("torch_dtype", "float16") or "").strip()
@@ -171,6 +184,8 @@ def main() -> None:
             "backend_policy": backend_policy,
             "device": device,
             "batch_size": batch_size,
+            "batch_mode": "auto" if requested_batch_size <= 0 else "manual",
+            "vram_fraction": vram_fraction,
             "embedding_rows": int(len(records)),
             "persona_rows": int(personas["uuid"].n_unique()),
             "domains": list(TEXT_DOMAINS.keys()),
@@ -179,6 +194,51 @@ def main() -> None:
             "runtime_seconds": elapsed,
         },
     )
+
+
+def resolve_text_embedding_batch_size(
+    *,
+    requested: int,
+    device: str,
+    vram_fraction: float,
+    torch_module: Any,
+) -> int:
+    if requested > 0:
+        return requested
+    if device != "cuda":
+        return CPU_TEXT_EMBEDDING_BATCH_SIZE
+
+    free_mb = query_free_gpu_memory_mb(torch_module)
+    usable_mb = int(free_mb * max(0.1, min(vram_fraction, 0.9)))
+    batch_size = usable_mb // TEXT_EMBEDDING_MB_PER_TEXT
+    return max(MIN_AUTO_TEXT_EMBEDDING_BATCH_SIZE, min(MAX_AUTO_TEXT_EMBEDDING_BATCH_SIZE, int(batch_size)))
+
+
+def query_free_gpu_memory_mb(torch_module: Any) -> int:
+    try:
+        free_bytes, _total_bytes = torch_module.cuda.mem_get_info()
+        return int(free_bytes / 1024 / 1024)
+    except Exception:
+        return query_free_gpu_memory_with_nvidia_smi()
+
+
+def query_free_gpu_memory_with_nvidia_smi() -> int:
+    try:
+        result = subprocess.run(
+            [
+                "nvidia-smi",
+                "--query-gpu=memory.free",
+                "--format=csv,noheader,nounits",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except Exception:
+        return 1024
+
+    first_value = result.stdout.strip().splitlines()[0]
+    return max(1, int(first_value))
 
 
 if __name__ == "__main__":

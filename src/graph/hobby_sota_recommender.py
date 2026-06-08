@@ -34,7 +34,7 @@ class _SotaAssets:
 
 
 class HobbySotaRecommendationService:
-    """Read-only adapter for the promoted GNN_Neural_Network hobby recommender."""
+    """Read-only adapter for the promoted hobby_recommender_ml hobby recommender."""
 
     def __init__(self, repo_root: Path | None = None) -> None:
         self.repo_root = repo_root or Path(__file__).resolve().parents[2]
@@ -44,7 +44,7 @@ class HobbySotaRecommendationService:
     def artifact_path(self) -> Path:
         return (
             self.repo_root
-            / "GNN_Neural_Network"
+            / "experiments/hobby_recommender_ml"
             / "artifacts"
             / "experiments"
             / "phase5_c_text_embedding"
@@ -79,7 +79,7 @@ class HobbySotaRecommendationService:
 
         context = assets.contexts.get(uuid)
         if context is None:
-            from GNN_Neural_Network.gnn_recommender.data import empty_person_context
+            from experiments.hobby_recommender_ml.hobby_recommender.data import empty_person_context
 
             context = empty_person_context(uuid)
 
@@ -108,14 +108,14 @@ class HobbySotaRecommendationService:
         if self._assets is not None:
             return self._assets
 
-        from GNN_Neural_Network.gnn_recommender.baseline import build_cooccurrence_counts, build_popularity_counts
-        from GNN_Neural_Network.gnn_recommender.config import load_config
-        from GNN_Neural_Network.gnn_recommender.data import load_json, load_person_contexts
-        from GNN_Neural_Network.gnn_recommender.embedding_cache import HobbyEmbeddingCache, PersonEmbeddingCache
-        from GNN_Neural_Network.gnn_recommender.ranker import LightGBMRanker
-        from GNN_Neural_Network.gnn_recommender.rerank import build_reranker_config
+        from experiments.hobby_recommender_ml.hobby_recommender.baseline import build_cooccurrence_counts, build_popularity_counts
+        from experiments.hobby_recommender_ml.hobby_recommender.config import load_config
+        from experiments.hobby_recommender_ml.hobby_recommender.data import load_json, load_person_contexts
+        from experiments.hobby_recommender_ml.hobby_recommender.embedding_cache import HobbyEmbeddingCache, PersonEmbeddingCache
+        from experiments.hobby_recommender_ml.hobby_recommender.ranker import LightGBMRanker
+        from experiments.hobby_recommender_ml.hobby_recommender.rerank import build_reranker_config
 
-        config_path = self.repo_root / "GNN_Neural_Network" / "configs" / "kure_text_optin_ranker.yaml"
+        config_path = self.repo_root / "experiments/hobby_recommender_ml" / "configs" / "kure_text_optin_ranker.yaml"
         config = load_config(config_path)
         model_path = self.artifact_path
         if not model_path.exists():
@@ -168,7 +168,7 @@ class HobbySotaRecommendationService:
         return self._assets
 
     def _build_candidates(self, assets: _SotaAssets, person_id: int) -> list[Any]:
-        from GNN_Neural_Network.gnn_recommender.ranker import load_or_build_candidate_pool
+        from experiments.hobby_recommender_ml.hobby_recommender.ranker import load_or_build_candidate_pool
 
         pools = load_or_build_candidate_pool(
             person_ids=[person_id],
@@ -193,8 +193,8 @@ class HobbySotaRecommendationService:
         candidates: list[Any],
         known_hobby_names: set[str],
     ) -> np.ndarray:
-        from GNN_Neural_Network.gnn_recommender.data import build_domain_persona_texts, build_domain_tagged_persona_text
-        from GNN_Neural_Network.gnn_recommender.rerank import build_rerank_features
+        from experiments.hobby_recommender_ml.hobby_recommender.data import build_domain_persona_texts, build_domain_tagged_persona_text
+        from experiments.hobby_recommender_ml.hobby_recommender.rerank import build_rerank_features
 
         person_text = build_domain_tagged_persona_text(context)
         person_domain_texts = build_domain_persona_texts(context)

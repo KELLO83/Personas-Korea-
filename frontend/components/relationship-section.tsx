@@ -17,6 +17,28 @@ type LoadState<T> = {
   error: string | null;
 };
 
+type ComparisonCandidate = {
+  uuid: string;
+  name: string;
+  age: number | null;
+  sex: string | null;
+  occupation: string | null;
+  province: string | null;
+  district: string | null;
+  similarity: number | null;
+  diversity: number | null;
+  finalScore: number | null;
+  sharedHobbies: string[];
+  sharedSkills: string[];
+  contrastReasons: string[];
+};
+
+type SegmentPreset = {
+  label: string;
+  province: string;
+  ageGroup: string;
+};
+
 const initialState = { data: null, loading: false, error: null };
 
 interface RelationshipSectionProps {
@@ -32,6 +54,8 @@ export function RelationshipSection({ selectedUuid, profile, onSelectPersona }: 
   const [lifeTrack, setLifeTrack] = useState<LoadState<LifeTrackResponse>>(initialState);
   const [segmentInsight, setSegmentInsight] = useState<LoadState<SegmentCompareResponse>>(initialState);
   const [diversityAxis, setDiversityAxis] = useState("mixed");
+  const [comparisonBoard, setComparisonBoard] = useState<ComparisonCandidate[]>([]);
+  const [segmentPresets, setSegmentPresets] = useState<SegmentPreset[]>([]);
   const [segments, setSegments] = useState({
     aLabel: "서울 20대",
     aProvince: "서울",
@@ -75,8 +99,35 @@ export function RelationshipSection({ selectedUuid, profile, onSelectPersona }: 
     );
   }
 
+  function pinCandidate(candidate: ComparisonCandidate) {
+    setComparisonBoard((current) => {
+      const next = [candidate, ...current.filter((item) => item.uuid !== candidate.uuid)];
+      return next.slice(0, 4);
+    });
+  }
+
+  function removeCandidate(uuid: string) {
+    setComparisonBoard((current) => current.filter((item) => item.uuid !== uuid));
+  }
+
+  function saveCurrentSegments() {
+    const presets = [
+      { label: segments.aLabel, province: segments.aProvince, ageGroup: segments.aAgeGroup },
+      { label: segments.bLabel, province: segments.bProvince, ageGroup: segments.bAgeGroup },
+    ].filter((preset) => preset.label.trim());
+    setSegmentPresets((current) => [...presets, ...current].slice(0, 6));
+  }
+
+  function applyPreset(side: "a" | "b", preset: SegmentPreset) {
+    setSegments((current) => side === "a"
+      ? { ...current, aLabel: preset.label, aProvince: preset.province, aAgeGroup: preset.ageGroup }
+      : { ...current, bLabel: preset.label, bProvince: preset.province, bAgeGroup: preset.ageGroup });
+  }
+
   return (
     <section className="grid">
+      <ComparisonBoard sourceName={profile.data?.display_name ?? shortUuid(selectedUuid)} candidates={comparisonBoard} onRemove={removeCandidate} onSelect={onSelectPersona} />
+
       <div className="grid two">
         <div className="card">
           <div className="section-toolbar">
@@ -88,11 +139,14 @@ export function RelationshipSection({ selectedUuid, profile, onSelectPersona }: 
           </div>
           <p className="muted small">{guilds.data?.scoring_policy ?? "SIMILAR_TO 기반 후보를 불러옵니다."}</p>
           <StatusMessage loading={guilds.loading} error={guilds.error} empty={guilds.data?.guilds.length === 0} />
-          <div className="results-list">
+          <div className="results-list evidence-list">
             {guilds.data?.guilds.map((guild) => (
-              <div className="result-card" key={guild.guild_id}>
-                <h3>{guild.title}</h3>
-                <p className="muted small">score {guild.score.toFixed(3)} · {guild.reason}</p>
+              <div className="result-card evidence-card" key={guild.guild_id}>
+                <div className="evidence-head">
+                  <h3>{guild.title}</h3>
+                  <span className="evidence-score">{guild.score.toFixed(3)}</span>
+                </div>
+                <p className="muted small reason-line">{guild.reason}</p>
                 <Pills items={[...guild.shared_hobbies.slice(0, 5), ...guild.shared_skills.slice(0, 5)]} />
                 <div className="results-list" style={{ marginTop: 12 }}>
                   {guild.members.map((member) => (
@@ -123,16 +177,27 @@ export function RelationshipSection({ selectedUuid, profile, onSelectPersona }: 
           </div>
           <p className="muted small">{diverse.data?.scoring_policy ?? "유사도에 다양성 보정을 더해 정렬합니다."}</p>
           <StatusMessage loading={diverse.loading} error={diverse.error} empty={diverse.data?.results.length === 0} />
-          <div className="results-list">
+          <div className="results-list evidence-list">
             {diverse.data?.results.map((persona) => (
-              <button className="result-card" key={persona.uuid} onClick={() => onSelectPersona(persona.uuid, persona.display_name)}>
-                <strong>{persona.display_name ?? shortUuid(persona.uuid)}</strong>
+              <div className="result-card evidence-card" key={persona.uuid}>
+                <div className="evidence-head">
+                  <strong>{persona.display_name ?? shortUuid(persona.uuid)}</strong>
+                  <span className="evidence-score">{persona.final_score.toFixed(3)}</span>
+                </div>
                 <p className="muted small">
                   {joinDefined([persona.age ? `${persona.age}세` : null, persona.sex, persona.province, persona.district, persona.occupation])}
                 </p>
-                <p className="small muted">similarity {percent(persona.similarity)} · diversity {percent(persona.diversity_score)} · final {persona.final_score.toFixed(3)}</p>
+                <div className="reason-meter" aria-label={`similarity ${percent(persona.similarity)}, diversity ${percent(persona.diversity_score)}`}>
+                  <span style={{ width: `${Math.min(persona.similarity, 1) * 100}%` }} />
+                  <span style={{ width: `${Math.min(persona.diversity_score, 1) * 100}%` }} />
+                </div>
+                <p className="small muted">similarity {percent(persona.similarity)} · diversity {percent(persona.diversity_score)}</p>
                 <Pills items={persona.contrast_reasons.slice(0, 4)} />
-              </button>
+                <div className="card-actions">
+                  <button className="ghost-button" type="button" onClick={() => pinCandidate(candidateFromDiverse(persona))}>비교 고정</button>
+                  <button className="ghost-button" type="button" onClick={() => onSelectPersona(persona.uuid, persona.display_name)}>이 사람 선택</button>
+                </div>
+              </div>
             ))}
           </div>
         </div>
@@ -196,6 +261,17 @@ export function RelationshipSection({ selectedUuid, profile, onSelectPersona }: 
           </div>
           <button className="primary-button" disabled={segmentInsight.loading} onClick={runSegmentInsight}>요약 생성</button>
         </div>
+        <div className="segment-builder-strip">
+          <button className="ghost-button" type="button" onClick={saveCurrentSegments}>현재 세그먼트 저장</button>
+          {segmentPresets.map((preset, index) => (
+            <div className="segment-preset" key={`${preset.label}-${index}`}>
+              <strong>{preset.label}</strong>
+              <span>{joinDefined([preset.province, preset.ageGroup])}</span>
+              <button type="button" onClick={() => applyPreset("a", preset)}>A</button>
+              <button type="button" onClick={() => applyPreset("b", preset)}>B</button>
+            </div>
+          ))}
+        </div>
         <div className="form-grid">
           <input className="input" value={segments.aLabel} onChange={(event) => setSegments({ ...segments, aLabel: event.target.value })} />
           <input className="input" value={segments.aProvince} onChange={(event) => setSegments({ ...segments, aProvince: event.target.value })} />
@@ -216,6 +292,75 @@ export function RelationshipSection({ selectedUuid, profile, onSelectPersona }: 
       </div>
     </section>
   );
+}
+
+function ComparisonBoard({
+  sourceName,
+  candidates,
+  onRemove,
+  onSelect,
+}: {
+  sourceName: string;
+  candidates: ComparisonCandidate[];
+  onRemove: (uuid: string) => void;
+  onSelect: (uuid: string, label: string | null) => void;
+}) {
+  return (
+    <div className="card comparison-board">
+      <div className="section-toolbar">
+        <div>
+          <div className="eyebrow">Recommendation Comparison</div>
+          <h2>추천 이유 비교 보드</h2>
+        </div>
+        <span className="pill">{sourceName} 기준 · {candidates.length}/4</span>
+      </div>
+      {candidates.length === 0 ? (
+        <p className="muted small">비슷하지만 다른 페르소나 카드에서 `비교 고정`을 눌러 후보를 모아보세요.</p>
+      ) : (
+        <div className="comparison-grid">
+          {candidates.map((candidate) => (
+            <div className="comparison-card" key={candidate.uuid}>
+              <div className="evidence-head">
+                <strong>{candidate.name}</strong>
+                <span className="evidence-score">{candidate.finalScore?.toFixed(3) ?? "-"}</span>
+              </div>
+              <p className="small muted">{joinDefined([candidate.age ? `${candidate.age}세` : null, candidate.sex, candidate.province, candidate.district, candidate.occupation])}</p>
+              <div className="comparison-matrix">
+                <span>similarity</span><strong>{candidate.similarity === null ? "-" : percent(candidate.similarity)}</strong>
+                <span>diversity</span><strong>{candidate.diversity === null ? "-" : percent(candidate.diversity)}</strong>
+                <span>shared</span><strong>{candidate.sharedHobbies.length + candidate.sharedSkills.length}</strong>
+                <span>contrast</span><strong>{candidate.contrastReasons.length}</strong>
+              </div>
+              <Pills items={[...candidate.sharedHobbies.slice(0, 3), ...candidate.sharedSkills.slice(0, 3)]} />
+              <Pills items={candidate.contrastReasons.slice(0, 3)} />
+              <div className="card-actions">
+                <button className="ghost-button" type="button" onClick={() => onSelect(candidate.uuid, candidate.name)}>선택</button>
+                <button className="ghost-button" type="button" onClick={() => onRemove(candidate.uuid)}>제거</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function candidateFromDiverse(persona: SimilarDiverseResponse["results"][number]): ComparisonCandidate {
+  return {
+    uuid: persona.uuid,
+    name: persona.display_name ?? shortUuid(persona.uuid),
+    age: persona.age,
+    sex: persona.sex,
+    occupation: persona.occupation,
+    province: persona.province,
+    district: persona.district,
+    similarity: persona.similarity,
+    diversity: persona.diversity_score,
+    finalScore: persona.final_score,
+    sharedHobbies: persona.shared_hobbies,
+    sharedSkills: persona.shared_skills,
+    contrastReasons: persona.contrast_reasons,
+  };
 }
 
 function StatusMessage({ loading, error, empty }: { loading: boolean; error: string | null; empty: boolean }) {

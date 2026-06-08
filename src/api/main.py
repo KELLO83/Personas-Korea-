@@ -10,6 +10,7 @@ from .routes import (
     career_transition,
     communities,
     compare,
+    graph_insights,
     graph_quality,
     graph_viz,
     influence,
@@ -28,6 +29,28 @@ from .routes import (
 
 logger = logging.getLogger(__name__)
 
+API_ROUTERS = (
+    insight.router,
+    similar.router,
+    communities.router,
+    path.router,
+    persona.router,
+    stats.router,
+    search.router,
+    graph_viz.router,
+    compare.router,
+    influence.router,
+    recommend.router,
+    chat.router,
+    target_persona.router,
+    lifestyle_map.router,
+    career_transition.router,
+    graph_insights.router,
+    graph_quality.router,
+    operations.router,
+    rag_traces.router,
+)
+
 
 def create_app() -> FastAPI:
     configure_logging()
@@ -39,24 +62,8 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    app.include_router(insight.router)
-    app.include_router(similar.router)
-    app.include_router(communities.router)
-    app.include_router(path.router)
-    app.include_router(persona.router)
-    app.include_router(stats.router)
-    app.include_router(search.router)
-    app.include_router(graph_viz.router)
-    app.include_router(compare.router)
-    app.include_router(influence.router)
-    app.include_router(recommend.router)
-    app.include_router(chat.router)
-    app.include_router(target_persona.router)
-    app.include_router(lifestyle_map.router)
-    app.include_router(career_transition.router)
-    app.include_router(graph_quality.router)
-    app.include_router(operations.router)
-    app.include_router(rag_traces.router)
+    for router in API_ROUTERS:
+        app.include_router(router)
     add_exception_handlers(app)
     logger.info("FastAPI application initialized")
     return app

@@ -6,13 +6,13 @@ set "ROOT=%~dp0"
 if "%ROOT:~-1%"=="\" set "ROOT=%ROOT:~0,-1%"
 cd /d "%ROOT%"
 
-set "PYTHON=%ROOT%\.venv\Scripts\python.exe"
+set "PYTHON=%ROOT%\.venv314\Scripts\python.exe"
 
 if not exist "%PYTHON%" (
-  echo [ERROR] Python runtime not found at .venv\Scripts\python.exe
+  echo [ERROR] Python runtime not found at .venv314\Scripts\python.exe
   echo Fix:
-  echo   py -3.11 -m venv .venv
-  echo   .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+  echo   py -3.14 -m venv .venv314
+  echo   .\.venv314\Scripts\python.exe -m pip install -r requirements.txt
   goto :END
 )
 
@@ -65,6 +65,12 @@ if %errorlevel%==0 (
   )
 ) else (
   echo [WARN] docker not found. Skip auto-start Neo4j.
+)
+
+echo [INFO] PostgreSQL/pgvector is expected on local PostgreSQL: localhost:5432/persona_vector.
+"%PYTHON%" -c "from dotenv import dotenv_values; import psycopg; uri = dotenv_values('.env').get('PGVECTOR_DATABASE_URI', 'postgresql://postgres:1234@localhost:5432/persona_vector'); conn = psycopg.connect(uri, connect_timeout=5); row = conn.execute('select current_database(), current_user').fetchone(); ext = conn.execute('select extversion from pg_extension where extname = chr(118) || chr(101) || chr(99) || chr(116) || chr(111) || chr(114)').fetchone(); conn.close(); pgvector = ext[0] if ext else 'missing'; print(f'[INFO] Local PostgreSQL ready: database={row[0]} user={row[1]} pgvector={pgvector}')"
+if errorlevel 1 (
+  echo [WARN] Local PostgreSQL/pgvector is not ready. Expected PGVECTOR_DATABASE_URI from .env.
 )
 
 if defined HAS_NODE (

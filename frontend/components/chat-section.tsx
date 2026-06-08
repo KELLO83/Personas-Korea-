@@ -38,9 +38,17 @@ export function ChatSection({ messages, input, loading, error, onInputChange, on
                 <div className="pill-row">{Object.entries(message.filters).map(([key, value]) => <span className="pill" key={key}>{key}: {value}</span>)}</div>
               )}
               {message.sources && message.sources.length > 0 && (
-                <details className="small muted">
+                <details className="source-details">
                   <summary>검색 근거 {message.sources.length}건</summary>
-                  <pre>{JSON.stringify(message.sources, null, 2)}</pre>
+                  <div className="source-list">
+                    {message.sources.slice(0, 5).map((source, sourceIndex) => (
+                      <div className="source-card" key={`${message.role}-${index}-source-${sourceIndex}`}>
+                        <strong>{sourceTitle(source, sourceIndex)}</strong>
+                        <SourceTrustSignals source={source} />
+                        <pre>{JSON.stringify(source, null, 2)}</pre>
+                      </div>
+                    ))}
+                  </div>
                 </details>
               )}
             </div>
@@ -49,4 +57,34 @@ export function ChatSection({ messages, input, loading, error, onInputChange, on
       </div>
     </section>
   );
+}
+
+function sourceTitle(source: Record<string, unknown>, index: number) {
+  const title = source.title ?? source.label ?? source.display_name ?? source.uuid ?? source.id;
+  return typeof title === "string" && title.trim() ? title : `source ${index + 1}`;
+}
+
+function SourceTrustSignals({ source }: { source: Record<string, unknown> }) {
+  const keys = Object.keys(source);
+  const score = sourceScore(source);
+  const matchedFields = keys.filter((key) => /filter|match|field|score|uuid|label|name/i.test(key)).slice(0, 5);
+  const trustLevel = score !== null ? "scored" : matchedFields.length >= 3 ? "structured" : "raw";
+
+  return (
+    <div className="trust-signal-row" aria-label="RAG 출처 신뢰도 신호">
+      <span className="trust-signal">{trustLevel}</span>
+      <span>{keys.length} keys</span>
+      <span>{score !== null ? `score ${score}` : "score 없음"}</span>
+      {matchedFields.map((field) => <span key={field}>{field}</span>)}
+    </div>
+  );
+}
+
+function sourceScore(source: Record<string, unknown>) {
+  const scoreKey = Object.keys(source).find((key) => /score|similarity|rank/i.test(key));
+  if (!scoreKey) return null;
+  const value = source[scoreKey];
+  if (typeof value === "number") return value.toFixed(3);
+  if (typeof value === "string" && value.trim()) return value;
+  return null;
 }
